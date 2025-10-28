@@ -19,14 +19,15 @@ Use uv directly for environment management and installs.
 # 1) Create a local virtual environment (./.venv)
 uv venv
 
-# 2) Install the package in editable mode
+# 2) Install the package in editable mode (installs runtime deps)
 uv pip install -e .
 
-# 3) Install dev tools explicitly (linters, types, tests, nox)
-uv pip install ruff pytest mypy pyright nox
+# 3) Install calcipy with toolchain extras (enables ./run tasks)
+uv pip install "calcipy[doc,lint,nox,tags,test,types]>=5.0.0"
 
 # 4) Confirm tooling available in the env
 uv run python -V
+uv run ./run --help
 uv run ruff --version
 uv run pytest -q
 ```
@@ -38,14 +39,21 @@ Notes:
 
 ## Core commands
 
+Preferred via calcipy task runner (no need to activate venv):
+
+- Lint check/fix: `uv run ./run lint` and `uv run ./run lint.fix`
+- Tests: `uv run ./run test`
+- Types: `uv run ./run types.mypy` and `uv run ./run types.pyright`
+- Docs: `uv run ./run doc.build` and `uv run ./run doc.watch`
+- Nox: `uv run ./run nox -s tests` (also `build_check`, `build_dist`)
+
+Alternative direct commands:
+
 - Lint: `uv run ruff check .`
-- Format (if applicable): `uv run ruff format .`
+- Format: `uv run ruff format .`
 - Types: `uv run mypy tail_cw tests` and `uv run pyright`
 - Tests: `uv run pytest -q`
-- Nox sessions (from `noxfile.py`):
-    - `uv run nox -s tests` (runs the test suite)
-    - `uv run nox -s build_check` (lint/types/docs checks)
-    - `uv run nox -s build_dist` (build artifacts)
+- Nox: `uv run nox -s tests` (also `build_check`, `build_dist`)
 
 Agents should run tests and lint/type checks before finishing a task and fix any failures.
 
@@ -113,15 +121,31 @@ References:
 ## Useful one-liners
 
 ```zsh
-# Lint + types + tests for quick local validation
+# Quick validation via calcipy (runs with uv)
+uv run ./run lint test types.mypy types.pyright
+
+# Alternative direct tools
 uv run ruff check . && \
 uv run mypy tail_cw tests && \
 uv run pyright && \
 uv run pytest -q
 
 # Run nox test session (aggregated checks configured by calcipy)
-uv run nox -s tests
+uv run ./run nox -s tests
 ```
+
+## Calcipy task runner (./run) quick reference
+
+Common tasks (see full list with `uv run ./run --help`):
+
+- `uv run ./run lint` / `lint.fix` — Ruff check/fix
+- `uv run ./run test` / `test.watch` — Pytest run/watch, see also `test.coverage`
+- `uv run ./run types.mypy` / `types.pyright` — Type checks
+- `uv run ./run doc.build` / `doc.watch` — Build or serve docs
+- `uv run ./run nox -s tests` — Run nox sessions from local `noxfile.py`
+- `uv run ./run tags` — Collect TODO/FIXME tags summary
+- `uv run ./run cl.bump` / `cl.write` — Version bump and changelog
+- `uv run ./run release` — Release pipeline (advanced)
 
 ## PR guidelines (for agents)
 
