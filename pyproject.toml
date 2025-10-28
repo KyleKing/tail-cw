@@ -1,6 +1,36 @@
 [build-system]
-build-backend = "poetry.core.masonry.api"
-requires = ["poetry-core"]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[dependency-groups]
+dev = ["calcipy[doc, lint, nox, tags, test, types]>=5.0.0"]
+
+[project]
+authors = [{email = "dev.act.kyle@gmail.com", name = "Kyle King"}]
+classifiers = [
+  "Development Status :: 1 - Planning",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+dependencies = ["corallium>=2.0.1"]
+description = "Tail and Filter AWS CloudWatch Logs"
+keywords = ["calcipy_template"]
+license = "MIT"
+maintainers = []
+name = "tail_cw"
+readme = "docs/README.md"
+requires-python = ">=3.11.11,<4"
+version = "0.0.1"
+
+[project.urls]
+"Bug Tracker" = "https://github.com/kyleking/tail-cw/issues"
+Changelog = "https://github.com/kyleking/tail-cw/blob/main/docs/docs/CHANGELOG.md"
+Documentation = "https://tail-cw.kyleking.me"
+Repository = "https://github.com/kyleking/tail-cw"
 
 [tool.commitizen]
 version = "0.0.1"
@@ -24,38 +54,6 @@ warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
-
-[tool.poetry]
-authors = ["Kyle King <dev.act.kyle@gmail.com>"]
-classifiers = [
-  "Development Status :: 1 - Planning",
-  "License :: OSI Approved :: MIT License",
-  "Operating System :: OS Independent",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.9",
-] # https://pypi.org/classifiers/
-description = "Tail and Filter AWS CloudWatch Logs"
-documentation = "https://tail-cw.kyleking.me"
-keywords = ["calcipy_template"]
-license = "MIT"
-maintainers = []
-name = "tail_cw"
-readme = "docs/README.md"
-repository = "https://github.com/kyleking/tail-cw"
-version = "0.0.1"
-
-[tool.poetry.dependencies]
-python = "^3.11.11"
-corallium = ">=2.0.1"
-
-[tool.poetry.group.dev.dependencies]
-calcipy = {extras = ["doc", "lint", "nox", "tags", "test", "types"], version = ">=5.0.0"}
-
-[tool.poetry.urls]
-"Bug Tracker" = "https://github.com/kyleking/tail-cw/issues"
-"Changelog" = "https://github.com/kyleking/tail-cw/blob/main/docs/docs/CHANGELOG.md"
 
 [tool.pyright]
 include = ["tail_cw", "tests"]
