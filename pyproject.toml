@@ -78,6 +78,15 @@ warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
+[[tool.mypy.overrides]]
+ignore_missing_imports = true
+module = "diskcache"
+
+[[tool.mypy.overrides]]
+# iterkeys() exists in diskcache but pyright doesn't know about it
+module = "tail_cw.cache.storage"
+warn_unused_ignores = false
+
 [tool.pyright]
 include = ["tail_cw", "tests"]
 pythonVersion = "3.11"
@@ -144,6 +153,12 @@ known-first-party = ['tail_cw']
 'scripts/check_imports.py' = [
   'F401', # imported but unused; consider adding to __all__ or using a redundant alias
 ]
+'tail_cw/cache/storage.py' = [
+  'DOC502', # Raised exception not explicitly raised (OSError from file I/O, ValueError from Polars)
+  'PLR0917', # Too many positional arguments (6/5) - cache key needs all parameters
+  'PLW1514', # Text mode without explicit encoding (UTF-8 default is fine)
+  'PYI034', # __enter__ should return Self (LogCache is fine for this use case)
+]
 'tests/*.py' = [
   'ANN001', # Missing type annotation for function argument
   'ANN201', # Missing return type annotation for public function
@@ -152,8 +167,13 @@ known-first-party = ['tail_cw']
   'D100', # Missing docstring in public module
   'D103', # Missing docstring in public function
   'PLC2701', # Private name import `_<>` from external module
+  'PLR2004', # Magic value used in comparison (acceptable in tests)
   'PT004', # flake8-pytest-style: fixture does not return
   'S101', # Use of `assert` detected
+  'SLF001', # Private member accessed (acceptable in tests for testing internals)
+]
+'tests/test_cache.py' = [
+  'PLR0917', # Too many positional arguments (6/5) - test helper function with many optional params
 ]
 
 [tool.ruff.lint.pydocstyle]
