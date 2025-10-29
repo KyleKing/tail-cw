@@ -7,3 +7,23 @@ sources, and search input with live filtering. The implementation follows Textua
 performance best practices including batch updates, streaming, and efficient
 rendering using Rich Segments.
 """
+
+from tail_cw.tui.app import LogTailApp
+from tail_cw.tui.log_viewer import (
+    batch_format_log_events,
+    format_log_event_detail,
+    format_log_event_for_table,
+    format_timestamp,
+    get_column_definitions,
+)
+from tail_cw.tui.record_detail import RecordDetailScreen
+
+__all__ = [
+    'LogTailApp',
+    'RecordDetailScreen',
+    'batch_format_log_events',
+    'format_log_event_detail',
+    'format_log_event_for_table',
+    'format_timestamp',
+    'get_column_definitions',
+]

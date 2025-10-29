@@ -49,6 +49,9 @@ readme = "docs/README.md"
 requires-python = ">=3.11"
 version = "0.0.1"
 
+[project.scripts]
+tail-cw = "tail_cw.__main__:main"
+
 [project.urls]
 "Bug Tracker" = "https://github.com/kyleking/tail-cw/issues"
 Changelog = "https://github.com/kyleking/tail-cw/blob/main/docs/docs/CHANGELOG.md"
