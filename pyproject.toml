@@ -3,7 +3,29 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [dependency-groups]
+all = [
+  "boto3>=1.35.0",
+  "diskcache>=5.6.0",
+  "duckdb>=1.1.0",
+  "polars>=1.13.0",
+  "pyarrow>=18.0.0",
+  "textual>=1.0.0",
+]
+aws = [
+  "boto3>=1.35.0",
+]
+cache = [
+  "diskcache>=5.6.0",
+]
 dev = ["calcipy[doc, lint, nox, tags, test, types]>=5.0.0"]
+query = [
+  "duckdb>=1.1.0",
+  "polars>=1.13.0",
+  "pyarrow>=18.0.0",
+]
+tui = [
+  "textual>=1.0.0",
+]
 
 [project]
 authors = [{email = "dev.act.kyle@gmail.com", name = "Kyle King"}]
@@ -14,16 +36,9 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
-  "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  "boto3>=1.35.0,<2.0.0",
   "corallium>=2.0.1",
-  "diskcache>=5.6.0,<6.0.0",
-  "duckdb>=1.1.0,<2.0.0",
-  "polars>=1.13.0,<2.0.0",
-  "pyarrow>=18.0.0,<19.0.0",
-  "textual>=1.0.0,<2.0.0",
 ]
 description = "Tail and Filter AWS CloudWatch Logs"
 keywords = ["calcipy_template"]
@@ -31,7 +46,7 @@ license = "MIT"
 maintainers = []
 name = "tail_cw"
 readme = "docs/README.md"
-requires-python = ">=3.11.11,<4"
+requires-python = ">=3.11"
 version = "0.0.1"
 
 [project.urls]
@@ -69,7 +84,7 @@ pythonVersion = "3.11"
 
 [tool.ruff]
 # Docs: https://github.com/charliermarsh/ruff
-# Tip: poetry run python -m ruff rule RUF100
+# Tip: uv run ruff rule RUF100
 line-length = 120
 target-version = 'py311'
 
@@ -149,3 +164,6 @@ all = true
 in_place = true
 sort_first = ["python"]
 trailing_comma_inline_array = true
+
+[tool.uv]
+default-groups = ["all", "dev"]

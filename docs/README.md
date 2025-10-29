@@ -4,7 +4,7 @@ Tail and Filter AWS CloudWatch Logs
 
 ## Installation
 
-1. `poetry add tail_cw`
+1. `uv add tail_cw`
 
 1. ...
 
