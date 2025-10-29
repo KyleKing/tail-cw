@@ -150,20 +150,12 @@ class LogTailApp(App[None]):
         if self._table is None:
             return
 
-        self._table.add_columns(
-            ('timestamp', 'Timestamp'),
-            ('log_group', 'Log Group'),
-            ('log_stream', 'Log Stream'),
-            ('message', 'Message'),
-            ('event_id', 'Event ID'),
-        )
-
-        # Set column widths for better display
-        self._table.add_column('timestamp', width=25)
-        self._table.add_column('log_group', width=30)
-        self._table.add_column('log_stream', width=30)
-        self._table.add_column('message', width=None)  # Flexible width
-        self._table.add_column('event_id', width=20)
+        # Add columns with widths in one go
+        self._table.add_column('Timestamp', key='timestamp', width=25)
+        self._table.add_column('Log Group', key='log_group', width=30)
+        self._table.add_column('Log Stream', key='log_stream', width=30)
+        self._table.add_column('Message', key='message', width=None)  # Flexible width
+        self._table.add_column('Event ID', key='event_id', width=20)
 
     def _load_log_events(self, events: list[LogEvent] | None = None) -> None:
         """Populate table with log events.

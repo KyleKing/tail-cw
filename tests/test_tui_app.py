@@ -25,14 +25,19 @@ def _make_test_log_events(count: int = 5) -> list[LogEvent]:
         else:
             message = f'{{"level":"INFO","index":{i},"message":"Test JSON {i}"}}'
 
+        # Create timestamps that handle large counts properly
+        base_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        timestamp = base_time.replace(second=i % 60, microsecond=(i // 60) * 1000)
+        ingestion_time = timestamp.replace(microsecond=timestamp.microsecond + 1000)
+
         events.append(
             LogEvent(
-                timestamp=datetime(2025, 1, 15, 10, i, 0, tzinfo=UTC),
+                timestamp=timestamp,
                 message=message,
                 log_group=f'/aws/test/group{i % 2}',
                 log_stream=f'stream-{i}',
                 event_id=f'event-{i:04d}',
-                ingestion_time=datetime(2025, 1, 15, 10, i, 1, tzinfo=UTC),
+                ingestion_time=ingestion_time,
             ),
         )
     return events
@@ -120,7 +125,7 @@ async def test_load_events_on_mount():
         assert table.row_count == 5
 
         # Check status label shows correct count
-        assert '5 events' in status.renderable.lower()
+        assert '5 events' in str(status.render()).lower()
 
 
 @pytest.mark.asyncio
@@ -138,7 +143,7 @@ async def test_empty_app_shows_no_logs_message():
         assert table.row_count == 0
 
         # Check status message
-        assert 'no logs loaded' in status.renderable.lower()
+        assert 'no logs loaded' in str(status.render()).lower()
 
 
 @pytest.mark.asyncio
@@ -235,7 +240,7 @@ async def test_load_events_method():
 
         # Initial state
         assert table.row_count == 3
-        assert '3 events' in status.renderable.lower()
+        assert '3 events' in str(status.render()).lower()
 
         # Load new events
         new_events = _make_test_log_events(7)
@@ -244,7 +249,7 @@ async def test_load_events_method():
 
         # Check updated state
         assert table.row_count == 7
-        assert '7 events' in status.renderable.lower()
+        assert '7 events' in str(status.render()).lower()
 
 
 @pytest.mark.asyncio
@@ -259,7 +264,7 @@ async def test_timestamp_formatting():
         table = app.query_one('#log_table', DataTable)
 
         # Get first row
-        row_key = table.rows[0].key
+        row_key = list(table.rows.keys())[0]
         cells = [table.get_cell(row_key, col.key) for col in table.columns.values()]
 
         # First cell should be the timestamp (Rich Text object)
@@ -294,7 +299,7 @@ async def test_message_truncation():
         table = app.query_one('#log_table', DataTable)
 
         # Get message cell (column index 3)
-        row_key = table.rows[0].key
+        row_key = list(table.rows.keys())[0]
         message_col = list(table.columns.values())[3]
         message_cell = table.get_cell(row_key, message_col.key)
 
