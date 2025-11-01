@@ -135,10 +135,7 @@ def test_format_log_event_for_table_no_truncation_needed():
 
 def test_batch_format_log_events():
     """Test batch formatting."""
-    events = [
-        _make_test_event(event_id=f'event-{i:04d}', message=f'Message {i}')
-        for i in range(5)
-    ]
+    events = [_make_test_event(event_id=f'event-{i:04d}', message=f'Message {i}') for i in range(5)]
 
     result = batch_format_log_events(events)
 

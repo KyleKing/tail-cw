@@ -1,59 +1,25 @@
 # AGENTS.md
 
-A concise, agent-focused guide for working on this Python project with uv tooling and (when present) Textual-based TUI code. Keep changes highly testable: prefer functions over classes, efficient data structures, and the fewest dependencies practical.
+A concise, agent-focused guide for working on this Python project with uv tooling and Textual-based TUI code. Keep changes highly testable: prefer functions over classes, efficient data structures, and the fewest dependencies practical.
 
 ## Quick context
 
 - Language: Python >=3.11
 - Package layout: `tail_cw/` with tests in `tests/`
+- Dependency management with uv (`uv sync`)
 - Package manager/config in repo: uv (via `pyproject.toml`)
-- Dev orchestration: nox sessions from `calcipy`
 - Linters/types: Ruff, Mypy, Pyright
 - Docs: MkDocs in `docs/`
 
-## Setup commands
-
-Use uv directly for environment management and installs.
-
-```zsh
-# 1) Create a local virtual environment (./.venv)
-uv venv
-
-# 2) Install the package in editable mode (installs runtime deps)
-uv pip install -e .
-
-# 3) Install calcipy with toolchain extras (enables ./run tasks)
-uv pip install "calcipy[doc,lint,nox,tags,test,types]>=5.0.0"
-
-# 4) Confirm tooling available in the env
-uv run python -V
-uv run ./run --help
-uv run ruff --version
-uv run pytest -q
-```
-
-Notes:
-
-- If your `pyproject.toml` uses PEP 621 `[project]` dependencies, `uv sync` is also an option. Otherwise, `uv pip install -e .` works via PEP 517 with the current build backend.
-- You don’t need to `source` the venv when using `uv run <cmd>`; uv runs commands in the project environment.
-
 ## Core commands
 
-Preferred via calcipy task runner (no need to activate venv):
+WARN: the `./run` commands (and nox) are currently broken. Use the direct commands listed below instead
 
-- Lint check/fix: `uv run ./run lint` and `uv run ./run lint.fix`
-- Tests: `uv run ./run test`
-- Types: `uv run ./run types.mypy` and `uv run ./run types.pyright`
-- Docs: `uv run ./run doc.build` and `uv run ./run doc.watch`
-- Nox: `uv run ./run nox -s tests` (also `build_check`, `build_dist`)
-
-Alternative direct commands:
-
-- Lint: `uv run ruff check .`
-- Format: `uv run ruff format .`
-- Types: `uv run mypy tail_cw tests` and `uv run pyright`
-- Tests: `uv run pytest -q`
-- Nox: `uv run nox -s tests` (also `build_check`, `build_dist`)
+- Format: `uv run ruff format`
+- Lint: `uv run ruff check --fix --unsafe-fixes`
+- Types: `uv run mypy` and `uv run pyright`
+- Tests: `uv run pytest -q --ff`
+- Pre-Commit: `prek run --all-files`
 
 Agents should run tests and lint/type checks before finishing a task and fix any failures.
 
@@ -67,8 +33,8 @@ Agents should run tests and lint/type checks before finishing a task and fix any
     - Use `heapq` for top-N, `bisect` for sorted inserts, `array`/`memoryview` when working with large numeric buffers.
     - Choose `dataclasses` for simple records; avoid heavy object hierarchies.
 - Fewest dependencies
-    - Reach for stdlib first. Add third-party libs only with clear benefit and small footprint; pin tightly if added.
-    - If a new dep duplicates existing functionality (e.g., Rich/Textual/Ruff/Mypy already present), don’t add it.
+    - Reach for stdlib first. Add third-party libs only with clear benefit and small footprint; use `uv add <name>` for managing dependencies
+    - If a new dependency duplicates existing functionality (e.g., Rich/Textual/Ruff/Mypy already present), don’t add it.
 - Types and contracts
     - Add precise type hints. Prefer `collections.abc` for callables/iterables.
     - Document inputs/outputs and error modes in docstrings; raise specific exceptions.
@@ -116,42 +82,7 @@ References:
 - Types: `mypy` and `pyright` pass on changed files and related modules
 - Tests: `pytest` suite passes locally
 - If you added Textual code: basic interaction test(s) included; UI remains responsive under typical input rates
-- No new runtime dependencies unless justified in PR description
-
-## Useful one-liners
-
-```zsh
-# Quick validation via calcipy (runs with uv)
-uv run ./run lint test types.mypy types.pyright
-
-# Alternative direct tools
-uv run ruff check . && \
-uv run mypy tail_cw tests && \
-uv run pyright && \
-uv run pytest -q
-
-# Run nox test session (aggregated checks configured by calcipy)
-uv run ./run nox -s tests
-```
-
-## Calcipy task runner (./run) quick reference
-
-Common tasks (see full list with `uv run ./run --help`):
-
-- `uv run ./run lint` / `lint.fix` — Ruff check/fix
-- `uv run ./run test` / `test.watch` — Pytest run/watch, see also `test.coverage`
-- `uv run ./run types.mypy` / `types.pyright` — Type checks
-- `uv run ./run doc.build` / `doc.watch` — Build or serve docs
-- `uv run ./run nox -s tests` — Run nox sessions from local `noxfile.py`
-- `uv run ./run tags` — Collect TODO/FIXME tags summary
-- `uv run ./run cl.bump` / `cl.write` — Version bump and changelog
-- `uv run ./run release` — Release pipeline (advanced)
-
-## PR guidelines (for agents)
-
-- Title: concise, imperative; if applicable, include scope in brackets, e.g., `[tui] Improve log tail batching`.
-- Include: summary of approach, tradeoffs, and why dependencies (if any) were added.
-- Ensure acceptance criteria are satisfied and described in the PR body.
+- No new runtime dependencies unless justified in request
 
 ## Notes for agents
 

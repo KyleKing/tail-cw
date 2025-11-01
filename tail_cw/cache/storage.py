@@ -171,11 +171,7 @@ def _log_events_to_ndjson_file(
                 'timestamp': event.timestamp.isoformat(),
                 'message': event.message,
                 'event_id': event.event_id,
-                'ingestion_time': (
-                    event.ingestion_time.isoformat()
-                    if event.ingestion_time is not None
-                    else None
-                ),
+                'ingestion_time': (event.ingestion_time.isoformat() if event.ingestion_time is not None else None),
             }
 
             # Try to parse message as JSON if it looks like JSON
@@ -265,8 +261,7 @@ def write_log_events_to_parquet(
         # Convert NDJSON to Parquet using Polars
         # Use scan_ndjson for lazy loading with schema inference
         (
-            pl.scan_ndjson(str(temp_file), infer_schema_length=1000)
-            .sink_parquet(
+            pl.scan_ndjson(str(temp_file), infer_schema_length=1000).sink_parquet(
                 str(output_path),
                 compression='zstd',
                 compression_level=compression_level,
@@ -437,10 +432,7 @@ class LogCache:
             metadata_value = self._metadata.get(cache_key)
             if metadata_value is not None:
                 # Handle both old string format and new tuple format
-                path_str = (
-                    str(metadata_value[0]) if isinstance(metadata_value, tuple)
-                    else str(metadata_value)
-                )
+                path_str = str(metadata_value[0]) if isinstance(metadata_value, tuple) else str(metadata_value)
                 referenced_files.add(Path(path_str))
 
         # Delete orphaned Parquet files
@@ -491,10 +483,7 @@ class LogCache:
                 metadata_value = self._metadata.get(cache_key)
                 if metadata_value is not None:
                     # Handle both old string format and new tuple format
-                    path_str = (
-                        str(metadata_value[0]) if isinstance(metadata_value, tuple)
-                        else str(metadata_value)
-                    )
+                    path_str = str(metadata_value[0]) if isinstance(metadata_value, tuple) else str(metadata_value)
 
                     if Path(path_str) == parquet_file:
                         self._metadata.delete(cache_key)
@@ -580,10 +569,7 @@ class LogCache:
             return iter(())
 
         # Handle both old string format and new tuple format
-        parquet_path_str = (
-            str(metadata_value[0]) if isinstance(metadata_value, tuple)
-            else str(metadata_value)
-        )
+        parquet_path_str = str(metadata_value[0]) if isinstance(metadata_value, tuple) else str(metadata_value)
 
         parquet_path = Path(parquet_path_str)
 
@@ -611,10 +597,7 @@ class LogCache:
             return False
 
         # Handle both old string format and new tuple format
-        parquet_path_str = (
-            str(metadata_value[0]) if isinstance(metadata_value, tuple)
-            else str(metadata_value)
-        )
+        parquet_path_str = str(metadata_value[0]) if isinstance(metadata_value, tuple) else str(metadata_value)
 
         # Verify file exists
         parquet_path = Path(parquet_path_str)

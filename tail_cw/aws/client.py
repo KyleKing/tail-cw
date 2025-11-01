@@ -145,11 +145,7 @@ def fetch_log_events(
         for event in page.get('events', []):
             # Convert timestamps from epoch ms to datetime
             timestamp = _epoch_ms_to_datetime(event['timestamp'])
-            ingestion_time = (
-                _epoch_ms_to_datetime(event['ingestionTime'])
-                if 'ingestionTime' in event
-                else None
-            )
+            ingestion_time = _epoch_ms_to_datetime(event['ingestionTime']) if 'ingestionTime' in event else None
 
             yield LogEvent(
                 log_group=log_group_name,

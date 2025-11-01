@@ -134,9 +134,7 @@ def format_log_event_detail(event: LogEvent) -> str:
         ...
     """
     # Format ingestion time, handling None
-    ingestion_time_str = (
-        event.ingestion_time.isoformat() if event.ingestion_time else 'N/A'
-    )
+    ingestion_time_str = event.ingestion_time.isoformat() if event.ingestion_time else 'N/A'
 
     return f"""Event ID: {event.event_id}
 Timestamp: {event.timestamp.isoformat()}
