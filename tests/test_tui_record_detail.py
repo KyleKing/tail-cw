@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 import pytest
+from textual.widgets import DataTable, Static
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.tui.app import LogTailApp
@@ -17,7 +18,8 @@ def _make_test_event(
     log_group: str = '/aws/test/group',
     log_stream: str = 'stream-0',
     event_id: str = 'event-0001',
-    ingestion_time: datetime | None | object = _SENTINEL,
+    *,
+    ingestion_time: datetime | object | None = _SENTINEL,
 ) -> LogEvent:
     """Create a test LogEvent with default or custom values.
 
@@ -94,8 +96,6 @@ async def test_modal_displays_event_details():
         app.push_screen(RecordDetailScreen(event))
         await pilot.pause()
 
-        from textual.widgets import Static
-
         content = app.screen.query_one('#content', Static)
         content_text = str(content.render())
 
@@ -123,8 +123,6 @@ async def test_modal_displays_jsonl_message():
         app.push_screen(RecordDetailScreen(event))
         await pilot.pause()
 
-        from textual.widgets import Static
-
         content = app.screen.query_one('#content', Static)
         content_text = str(content.render())
 
@@ -145,8 +143,6 @@ async def test_modal_displays_plain_text_message():
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
         await pilot.pause()
-
-        from textual.widgets import Static
 
         content = app.screen.query_one('#content', Static)
         content_text = str(content.render())
@@ -253,8 +249,6 @@ async def test_modal_with_none_ingestion_time():
         app.push_screen(RecordDetailScreen(event))
         await pilot.pause()
 
-        from textual.widgets import Static
-
         content = app.screen.query_one('#content', Static)
         content_text = str(content.render())
 
@@ -272,8 +266,6 @@ async def test_modal_with_long_message():
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
         await pilot.pause()
-
-        from textual.widgets import Static
 
         content = app.screen.query_one('#content', Static)
         content_text = str(content.render())
@@ -293,8 +285,6 @@ async def test_modal_with_special_characters():
         app.push_screen(RecordDetailScreen(event))
         await pilot.pause()
 
-        from textual.widgets import Static
-
         content = app.screen.query_one('#content', Static)
         content_text = str(content.render())
 
@@ -312,8 +302,6 @@ async def test_modal_from_app_integration():
     app = LogTailApp(log_events=events)
 
     async with app.run_test() as pilot:
-        from textual.widgets import DataTable
-
         # Focus table and select first row
         table = app.query_one('#log_table', DataTable)
         table.focus()
@@ -338,8 +326,6 @@ async def test_modal_from_app_integration():
         assert isinstance(app.screen, RecordDetailScreen)
 
         # Check modal displays correct event (based on cursor row)
-        from textual.widgets import Static
-
         content = app.screen.query_one('#content', Static)
         content_text = str(content.render())
         # The cursor may be on row 0 or 1 depending on test order, just verify it shows an event
@@ -361,8 +347,6 @@ async def test_modal_multiple_open_close():
     app = LogTailApp(log_events=events)
 
     async with app.run_test() as pilot:
-        from textual.widgets import DataTable
-
         table = app.query_one('#log_table', DataTable)
         table.focus()
         await pilot.pause()
@@ -399,8 +383,6 @@ async def test_modal_with_empty_message():
         app.push_screen(RecordDetailScreen(event))
         await pilot.pause()
 
-        from textual.widgets import Static
-
         content = app.screen.query_one('#content', Static)
         content_text = str(content.render())
 
@@ -421,8 +403,6 @@ Line 3"""
         app.push_screen(RecordDetailScreen(event))
         await pilot.pause()
 
-        from textual.widgets import Static
-
         content = app.screen.query_one('#content', Static)
         content_text = str(content.render())
 
@@ -442,8 +422,6 @@ async def test_modal_with_malformed_json():
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
         await pilot.pause()
-
-        from textual.widgets import Static
 
         content = app.screen.query_one('#content', Static)
         content_text = str(content.render())

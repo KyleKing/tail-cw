@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 import pytest
+from textual.widgets import DataTable, Label
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.tui.app import LogTailApp
@@ -20,10 +21,7 @@ def _make_test_log_events(count: int = 5) -> list[LogEvent]:
     events = []
     for i in range(count):
         # Alternate between plain text and JSON messages
-        if i % 2 == 0:
-            message = f'Test log message {i}'
-        else:
-            message = f'{{"level":"INFO","index":{i},"message":"Test JSON {i}"}}'
+        message = f'Test log message {i}' if i % 2 == 0 else f'{{"level":"INFO","index":{i},"message":"Test JSON {i}"}}'
 
         # Create timestamps that handle large counts properly
         base_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
@@ -73,7 +71,7 @@ async def test_app_compose_structure():
     """Test UI composition has required widgets."""
     app = LogTailApp()
 
-    async with app.run_test() as pilot:
+    async with app.run_test() as _:
         # Check for Header, Footer, DataTable, and status Label
         header = app.query_one('Header')
         footer = app.query_one('Footer')
@@ -92,9 +90,7 @@ async def test_table_columns_setup():
     events = _make_test_log_events(2)
     app = LogTailApp(log_events=events)
 
-    async with app.run_test() as pilot:
-        from textual.widgets import DataTable
-
+    async with app.run_test() as _:
         table = app.query_one('#log_table', DataTable)
 
         # Check column count (5 columns)
@@ -115,9 +111,7 @@ async def test_load_events_on_mount():
     events = _make_test_log_events(5)
     app = LogTailApp(log_events=events)
 
-    async with app.run_test() as pilot:
-        from textual.widgets import DataTable, Label
-
+    async with app.run_test() as _:
         table = app.query_one('#log_table', DataTable)
         status = app.query_one('#status', Label)
 
@@ -133,9 +127,7 @@ async def test_empty_app_shows_no_logs_message():
     """Test empty state."""
     app = LogTailApp()
 
-    async with app.run_test() as pilot:
-        from textual.widgets import DataTable, Label
-
+    async with app.run_test() as _:
         table = app.query_one('#log_table', DataTable)
         status = app.query_one('#status', Label)
 
@@ -153,8 +145,6 @@ async def test_keyboard_navigation():
     app = LogTailApp(log_events=events)
 
     async with app.run_test() as pilot:
-        from textual.widgets import DataTable
-
         table = app.query_one('#log_table', DataTable)
 
         # Focus the table
@@ -233,8 +223,6 @@ async def test_load_events_method():
     app = LogTailApp(log_events=initial_events)
 
     async with app.run_test() as pilot:
-        from textual.widgets import DataTable, Label
-
         table = app.query_one('#log_table', DataTable)
         status = app.query_one('#status', Label)
 
@@ -258,13 +246,11 @@ async def test_timestamp_formatting():
     events = _make_test_log_events(1)
     app = LogTailApp(log_events=events)
 
-    async with app.run_test() as pilot:
-        from textual.widgets import DataTable
-
+    async with app.run_test() as _:
         table = app.query_one('#log_table', DataTable)
 
         # Get first row
-        row_key = list(table.rows.keys())[0]
+        row_key = next(iter(table.rows.keys()))
         cells = [table.get_cell(row_key, col.key) for col in table.columns.values()]
 
         # First cell should be the timestamp (Rich Text object)
@@ -293,13 +279,11 @@ async def test_message_truncation():
 
     app = LogTailApp(log_events=[event])
 
-    async with app.run_test() as pilot:
-        from textual.widgets import DataTable
-
+    async with app.run_test() as _:
         table = app.query_one('#log_table', DataTable)
 
         # Get message cell (column index 3)
-        row_key = list(table.rows.keys())[0]
+        row_key = next(iter(table.rows.keys()))
         message_col = list(table.columns.values())[3]
         message_cell = table.get_cell(row_key, message_col.key)
 
@@ -317,8 +301,6 @@ async def test_batch_loading_performance():
     app = LogTailApp(log_events=events)
 
     async with app.run_test() as pilot:
-        from textual.widgets import DataTable
-
         table = app.query_one('#log_table', DataTable)
 
         # All events should be loaded
@@ -342,9 +324,7 @@ async def test_events_with_none_ingestion_time():
 
     app = LogTailApp(log_events=[event])
 
-    async with app.run_test() as pilot:
-        from textual.widgets import DataTable
-
+    async with app.run_test() as _:
         table = app.query_one('#log_table', DataTable)
 
         # Should load without error
@@ -365,9 +345,7 @@ async def test_events_with_special_characters():
 
     app = LogTailApp(log_events=[event])
 
-    async with app.run_test() as pilot:
-        from textual.widgets import DataTable
-
+    async with app.run_test() as _:
         table = app.query_one('#log_table', DataTable)
 
         # Should load without error
@@ -388,9 +366,7 @@ async def test_empty_message():
 
     app = LogTailApp(log_events=[event])
 
-    async with app.run_test() as pilot:
-        from textual.widgets import DataTable
-
+    async with app.run_test() as _:
         table = app.query_one('#log_table', DataTable)
 
         # Should load without error

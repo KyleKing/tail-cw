@@ -20,6 +20,7 @@ def _make_cw_event(
     timestamp: int = 1700000000000,
     message: str = 'Test log message',
     event_id: str = 'event-123',
+    *,
     include_ingestion_time: bool = True,
 ):
     """Create a mock CloudWatch event dict for testing.

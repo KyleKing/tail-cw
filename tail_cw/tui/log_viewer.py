@@ -24,6 +24,7 @@ import json
 from collections.abc import Iterable
 from datetime import datetime
 
+from rich.console import RenderableType
 from rich.text import Text
 
 from tail_cw.aws.client import LogEvent
@@ -55,7 +56,7 @@ def format_timestamp(dt: datetime, style: str = 'cyan') -> Text:
 def format_log_event_for_table(
     event: LogEvent,
     truncate_message: int = 100,
-) -> tuple[Text, str, str, str, str]:
+) -> tuple[RenderableType, str, str, str, str]:
     """Convert a LogEvent to a table row tuple.
 
     Args:
@@ -91,7 +92,7 @@ def format_log_event_for_table(
 def batch_format_log_events(
     events: Iterable[LogEvent],
     truncate_message: int = 100,
-) -> list[tuple[Text, str, str, str, str]]:
+) -> list[tuple[RenderableType, str, str, str, str]]:
     """Convert multiple LogEvents to table rows efficiently.
 
     Uses list comprehension for batch processing, improving performance
@@ -208,7 +209,8 @@ def format_log_event_detail_with_json(event: LogEvent) -> str:
     if parsed_json:
         # Replace the Message section with both raw and parsed
         parts = basic_detail.split('Message:\n', 1)
-        if len(parts) == 2:
+        expected_parts = 2  # header and message content
+        if len(parts) == expected_parts:
             header = parts[0]
             return f"""{header}Message (raw):
 {event.message}

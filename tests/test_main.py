@@ -3,12 +3,11 @@
 from unittest.mock import patch
 
 import tail_cw.__main__
+from tail_cw.__main__ import main
 
 
 def test_main_function_exists():
     """Test that main function is defined."""
-    from tail_cw.__main__ import main
-
     assert callable(main)
 
 

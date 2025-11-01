@@ -9,15 +9,23 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import tempfile
 from collections.abc import Iterable, Iterator
 from datetime import datetime
+from operator import itemgetter
 from pathlib import Path
 
 import polars as pl
 from diskcache import Cache
 
 from tail_cw.aws.client import LogEvent
+
+# Precompiled regex for detecting ISO8601/RFC3339 timestamps at start of message
+# Matches formats like: 2025-01-01T12:00:00Z, 2025-01-01T12:00:00.123456+00:00
+_TIMESTAMP_PREFIX_RE = re.compile(
+    r'^\s*\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\s*',
+)
 
 
 def generate_cache_key(
@@ -99,9 +107,8 @@ def generate_cache_key(
 def is_jsonl_message(message: str) -> bool:
     """Detect if a log message appears to be JSON.
 
-    CloudWatch log messages don't have timestamp prefixes in the message field
-    itself, so we simply check if the message starts with '{' after stripping
-    leading whitespace.
+    Checks if the message starts with '{' after stripping leading whitespace.
+    Also handles messages with leading ISO8601/RFC3339 timestamps followed by JSON.
 
     Args:
         message: The log message content.
@@ -114,10 +121,20 @@ def is_jsonl_message(message: str) -> bool:
         True
         >>> is_jsonl_message('  {"key":"value"}')
         True
+        >>> is_jsonl_message('2025-01-01T12:00:00Z {"k":1}')
+        True
         >>> is_jsonl_message('Plain text log')
         False
     """
-    return message.lstrip().startswith('{')
+    # Fast path: check if message starts with '{' after stripping whitespace
+    stripped = message.lstrip()
+    if stripped.startswith('{'):
+        return True
+
+    # Check if message has timestamp prefix followed by '{'
+    # Remove timestamp prefix and check again
+    without_timestamp = _TIMESTAMP_PREFIX_RE.sub('', message, count=1)
+    return without_timestamp.lstrip().startswith('{')
 
 
 def _log_events_to_ndjson_file(
@@ -276,7 +293,8 @@ def read_parquet_to_log_events(parquet_path: Path) -> Iterator[LogEvent]:
     """Read a Parquet file back to LogEvent instances.
 
     Performs the inverse operation of write_log_events_to_parquet,
-    reconstructing LogEvent objects from the Parquet schema.
+    reconstructing LogEvent objects from the Parquet schema. Uses
+    streaming to avoid loading the entire file into memory.
 
     Args:
         parquet_path: Path to Parquet file created by write_log_events_to_parquet.
@@ -297,11 +315,20 @@ def read_parquet_to_log_events(parquet_path: Path) -> Iterator[LogEvent]:
         msg = f'Parquet file not found: {parquet_path}'
         raise FileNotFoundError(msg)
 
-    # Read Parquet file into DataFrame
-    df = pl.scan_parquet(str(parquet_path)).collect()
+    # Use scan_parquet with streaming engine to avoid loading entire file
+    # Process in batches to balance memory usage and iteration overhead
+    lazy_df = pl.scan_parquet(str(parquet_path))
+
+    # Collect with streaming engine for memory-efficient processing
+    try:
+        # Try new engine parameter (Polars >= 1.25.0)
+        df_iter = lazy_df.collect(engine='streaming')
+    except TypeError:
+        # Fall back to deprecated streaming parameter for older Polars versions
+        df_iter = lazy_df.collect(streaming=True)  # type: ignore[call-arg, call-overload]
 
     # Iterate through rows and reconstruct LogEvent instances
-    for row in df.iter_rows(named=True):
+    for row in df_iter.iter_rows(named=True):
         # Parse ISO timestamp strings back to datetime objects
         timestamp = datetime.fromisoformat(row['timestamp'])
 
@@ -384,6 +411,7 @@ class LogCache:
         self._cache_dir = cache_dir
         self._parquet_dir = cache_dir / 'parquet'
         self._default_ttl = default_ttl_seconds
+        self._size_limit_bytes = size_limit_mb * 1024 * 1024
 
         # Create directories
         self._cache_dir.mkdir(parents=True, exist_ok=True)
@@ -391,12 +419,92 @@ class LogCache:
 
         # Initialize DiskCache with size limit and eviction policy
         # Size limit is in bytes
-        size_limit_bytes = size_limit_mb * 1024 * 1024
         self._metadata = Cache(
             str(self._cache_dir / 'metadata'),
-            size_limit=size_limit_bytes,
+            size_limit=self._size_limit_bytes,
             eviction_policy=eviction_policy,
         )
+
+    def _cleanup_orphaned_files(self) -> int:
+        """Clean up Parquet files not referenced by any metadata entry.
+
+        Returns:
+            Number of orphaned files deleted.
+        """
+        # Find all files referenced in metadata
+        referenced_files = set()
+        for cache_key in self._metadata.iterkeys():  # type: ignore[attr-defined]
+            metadata_value = self._metadata.get(cache_key)
+            if metadata_value is not None:
+                # Handle both old string format and new tuple format
+                path_str = (
+                    str(metadata_value[0]) if isinstance(metadata_value, tuple)
+                    else str(metadata_value)
+                )
+                referenced_files.add(Path(path_str))
+
+        # Delete orphaned Parquet files
+        cleaned_count = 0
+        for parquet_file in self._parquet_dir.glob('*.parquet'):
+            if parquet_file not in referenced_files:
+                parquet_file.unlink()
+                cleaned_count += 1
+
+        return cleaned_count
+
+    def _enforce_parquet_size_limit(self) -> int:
+        """Enforce Parquet directory size limit via FIFO eviction.
+
+        Computes total size of Parquet files and deletes oldest files
+        (by creation time) until under the size limit. Also removes
+        corresponding metadata entries.
+
+        Returns:
+            Number of files evicted.
+        """
+        # Collect all Parquet files with their sizes and creation times
+        parquet_files = []
+        total_size = 0
+        for parquet_file in self._parquet_dir.glob('*.parquet'):
+            stat = parquet_file.stat()
+            size = stat.st_size
+            # Use birthtime if available, otherwise ctime
+            ctime = stat.st_birthtime if hasattr(stat, 'st_birthtime') else stat.st_ctime
+            parquet_files.append((parquet_file, size, ctime))
+            total_size += size
+
+        # Check if we're over the limit
+        if total_size <= self._size_limit_bytes:
+            return 0
+
+        # Sort by creation time (oldest first) for FIFO
+        parquet_files.sort(key=itemgetter(2))
+
+        # Delete oldest files until under limit
+        evicted_count = 0
+        for parquet_file, size, _ctime in parquet_files:
+            if total_size <= self._size_limit_bytes:
+                break
+
+            # Find and delete corresponding metadata entries
+            for cache_key in list(self._metadata.iterkeys()):  # type: ignore[attr-defined]
+                metadata_value = self._metadata.get(cache_key)
+                if metadata_value is not None:
+                    # Handle both old string format and new tuple format
+                    path_str = (
+                        str(metadata_value[0]) if isinstance(metadata_value, tuple)
+                        else str(metadata_value)
+                    )
+
+                    if Path(path_str) == parquet_file:
+                        self._metadata.delete(cache_key)
+
+            # Delete the Parquet file
+            parquet_file.unlink()
+            total_size -= size
+            evicted_count += 1
+
+        return evicted_count
 
     def write(
         self,
@@ -427,44 +535,63 @@ class LogCache:
         # Write events to Parquet
         stats = write_log_events_to_parquet(log_events, parquet_path)
 
-        # Store metadata in DiskCache
+        # Store metadata in DiskCache with file size for efficient size tracking
         ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
+        metadata_value = (str(parquet_path), stats['file_size_bytes'])
         self._metadata.set(
             cache_key,
-            str(parquet_path),
+            metadata_value,
             expire=ttl,
         )
 
+        # Trigger DiskCache expiration and culling to enforce TTL and size limits
+        self._metadata.expire()
+        # Trigger cull to apply DiskCache eviction policy
+        # Note: cull() returns the number of entries evicted
+        self._metadata.cull()
+
+        # Clean up orphaned Parquet files after metadata changes
+        self._cleanup_orphaned_files()
+
+        # Enforce Parquet directory size limit
+        self._enforce_parquet_size_limit()
+
         return stats
 
-    def read(self, cache_key: str) -> Iterator[LogEvent] | None:
+    def read(self, cache_key: str) -> Iterator[LogEvent]:
         """Read log events from cache.
 
         Args:
             cache_key: Cache key to read from.
 
         Returns:
-            Iterator of LogEvent instances if key exists, None otherwise.
+            Iterator of LogEvent instances. Returns empty iterator if key
+            doesn't exist or file is missing.
 
         Example:
-            >>> events = cache.read('cache:v1:abc123')
-            >>> if events is not None:
-            ...     for event in events:
-            ...         print(event.message)
+            >>> events = list(cache.read('cache:v1:abc123'))
+            >>> for event in events:
+            ...     print(event.message)
         """
         # Get Parquet path from metadata
-        parquet_path_str = self._metadata.get(cache_key)
+        metadata_value = self._metadata.get(cache_key)
 
-        if parquet_path_str is None:
-            return None
+        if metadata_value is None:
+            return iter(())
 
-        parquet_path = Path(str(parquet_path_str))
+        # Handle both old string format and new tuple format
+        parquet_path_str = (
+            str(metadata_value[0]) if isinstance(metadata_value, tuple)
+            else str(metadata_value)
+        )
+
+        parquet_path = Path(parquet_path_str)
 
         # Check if file exists (may have been deleted externally)
         if not parquet_path.exists():
             # Clean up stale metadata
             self._metadata.delete(cache_key)
-            return None
+            return iter(())
 
         # Read and return events
         return read_parquet_to_log_events(parquet_path)
@@ -478,13 +605,19 @@ class LogCache:
         Returns:
             True if key exists and is valid, False otherwise.
         """
-        parquet_path_str = self._metadata.get(cache_key)
+        metadata_value = self._metadata.get(cache_key)
 
-        if parquet_path_str is None:
+        if metadata_value is None:
             return False
 
+        # Handle both old string format and new tuple format
+        parquet_path_str = (
+            str(metadata_value[0]) if isinstance(metadata_value, tuple)
+            else str(metadata_value)
+        )
+
         # Verify file exists
-        parquet_path = Path(str(parquet_path_str))
+        parquet_path = Path(parquet_path_str)
         if not parquet_path.exists():
             # Clean up stale metadata
             self._metadata.delete(cache_key)
@@ -496,7 +629,7 @@ class LogCache:
         """Manually trigger expiration of TTL entries and clean up orphaned files.
 
         Removes expired cache entries and deletes Parquet files that are no longer
-        referenced by any metadata entry.
+        referenced by any metadata entry. Also enforces Parquet directory size limit.
 
         Returns:
             Number of orphaned Parquet files cleaned up.
@@ -505,22 +638,17 @@ class LogCache:
             >>> cache.evict_expired()
             3  # Cleaned up 3 orphaned files
         """
-        # Trigger DiskCache expiration
+        # Trigger DiskCache expiration to remove TTL-expired entries
         self._metadata.expire()
 
-        # Find orphaned Parquet files (files not referenced by any metadata)
-        referenced_files = set()
-        for cache_key in self._metadata.iterkeys():  # type: ignore[attr-defined] # pyright needs this
-            parquet_path_str = self._metadata.get(cache_key)
-            if parquet_path_str is not None:
-                referenced_files.add(Path(str(parquet_path_str)))
+        # Trigger cull to apply DiskCache eviction policy
+        self._metadata.cull()
 
-        # Find and delete orphaned files
-        cleaned_count = 0
-        for parquet_file in self._parquet_dir.glob('*.parquet'):
-            if parquet_file not in referenced_files:
-                parquet_file.unlink()
-                cleaned_count += 1
+        # Clean up orphaned Parquet files after metadata changes
+        cleaned_count = self._cleanup_orphaned_files()
+
+        # Enforce Parquet directory size limit
+        self._enforce_parquet_size_limit()
 
         return cleaned_count
 

@@ -12,15 +12,16 @@ formatting logic extracted to separate modules (log_viewer.py).
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
 from textual.widgets import DataTable, Footer, Header, Label
+from textual.worker import get_current_worker
 
 from tail_cw.aws.client import LogEvent
-from tail_cw.tui.log_viewer import batch_format_log_events
+from tail_cw.tui.log_viewer import batch_format_log_events, get_column_definitions
 from tail_cw.tui.record_detail import RecordDetailScreen
 
 
@@ -104,9 +105,9 @@ class LogTailApp(App[None]):
         super().__init__()
         self.title = title
         self._log_events: list[LogEvent] = log_events if log_events is not None else []
-        self._table: DataTable[str] | None = None
+        self._table: DataTable[Any] | None = None
 
-    def compose(self) -> ComposeResult:
+    def compose(self) -> ComposeResult:  # noqa: PLR6301
         """Build the UI hierarchy.
 
         Yields:
@@ -150,18 +151,26 @@ class LogTailApp(App[None]):
         if self._table is None:
             return
 
-        # Add columns with widths in one go
-        self._table.add_column('Timestamp', key='timestamp', width=25)
-        self._table.add_column('Log Group', key='log_group', width=30)
-        self._table.add_column('Log Stream', key='log_stream', width=30)
-        self._table.add_column('Message', key='message', width=None)  # Flexible width
-        self._table.add_column('Event ID', key='event_id', width=20)
+        # Width policy: fixed for most columns, flexible for message
+        column_widths = {
+            'timestamp': 25,
+            'log_group': 30,
+            'log_stream': 30,
+            'message': None,  # Flexible width
+            'event_id': 20,
+        }
+
+        # Add columns using centralized definitions
+        for key, label in get_column_definitions():
+            width = column_widths.get(key)
+            self._table.add_column(label, key=key, width=width)
 
     def _load_log_events(self, events: list[LogEvent] | None = None) -> None:
         """Populate table with log events.
 
         Uses batch insertion (add_rows) for performance with large datasets.
-        Clears existing data before loading new events.
+        For very large datasets (>5,000 events), uses incremental loading
+        to keep the UI responsive.
 
         Args:
             events: Optional list of events to load. If None, uses self._log_events
@@ -174,12 +183,62 @@ class LogTailApp(App[None]):
         # Clear existing data
         self._table.clear(columns=False)
 
-        # Batch format and load events
-        formatted_rows = batch_format_log_events(events_to_load, truncate_message=100)
-        self._table.add_rows(formatted_rows)  # type: ignore[arg-type]
+        # Set loading state
+        self._table.loading = True
 
-        # Update loading state
-        self._table.loading = False
+        # Threshold for incremental loading
+        chunk_threshold = 5000
+        chunk_size = 1000
+
+        if len(events_to_load) > chunk_threshold:
+            # Use incremental loading for large datasets
+            self.run_worker(
+                self._load_events_incrementally(events_to_load, chunk_size),
+                name='load_events',
+                exclusive=True,
+            )
+        else:
+            # Direct load for smaller datasets
+            formatted_rows = batch_format_log_events(events_to_load, truncate_message=100)
+            self._table.add_rows(formatted_rows)
+            self._table.loading = False
+
+    async def _load_events_incrementally(
+        self,
+        events: list[LogEvent],
+        chunk_size: int,
+    ) -> None:
+        """Load events in chunks to keep UI responsive.
+
+        Args:
+            events: List of events to load
+            chunk_size: Number of events per chunk
+        """
+        worker = get_current_worker()
+        total = len(events)
+
+        for start_idx in range(0, total, chunk_size):
+            # Check if worker was cancelled
+            if worker.is_cancelled:
+                break
+
+            end_idx = min(start_idx + chunk_size, total)
+            chunk = events[start_idx:end_idx]
+
+            # Format and add chunk
+            formatted_rows = batch_format_log_events(chunk, truncate_message=100)
+
+            if self._table is not None:
+                self._table.add_rows(formatted_rows)
+
+            # Update progress
+            progress = end_idx / total * 100
+            self._update_status(f'Loading events: {end_idx}/{total} ({progress:.0f}%)')
+
+        # Finalize loading
+        if self._table is not None:
+            self._table.loading = False
+        self._update_status(f'Loaded {total} events')
 
     def _update_status(self, message: str) -> None:
         """Update the status label with a message.
@@ -199,14 +258,14 @@ class LogTailApp(App[None]):
         if self._table is None:
             return
 
-        cursor_coordinate = self._table.cursor_coordinate
-        if cursor_coordinate.row < 0:
-            # No row selected
+        row_index = self._table.cursor_row
+        if row_index < 0 or not self._log_events:
+            # No row selected or no events
             return
 
         # Get the LogEvent from our data
         try:
-            log_event = self._log_events[cursor_coordinate.row]
+            log_event = self._log_events[row_index]
         except IndexError:
             self.notify('Invalid row selection', severity='error')
             return

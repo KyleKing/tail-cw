@@ -149,11 +149,20 @@ def test_is_jsonl_message():
     assert is_jsonl_message('  {"key":"value"}') is True
     assert is_jsonl_message('\t{"key":"value"}') is True
 
+    # JSON with leading timestamp (ISO8601/RFC3339)
+    assert is_jsonl_message('2025-01-01T12:00:00Z {"k":1}') is True
+    assert is_jsonl_message('2025-01-01T12:00:00.123456Z {"k":1}') is True
+    assert is_jsonl_message('2025-01-01T12:00:00+00:00 {"k":1}') is True
+    assert is_jsonl_message('  2025-01-01T12:00:00Z   {"k":1}') is True
+
     # Plain text
     assert is_jsonl_message('Plain log message') is False
 
     # Text starting with bracket (not JSON)
     assert is_jsonl_message('[ERROR] message') is False
+
+    # Timestamp without JSON
+    assert is_jsonl_message('2025-01-01T12:00:00Z Plain text') is False
 
     # Empty string
     assert is_jsonl_message('') is False
@@ -396,9 +405,7 @@ def test_log_cache_write_and_read(fix_test_cache: Path):
         assert stats['file_size_bytes'] > 0
 
         # Read back
-        cached_events_iter = cache.read(cache_key)
-        assert cached_events_iter is not None
-        cached_events = list(cached_events_iter)
+        cached_events = list(cache.read(cache_key))
 
         assert len(cached_events) == 3
         assert cached_events[0].event_id == 'event-1'
@@ -460,30 +467,72 @@ def test_log_cache_fifo_eviction(fix_test_cache: Path):
     """Test FIFO eviction when size limit is exceeded."""
     cache_dir = fix_test_cache / 'cache_fifo'
 
-    # Create cache with very small size limit (1 KB)
+    # Create cache with very small size limit to force eviction
+    # Use 1 MB but write much more data to ensure eviction
     with LogCache(cache_dir, size_limit_mb=1) as cache:
+        cache_keys = []
+
         # Write multiple batches to exceed size limit
+        # Write 10 batches of large data to ensure we exceed 1MB
         for i in range(10):
             start = datetime(2025, 1, i + 1, tzinfo=UTC)
             end = datetime(2025, 1, i + 2, tzinfo=UTC)
             cache_key = generate_cache_key(f'/aws/lambda/fn{i}', start, end)
+            cache_keys.append(cache_key)
 
-            # Create enough events to use space
+            # Create enough events to use significant space
+            # Each message is ~100 bytes, 2000 events = ~200KB per file
+            # 10 files * 200KB = 2MB total, exceeding 1MB limit
+            long_message = (
+                'Message {j} with content to fill space for testing '
+                'eviction behavior with longer text to increase file size'
+            )
             events = [
                 _make_log_event(
                     event_id=f'event-{j}',
-                    message=f'Message {j} with content to fill space',
+                    message=long_message.format(j=j),
                 )
-                for j in range(100)
+                for j in range(2000)
             ]
 
             cache.write(events, cache_key)
 
-        # Trigger cleanup to remove orphaned files
+            # Add small delay to ensure different creation times
+            time.sleep(0.01)
+
+        # Count total Parquet file size to verify we wrote enough data
+        parquet_files = list(cache._parquet_dir.glob('*.parquet'))
+        total_size = sum(f.stat().st_size for f in parquet_files)
+
+        # Verify we actually wrote enough data to trigger eviction
+        # With compression, files might be smaller than expected
+        # If total size is under limit, we need to verify cache is functional
+        size_limit_bytes = 1 * 1024 * 1024
+
+        if total_size > size_limit_bytes:
+            # Size limit enforcement happened
+            # Verify that at least some files were evicted (not all keys exist)
+            existing_keys = sum(1 for key in cache_keys if cache.exists(key))
+            assert existing_keys < len(cache_keys), 'Some keys should have been evicted'
+
+            # Verify oldest keys were evicted (FIFO)
+            # At least one of the first few keys should be gone
+            first_half_exists = [cache.exists(key) for key in cache_keys[:5]]
+            assert not all(first_half_exists), 'At least one old key should be evicted (FIFO)'
+
+            # Most recent keys should still exist
+            last_few_exists = [cache.exists(key) for key in cache_keys[-2:]]
+            assert any(last_few_exists), 'Recent keys should still exist'
+        else:
+            # Compression was very effective, verify cache is still functional
+            # All keys should still exist
+            for key in cache_keys:
+                assert cache.exists(key), 'All keys should exist if under size limit'
+
+        # Verify that evict_expired also works correctly
         cache.evict_expired()
 
-        # Verify cache is functional after FIFO eviction
-        # Note: Exact behavior depends on DiskCache internals and size calculations
+        # Cache should still be functional
         assert cache._metadata is not None
 
 
@@ -567,9 +616,7 @@ def test_log_cache_concurrent_writes(fix_test_cache: Path):
 
         # All keys should be readable independently
         for i, cache_key in enumerate(keys):
-            cached_events_iter = cache.read(cache_key)
-            assert cached_events_iter is not None
-            cached_events = list(cached_events_iter)
+            cached_events = list(cache.read(cache_key))
             assert len(cached_events) == 1
             assert cached_events[0].event_id == f'event-{i}'
             assert cached_events[0].message == f'Message {i}'
@@ -584,10 +631,10 @@ def test_log_cache_invalid_cache_key(fix_test_cache: Path):
     cache_dir = fix_test_cache / 'cache_invalid'
 
     with LogCache(cache_dir) as cache:
-        # Try to read nonexistent key
-        result = cache.read('nonexistent-key')
+        # Try to read nonexistent key - should return empty iterator
+        result = list(cache.read('nonexistent-key'))
 
-        assert result is None
+        assert result == []
 
 
 def test_log_cache_malformed_jsonl(fix_test_cache: Path):
@@ -619,9 +666,7 @@ def test_log_cache_malformed_jsonl(fix_test_cache: Path):
         assert stats['jsonl_events'] == 1
 
         # Read back and verify message is preserved
-        cached_events_iter = cache.read(cache_key)
-        assert cached_events_iter is not None
-        cached_events = list(cached_events_iter)
+        cached_events = list(cache.read(cache_key))
         assert len(cached_events) == 2
         assert cached_events[0].message == '{invalid json structure'
 
@@ -660,9 +705,7 @@ def test_log_cache_special_characters(fix_test_cache: Path):
         cache.write(events, cache_key)
 
         # Read back and verify preservation
-        cached_events_iter = cache.read(cache_key)
-        assert cached_events_iter is not None
-        cached_events = list(cached_events_iter)
+        cached_events = list(cache.read(cache_key))
         assert len(cached_events) == 3
         assert cached_events[0].message == 'Message with unicode: 你好世界'
         assert cached_events[1].message == 'Message with newlines:\nLine 1\nLine 2'
@@ -695,9 +738,7 @@ def test_log_cache_large_batch(fix_test_cache: Path):
 
         # Read back and verify count
         # Use iterator to avoid loading all into memory
-        cached_events_iter = cache.read(cache_key)
-        assert cached_events_iter is not None
-        count = sum(1 for _ in cached_events_iter)
+        count = sum(1 for _ in cache.read(cache_key))
 
         assert count == 10000
 
@@ -744,9 +785,7 @@ def test_log_cache_datetime_precision(fix_test_cache: Path):
         cache.write(events, cache_key)
 
         # Read back and verify precision
-        cached_events_iter = cache.read(cache_key)
-        assert cached_events_iter is not None
-        cached_events = list(cached_events_iter)
+        cached_events = list(cache.read(cache_key))
         assert len(cached_events) == 1
 
         assert cached_events[0].timestamp == timestamp_with_micros

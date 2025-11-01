@@ -24,7 +24,8 @@ def _make_test_event(
     log_group: str = '/aws/test/group',
     log_stream: str = 'stream-0',
     event_id: str = 'event-0001',
-    ingestion_time: datetime | None | object = _SENTINEL,
+    *,
+    ingestion_time: datetime | object | None = _SENTINEL,
 ) -> LogEvent:
     """Create a test LogEvent with default or custom values.
 
@@ -317,7 +318,7 @@ def test_empty_message():
 
     # Test table formatting
     table_row = format_log_event_for_table(event)
-    assert table_row[3] == ''
+    assert not table_row[3]
 
     # Test detail formatting
     detail = format_log_event_detail(event)
