@@ -16,6 +16,7 @@ from typing import Any, TypedDict
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.query.engine import query_parquet_file_to_log_events
+from tail_cw.query.parser import combine_filters, parse_filter_pattern
 
 DEFAULT_TRACE_ID_FIELDS = [
     'trace_id',
@@ -484,7 +485,12 @@ def query_traces_from_parquet(
         >>> traces[0].trace_id
         'abc123'
     """
-    # Query all events from Parquet file
+    # NOTE: We don't push down trace_id filtering to Parquet because:
+    # 1. We don't know which trace_id fields exist in the parsed struct
+    # 2. Polars/DuckDB fail when trying to access non-existent struct fields
+    # 3. Filtering in-memory after extraction is more reliable for trace IDs
+
+    # Query events from Parquet file without filter
     try:
         events = list(query_parquet_file_to_log_events(parquet_path, None))
     except Exception:
@@ -501,7 +507,7 @@ def query_traces_from_parquet(
     if trace_id:
         trace_groups = [tg for tg in trace_groups if tg.trace_id == trace_id]
 
-    # Apply limit
+    # Apply limit to trace groups after filtering
     if limit:
         trace_groups = trace_groups[:limit]
 
@@ -521,9 +527,23 @@ def find_traces_with_errors(
     Returns:
         List of TraceGroups with errors, sorted by error_count descending.
     """
-    # Query for all events (we need to check each for errors)
+    # Build error filter matching error keywords in message text
+    # This is more reliable than trying to match structured fields which may not exist
+    error_filters = []
+
+    # Match error keywords in message fields using text search
+    for keyword in ERROR_KEYWORDS:
+        try:
+            error_filters.append(parse_filter_pattern(keyword))
+        except ValueError:
+            continue
+
+    # Combine all error conditions with OR
+    filter_node = None if not error_filters else combine_filters(error_filters, operator='OR')
+
+    # Query for error events only
     try:
-        events = query_parquet_file_to_log_events(parquet_path, None)
+        events = query_parquet_file_to_log_events(parquet_path, filter_node)
     except Exception:
         return []
 
@@ -533,7 +553,7 @@ def find_traces_with_errors(
     # Create trace groups
     trace_groups = create_trace_groups(grouped_spans)
 
-    # Filter to only traces with errors
+    # Filter to only traces with errors (double-check with is_error_event)
     error_traces = [tg for tg in trace_groups if tg.error_count > 0]
 
     # Sort by error_count descending

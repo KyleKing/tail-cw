@@ -9,6 +9,7 @@ from textual.widgets import Input, Label, Tree
 from tail_cw.aws.client import LogEvent
 from tail_cw.query.trace import TraceGroup, log_event_to_trace_span
 from tail_cw.tui.app import LogTailApp
+from tail_cw.tui.record_detail import RecordDetailScreen
 from tail_cw.tui.trace_viewer import TraceViewerScreen
 
 
@@ -493,3 +494,47 @@ async def test_trace_viewer_help():
         # Should show notification (can't easily test notification content)
         # Just verify it doesn't crash
         assert app.screen == screen
+
+
+@pytest.mark.asyncio
+async def test_trace_viewer_enter_shows_span_detail():
+    """Test that action_show_span_detail pushes RecordDetailScreen for span nodes."""
+    trace_group = _make_test_trace_group('trace-1', span_count=3)
+    screen = TraceViewerScreen([trace_group])
+    app = LogTailApp()
+
+    async with app.run_test() as pilot:
+        app.push_screen(screen)
+        await pilot.pause()
+
+        tree = app.screen.query_one('#trace_tree', Tree)
+
+        # Expand all to reveal all nodes
+        await pilot.press('e')
+        await pilot.pause()
+
+        # Navigate down through the tree to find a span node
+        # Tree structure: trace -> service -> span (span is leaf)
+        # Starting from root (or first trace if show_root=False)
+        for _ in range(10):  # Navigate up to 10 nodes to find a span
+            await pilot.press('down')
+            await pilot.pause()
+
+            cursor_node = tree.cursor_node
+            if cursor_node and cursor_node.data and cursor_node.data.get('type') == 'span':
+                break
+
+        # Verify we're on a span node
+        cursor_node = tree.cursor_node
+        assert cursor_node is not None
+        assert cursor_node.data is not None
+        assert cursor_node.data.get('type') == 'span', f"Expected span node, got {cursor_node.data.get('type')}"
+
+        # Call the action directly instead of pressing enter (more reliable in tests)
+        screen.action_show_span_detail()
+        await pilot.pause()
+
+        # Check that RecordDetailScreen was pushed
+        # The screen should have changed to RecordDetailScreen
+        screen_type_name = type(app.screen).__name__
+        assert isinstance(app.screen, RecordDetailScreen), f'Expected RecordDetailScreen but got {screen_type_name}'

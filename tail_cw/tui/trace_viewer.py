@@ -108,6 +108,10 @@ class TraceViewerScreen(Screen[None]):
         self._search_input = self.query_one('#trace_search', Input)
         self._status_label = self.query_one('#trace_status', Label)
 
+        # Hide the root node to show traces as top-level items
+        if self._tree is not None:
+            self._tree.show_root = False
+
         self._build_trace_tree()
         self._update_status()
 

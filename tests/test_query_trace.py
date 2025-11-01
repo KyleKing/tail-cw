@@ -1,7 +1,7 @@
 """Tests for trace extraction and grouping functionality."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from tail_cw.aws.client import LogEvent
@@ -280,8 +280,8 @@ def test_create_trace_groups_chronological_sorting():
     # Create spans out of order
     events = [
         _make_test_event_with_trace('trace-1', timestamp=base_time),
-        _make_test_event_with_trace('trace-1', timestamp=base_time.replace(second=base_time.second - 1)),
-        _make_test_event_with_trace('trace-1', timestamp=base_time.replace(second=base_time.second + 1)),
+        _make_test_event_with_trace('trace-1', timestamp=base_time - timedelta(seconds=1)),
+        _make_test_event_with_trace('trace-1', timestamp=base_time + timedelta(seconds=1)),
     ]
 
     grouped = group_events_by_trace(events)
@@ -297,7 +297,7 @@ def test_create_trace_groups_duration_calculation():
     base_time = datetime.now(UTC)
     events = [
         _make_test_event_with_trace('trace-1', timestamp=base_time),
-        _make_test_event_with_trace('trace-1', timestamp=base_time.replace(second=base_time.second + 5)),
+        _make_test_event_with_trace('trace-1', timestamp=base_time + timedelta(seconds=5)),
     ]
 
     grouped = group_events_by_trace(events)

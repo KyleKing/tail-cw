@@ -24,7 +24,7 @@ from textual.worker import get_current_worker
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.query import parse_extended_filter, parse_filter_pattern, query_parquet_file_to_log_events
-from tail_cw.query.trace import extract_trace_id_from_event, query_traces_from_parquet
+from tail_cw.query.trace import DEFAULT_TRACE_ID_FIELDS, extract_trace_id_from_event, query_traces_from_parquet
 from tail_cw.tui.log_viewer import batch_format_log_events, get_column_definitions
 from tail_cw.tui.record_detail import RecordDetailScreen
 from tail_cw.tui.trace_viewer import TraceViewerScreen
@@ -112,6 +112,7 @@ class LogTailApp(App[None]):
         log_events: list[LogEvent] | None = None,
         title: str = 'CloudWatch Logs Viewer',
         parquet_path: Path | None = None,
+        trace_id_fields: list[str] | None = None,
     ) -> None:
         """Initialize the LogTailApp.
 
@@ -119,6 +120,8 @@ class LogTailApp(App[None]):
             log_events: Optional initial list of log events to display
             title: Application title shown in header
             parquet_path: Optional path to Parquet file for search functionality
+            trace_id_fields: Optional list of field names to search for trace IDs.
+                Defaults to DEFAULT_TRACE_ID_FIELDS if not provided.
         """
         super().__init__()
         self.title = title
@@ -128,6 +131,7 @@ class LogTailApp(App[None]):
         self._search_input: Input | None = None
         self._parquet_path: Path | None = parquet_path
         self._search_debounce_timer: str | None = None  # For debouncing search
+        self._trace_id_fields: list[str] = trace_id_fields if trace_id_fields is not None else DEFAULT_TRACE_ID_FIELDS
 
     def compose(self) -> ComposeResult:  # noqa: PLR6301
         """Build the UI hierarchy.
@@ -347,9 +351,14 @@ class LogTailApp(App[None]):
             return
 
         try:
-            # Query for all traces
+            # Query for all traces with a reasonable limit to avoid UI stalls
             self._update_status('Loading traces...')
-            trace_groups = query_traces_from_parquet(self._parquet_path)
+            trace_limit = 100  # Reasonable limit for trace overview
+            trace_groups = query_traces_from_parquet(
+                self._parquet_path,
+                trace_id_fields=self._trace_id_fields,
+                limit=trace_limit,
+            )
 
             if not trace_groups:
                 self.notify(
@@ -398,7 +407,7 @@ class LogTailApp(App[None]):
             return
 
         # Extract trace ID
-        trace_id = extract_trace_id_from_event(log_event)
+        trace_id = extract_trace_id_from_event(log_event, self._trace_id_fields)
         if not trace_id:
             self.notify(
                 'No trace ID found in selected event',
@@ -412,6 +421,7 @@ class LogTailApp(App[None]):
             trace_groups = query_traces_from_parquet(
                 self._parquet_path,
                 trace_id=trace_id,
+                trace_id_fields=self._trace_id_fields,
             )
 
             if not trace_groups:
