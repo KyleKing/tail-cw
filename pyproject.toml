@@ -44,6 +44,7 @@ classifiers = [
 ]
 dependencies = [
   "corallium>=2.0.1",
+  "platformdirs>=4.0.0",
 ]
 description = "Tail and Filter AWS CloudWatch Logs"
 keywords = ["calcipy_template"]

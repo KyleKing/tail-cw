@@ -1399,6 +1399,7 @@ version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "corallium" },
+    { name = "platformdirs" },
 ]
 
 [package.dev-dependencies]
@@ -1432,7 +1433,10 @@ tui = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "corallium", specifier = ">=2.0.1" }]
+requires-dist = [
+    { name = "corallium", specifier = ">=2.0.1" },
+    { name = "platformdirs", specifier = ">=4.0.0" },
+]
 
 [package.metadata.requires-dev]
 all = [

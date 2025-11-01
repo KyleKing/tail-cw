@@ -5,13 +5,15 @@ Provides streaming access to CloudWatch Logs via boto3 with efficient pagination
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 import boto3  # type: ignore[import-untyped]
 from botocore.config import Config  # type: ignore[import-untyped]
+
+ProgressCallback = Callable[[int, str], None]
 
 
 @dataclass(frozen=True)
@@ -77,6 +79,7 @@ def fetch_log_events(
     log_stream_names: list[str] | None = None,
     interleaved: bool = True,
     region_name: str | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> Iterator[LogEvent]:
     """Fetch CloudWatch Logs events using efficient pagination.
 
@@ -96,6 +99,7 @@ def fetch_log_events(
             chronologically. Default is True.
         region_name: Optional AWS region override. If None, uses boto3's default
             region resolution.
+        progress_callback: Optional callable invoked every 100 events fetched.
 
     Yields:
         LogEvent instances for each log event in the time range.
@@ -141,8 +145,13 @@ def fetch_log_events(
         **kwargs,
     )
 
+    event_count = 0
     for page in page_iterator:
         for event in page.get('events', []):
+            event_count += 1
+            if progress_callback and event_count % 100 == 0:
+                progress_callback(event_count, f'Fetched {event_count} events...')
+
             # Convert timestamps from epoch ms to datetime
             timestamp = _epoch_ms_to_datetime(event['timestamp'])
             ingestion_time = _epoch_ms_to_datetime(event['ingestionTime']) if 'ingestionTime' in event else None

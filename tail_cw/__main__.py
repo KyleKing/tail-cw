@@ -12,7 +12,7 @@ on keyboard interrupt, and error reporting to stderr.
 
 Future enhancements:
     - CLI argument parsing for log group, stream, time range
-    - Config file support for AWS credentials, preferences
+    - Command-line overrides for configuration and AWS credentials
     - Option to load from cache vs. fetch from AWS
 """
 
@@ -20,15 +20,16 @@ from __future__ import annotations
 
 import sys
 
+from tail_cw.config import load_config
 from tail_cw.tui.app import LogTailApp
 
 
 def main() -> int:
     """Main entry point for the TUI application.
 
-    Creates and runs a LogTailApp instance. Currently starts with no data
-    loaded; future versions will support CLI arguments for specifying log
-    sources and filters.
+    Loads configuration from the default location and runs a LogTailApp
+    instance. Currently starts with no data loaded; future versions will
+    support CLI arguments for specifying log sources and filters.
 
     Returns:
         Exit code: 0 for success, 1 for error
@@ -40,9 +41,15 @@ def main() -> int:
         >>> # tail-cw
     """
     try:
+        config = load_config()
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f'Configuration error: {exc}\n')
+        return 1
+
+    try:
         # Create the app with no initial data
-        # TODO: Add CLI argument parsing for log group, time range, etc.
-        app = LogTailApp()
+        # TODO: Add CLI argument parsing for log group, time range, and config path override.
+        app = LogTailApp(config=config)
 
         # Run the TUI
         app.run()

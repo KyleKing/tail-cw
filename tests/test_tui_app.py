@@ -6,7 +6,8 @@ import pytest
 from textual.widgets import DataTable, Label
 
 from tail_cw.aws.client import LogEvent
-from tail_cw.tui.app import LogTailApp
+from tail_cw.config import TailCWConfig, TUIConfig
+from tail_cw.tui.app import LogTailApp, ProgressUpdate
 
 
 def _make_test_log_events(count: int = 5) -> list[LogEvent]:
@@ -66,6 +67,35 @@ def test_app_initialization_with_custom_title():
     assert app.title == 'Custom Title'
 
 
+def test_app_with_custom_config():
+    """Ensure custom configuration values are honored."""
+    config = TailCWConfig(
+        tui=TUIConfig(
+            chunk_threshold=10,
+            chunk_size=3,
+            initial_load_limit=42,
+            search_limit=77,
+            trace_limit=5,
+        ),
+    )
+    config.trace.trace_id_fields = ['traceId', 'context.trace_id']
+
+    app = LogTailApp(config=config)
+
+    assert app._config is config
+    assert app._config.tui.chunk_threshold == 10
+    assert app._trace_id_fields == ['traceId', 'context.trace_id']
+
+
+def test_app_loads_default_config():
+    """App should load default configuration when none is provided."""
+    app = LogTailApp()
+
+    assert isinstance(app._config, TailCWConfig)
+    assert app._config.tui.chunk_threshold == 5000
+    assert app._trace_id_fields
+
+
 @pytest.mark.asyncio
 async def test_app_compose_structure():
     """Test UI composition has required widgets."""
@@ -82,6 +112,21 @@ async def test_app_compose_structure():
         assert footer is not None
         assert table is not None
         assert status is not None
+
+
+@pytest.mark.asyncio
+async def test_app_progress_update_message():
+    """Progress messages should update the status label."""
+    app = LogTailApp()
+
+    async with app.run_test() as pilot:
+        app.post_message(ProgressUpdate(current=25, total=100, status='Loading'))
+        await pilot.pause()
+
+        status = app.query_one('#status', Label)
+        rendered = str(status.render())
+        assert 'Loading' in rendered
+        assert '25/100' in rendered
 
 
 @pytest.mark.asyncio
@@ -123,6 +168,44 @@ async def test_load_events_on_mount():
 
 
 @pytest.mark.asyncio
+async def test_app_incremental_loading_with_progress(monkeypatch):
+    """Incremental loading should emit progress updates."""
+    config = TailCWConfig(
+        tui=TUIConfig(
+            chunk_threshold=4,
+            chunk_size=2,
+            initial_load_limit=5,
+            search_limit=10,
+            trace_limit=5,
+        ),
+    )
+    events = _make_test_log_events(6)
+    app = LogTailApp(log_events=[], config=config)
+    messages = []
+    original_update = app._update_status
+
+    def record_status(message: str) -> None:
+        messages.append(message)
+        original_update(message)
+
+    async with app.run_test() as pilot:
+        monkeypatch.setattr(app, '_update_status', record_status)
+        app.load_events(events)
+        table = app.query_one('#log_table', DataTable)
+        for _ in range(20):
+            await pilot.pause()
+            if table.row_count == len(events):
+                break
+
+        await app.workers.wait_for_complete()
+
+        assert table.row_count == len(events)
+
+    assert any('Loading events' in message for message in messages)
+    assert any(f'Loaded {len(events)} events' in message for message in messages)
+
+
+@pytest.mark.asyncio
 async def test_empty_app_shows_no_logs_message():
     """Test empty state."""
     app = LogTailApp()
@@ -136,6 +219,70 @@ async def test_empty_app_shows_no_logs_message():
 
         # Check status message
         assert 'no logs loaded' in str(status.render()).lower()
+
+
+@pytest.mark.asyncio
+async def test_app_uses_config_chunk_threshold(monkeypatch):
+    """Chunk threshold from config should drive incremental loading."""
+    config = TailCWConfig(
+        tui=TUIConfig(
+            chunk_threshold=3,
+            chunk_size=1,
+            initial_load_limit=5,
+            search_limit=10,
+            trace_limit=5,
+        ),
+    )
+    app = LogTailApp(log_events=[], config=config)
+    events = _make_test_log_events(5)
+
+    async with app.run_test() as pilot:
+        original_run_worker = app.run_worker
+        flags = {'called': False}
+
+        def tracking_run_worker(awaitable, *args, **kwargs):
+            flags['called'] = True
+            return original_run_worker(awaitable, *args, **kwargs)
+
+        monkeypatch.setattr(app, 'run_worker', tracking_run_worker)
+        app.load_events(events)
+        await pilot.pause()
+
+    assert flags['called'] is True
+
+
+@pytest.mark.asyncio
+async def test_app_uses_config_search_limit(monkeypatch, tmp_path):
+    """Search queries should respect configured limits."""
+    config = TailCWConfig(
+        tui=TUIConfig(
+            chunk_threshold=5000,
+            chunk_size=1000,
+            initial_load_limit=5,
+            search_limit=15,
+            trace_limit=5,
+        ),
+    )
+    parquet_path = tmp_path / 'logs.parquet'
+    parquet_path.write_text('', encoding='utf-8')
+
+    events = _make_test_log_events(3)
+    captured = {}
+
+    def fake_query(path, filter_node, limit):
+        captured['limit'] = limit
+        yield from events
+
+    monkeypatch.setattr('tail_cw.tui.app.query_parquet_file_to_log_events', fake_query)
+
+    app = LogTailApp(log_events=[], parquet_path=parquet_path, config=config)
+
+    async with app.run_test() as pilot:
+        await app._execute_search_query('message')
+        await pilot.pause()
+
+    assert captured['limit'] == 15
+    assert len(app._log_events) == 3
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 """Tests for AWS CloudWatch Logs client."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -288,6 +289,146 @@ def test_fetch_log_events_empty_page():
         assert results[0].event_id == 'event-1'
 
     stub.deactivate()
+
+
+def test_fetch_log_events_with_progress_callback():
+    """Progress callback should receive monotonic updates."""
+
+    class DummyPaginator:
+        def __init__(self, pages) -> None:
+            self._pages = pages
+
+        def paginate(self, **_kwargs):
+            yield from self._pages
+
+    class DummyClient:
+        def __init__(self, pages) -> None:
+            self._pages = pages
+
+        def get_paginator(self, name):
+            assert name == 'filter_log_events'
+            return DummyPaginator(self._pages)
+
+    pages: list[dict[str, Any]] = []
+    total_events = 250
+    events = [
+        _make_cw_event(
+            event_id=f'event-{i}',
+            timestamp=1700000000000 + i,
+            message=f'Event {i}',
+        )
+        for i in range(total_events)
+    ]
+    pages.extend(({'events': events[:120]}, {'events': events[120:200]}, {'events': events[200:]}))
+
+    calls = []
+
+    def progress(current, status):
+        calls.append((current, status))
+
+    start = datetime.now(tz=UTC) - timedelta(hours=1)
+    end = datetime.now(tz=UTC)
+
+    with patch('tail_cw.aws.client._create_logs_client', return_value=DummyClient(pages)):
+        results = list(
+            fetch_log_events(
+                '/test/log-group',
+                start,
+                end,
+                progress_callback=progress,
+            ),
+        )
+
+    assert len(results) == total_events
+    assert calls, 'Expected progress callback to be invoked'
+    counts = [count for count, _ in calls]
+    assert counts == sorted(counts)
+    assert counts[-1] >= 200
+    for _, status in calls:
+        assert status.startswith('Fetched')
+
+
+def test_fetch_log_events_progress_callback_frequency():
+    """Progress callback should fire roughly every 100 events."""
+
+    class DummyPaginator:
+        def __init__(self, pages) -> None:
+            self._pages = pages
+
+        def paginate(self, **_kwargs):
+            yield from self._pages
+
+    class DummyClient:
+        def __init__(self, pages) -> None:
+            self._pages = pages
+
+        def get_paginator(self, name):
+            assert name == 'filter_log_events'
+            return DummyPaginator(self._pages)
+
+    events = [
+        _make_cw_event(
+            event_id=f'event-{i}',
+            timestamp=1700000000000 + i,
+            message=f'Event {i}',
+        )
+        for i in range(250)
+    ]
+    pages = [{'events': events}]
+    calls = []
+
+    def progress(current, status):
+        calls.append(current)
+
+    start = datetime.now(tz=UTC) - timedelta(minutes=30)
+    end = datetime.now(tz=UTC)
+
+    with patch('tail_cw.aws.client._create_logs_client', return_value=DummyClient(pages)):
+        list(
+            fetch_log_events(
+                '/test/log-group',
+                start,
+                end,
+                progress_callback=progress,
+            ),
+        )
+
+    assert calls == [100, 200]
+
+
+def test_fetch_log_events_without_progress_callback():
+    """Ensure fetch works when no progress callback is supplied."""
+
+    class DummyPaginator:
+        def __init__(self, pages) -> None:
+            self._pages = pages
+
+        def paginate(self, **_kwargs):
+            yield from self._pages
+
+    class DummyClient:
+        def __init__(self, pages) -> None:
+            self._pages = pages
+
+        def get_paginator(self, name):
+            assert name == 'filter_log_events'
+            return DummyPaginator(self._pages)
+
+    events = [
+        _make_cw_event(
+            event_id=f'event-{i}',
+            timestamp=1700000000000 + i,
+            message=f'Event {i}',
+        )
+        for i in range(50)
+    ]
+
+    with patch('tail_cw.aws.client._create_logs_client', return_value=DummyClient([{'events': events}])):
+        start = datetime.now(tz=UTC) - timedelta(minutes=5)
+        end = datetime.now(tz=UTC)
+        results = list(fetch_log_events('/test/log-group', start, end))
+
+    assert len(results) == 50
 
 
 def test_fetch_log_events_with_filter_pattern():

@@ -12,6 +12,7 @@ formatting logic extracted to separate modules (log_viewer.py).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -19,15 +20,39 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
+from textual.message import Message
 from textual.widgets import DataTable, Footer, Header, Input, Label
 from textual.worker import get_current_worker
 
 from tail_cw.aws.client import LogEvent
+from tail_cw.config import TailCWConfig, load_config
 from tail_cw.query import parse_extended_filter, parse_filter_pattern, query_parquet_file_to_log_events
-from tail_cw.query.trace import DEFAULT_TRACE_ID_FIELDS, extract_trace_id_from_event, query_traces_from_parquet
+from tail_cw.query.trace import extract_trace_id_from_event, query_traces_from_parquet
 from tail_cw.tui.log_viewer import batch_format_log_events, get_column_definitions
 from tail_cw.tui.record_detail import RecordDetailScreen
 from tail_cw.tui.trace_viewer import TraceViewerScreen
+
+
+@dataclass(slots=True, init=False)
+class ProgressUpdate(Message):
+    """Message dispatched by background workers to report progress.
+
+    Attributes:
+        current: Current progress value (items processed).
+        total: Total number of items when known, otherwise ``-1``.
+        status: Human-readable status message.
+    """
+
+    current: int
+    total: int
+    status: str
+
+    def __init__(self, current: int, total: int, status: str) -> None:
+        """Store progress metadata and initialise the message."""
+        self.current = current
+        self.total = total
+        self.status = status
+        Message.__init__(self)
 
 
 class LogTailApp(App[None]):
@@ -44,6 +69,7 @@ class LogTailApp(App[None]):
         - Batch loading for performance with large datasets
         - Status bar showing event counts
         - Extensible design for future search/filter capabilities
+        - Config-driven pagination, search limits, and trace discovery
 
     Keyboard shortcuts:
         - q: Quit the application
@@ -113,6 +139,7 @@ class LogTailApp(App[None]):
         title: str = 'CloudWatch Logs Viewer',
         parquet_path: Path | None = None,
         trace_id_fields: list[str] | None = None,
+        config: TailCWConfig | None = None,
     ) -> None:
         """Initialize the LogTailApp.
 
@@ -121,17 +148,21 @@ class LogTailApp(App[None]):
             title: Application title shown in header
             parquet_path: Optional path to Parquet file for search functionality
             trace_id_fields: Optional list of field names to search for trace IDs.
-                Defaults to DEFAULT_TRACE_ID_FIELDS if not provided.
+                Defaults to values defined in the configuration when omitted.
+            config: Optional application configuration. When not supplied the
+                configuration is loaded from the default location.
         """
         super().__init__()
         self.title = title
+        self._config = config if config is not None else load_config()
         self._log_events: list[LogEvent] = log_events if log_events is not None else []
         self._all_events: list[LogEvent] = []  # Full unfiltered dataset for fallback
         self._table: DataTable[Any] | None = None
         self._search_input: Input | None = None
         self._parquet_path: Path | None = parquet_path
         self._search_debounce_timer: str | None = None  # For debouncing search
-        self._trace_id_fields: list[str] = trace_id_fields if trace_id_fields is not None else DEFAULT_TRACE_ID_FIELDS
+        trace_fields = trace_id_fields if trace_id_fields is not None else list(self._config.trace.trace_id_fields)
+        self._trace_id_fields: list[str] = trace_fields
 
     def compose(self) -> ComposeResult:  # noqa: PLR6301
         """Build the UI hierarchy.
@@ -229,8 +260,8 @@ class LogTailApp(App[None]):
         self._table.loading = True
 
         # Threshold for incremental loading
-        chunk_threshold = 5000
-        chunk_size = 1000
+        chunk_threshold = self._config.tui.chunk_threshold
+        chunk_size = self._config.tui.chunk_size
 
         if len(events_to_load) > chunk_threshold:
             # Use incremental loading for large datasets
@@ -274,13 +305,16 @@ class LogTailApp(App[None]):
                 self._table.add_rows(formatted_rows)
 
             # Update progress
-            progress = end_idx / total * 100
-            self._update_status(f'Loading events: {end_idx}/{total} ({progress:.0f}%)')
+            self._post_progress(end_idx, total, 'Loading events')
 
         # Finalize loading
         if self._table is not None:
             self._table.loading = False
         self._update_status(f'Loaded {total} events')
+
+    def _post_progress(self, current: int, total: int, status: str) -> None:
+        """Post a progress update message to the app."""
+        self.post_message(ProgressUpdate(current=current, total=total, status=status))
 
     def _update_status(self, message: str) -> None:
         """Update the status label with a message.
@@ -290,6 +324,15 @@ class LogTailApp(App[None]):
         """
         status_label = self.query_one('#status', Label)
         status_label.update(message)
+
+    def on_progress_update(self, message: ProgressUpdate) -> None:
+        """Handle progress updates from background workers."""
+        if message.total > 0:
+            status_text = f'{message.status} ({message.current}/{message.total})'
+        else:
+            status_text = f'{message.status} ({message.current} events)'
+        self._update_status(status_text)
+        message.stop()
 
     def action_show_detail(self) -> None:
         """Handle Enter key to show detail modal for selected row.
@@ -353,7 +396,7 @@ class LogTailApp(App[None]):
         try:
             # Query for all traces with a reasonable limit to avoid UI stalls
             self._update_status('Loading traces...')
-            trace_limit = 100  # Reasonable limit for trace overview
+            trace_limit = self._config.tui.trace_limit
             trace_groups = query_traces_from_parquet(
                 self._parquet_path,
                 trace_id_fields=self._trace_id_fields,
@@ -535,11 +578,12 @@ class LogTailApp(App[None]):
             # Execute search
             if self._parquet_path is not None:
                 # Query Parquet file
+                search_limit = self._config.tui.search_limit
                 results = list(
                     query_parquet_file_to_log_events(
                         self._parquet_path,
                         filter_node,
-                        limit=10000,  # Reasonable limit for UI
+                        limit=search_limit,  # Configured limit for UI
                     ),
                 )
             else:
@@ -633,18 +677,21 @@ class LogTailApp(App[None]):
 
         # Load initial data (limited for performance)
         try:
+            initial_limit = self._config.tui.initial_load_limit
             events = list(
                 query_parquet_file_to_log_events(
                     parquet_path,
                     None,  # No filter - load all
-                    limit=1000,  # Initial load limit
+                    limit=initial_limit,  # Initial load limit
                 ),
             )
 
             self._log_events = events
             self._all_events = events.copy()
             self._load_log_events(events)
-            self._update_status(f'Loaded {len(events)} events from Parquet (showing first 1000)')
+            self._update_status(
+                f'Loaded {len(events)} events from Parquet (showing first {min(len(events), initial_limit)})',
+            )
 
         except Exception as e:
             self.notify(f'Failed to load Parquet file: {e}', severity='error')

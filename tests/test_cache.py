@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import polars as pl
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
 import pytest
 
 from tail_cw.aws.client import LogEvent
@@ -310,6 +311,82 @@ def test_write_log_events_to_parquet_compression_levels(fix_test_cache: Path):
     assert len(df_high) == 1000
 
 
+def test_write_log_events_to_parquet_custom_row_group_size(fix_test_cache: Path):
+    """Ensure custom row group size is honored."""
+    events = [
+        _make_log_event(
+            event_id=f'event-{i}',
+            message=f'Row group test {i}',
+        )
+        for i in range(1500)
+    ]
+    output_path = fix_test_cache / 'custom_row_group.parquet'
+
+    stats = write_log_events_to_parquet(
+        events,
+        output_path,
+        row_group_size=500,
+    )
+
+    assert stats['total_events'] == 1500
+
+    parquet_file = pq.ParquetFile(output_path)
+    assert parquet_file.metadata is not None
+    assert parquet_file.metadata.num_row_groups == 3
+    for index in range(parquet_file.metadata.num_row_groups):
+        assert parquet_file.metadata.row_group(index).num_rows <= 500
+
+
+def test_write_log_events_to_parquet_custom_infer_schema_length(fix_test_cache: Path):
+    """Verify writes complete with a custom schema inference window."""
+    events = [
+        _make_log_event(
+            event_id=f'event-{i}',
+            message=(f'{{"value": {i}}}' if i % 2 == 0 else f'plain-{i}'),
+        )
+        for i in range(200)
+    ]
+    output_path = fix_test_cache / 'custom_infer.parquet'
+
+    stats = write_log_events_to_parquet(
+        events,
+        output_path,
+        infer_schema_length=50,
+    )
+
+    assert stats['total_events'] == 200
+    assert output_path.exists()
+
+
+def test_write_log_events_to_parquet_with_progress_callback(fix_test_cache: Path):
+    """Ensure progress callbacks are invoked during conversion."""
+    events = [
+        _make_log_event(
+            event_id=f'event-{i}',
+            message=f'{{"idx": {i}}}',
+        )
+        for i in range(2100)
+    ]
+    output_path = fix_test_cache / 'progress.parquet'
+    calls = []
+
+    def progress(current: int, total: int, status: str) -> None:
+        calls.append((current, total, status))
+
+    stats = write_log_events_to_parquet(
+        events,
+        output_path,
+        progress_callback=progress,
+    )
+
+    assert stats['total_events'] == 2100
+    statuses = {status for _, _, status in calls}
+    assert 'Parsing JSONL...' in statuses
+    assert 'Converting to Parquet...' in statuses
+    assert any(total == -1 for _, total, _ in calls)
+    assert any(total == 2100 for _, total, _ in calls)
+
+
 def test_read_parquet_to_log_events_round_trip(fix_test_cache: Path):
     """Test round-trip conversion: LogEvent -> Parquet -> LogEvent."""
     # Create events with various field combinations
@@ -412,6 +489,60 @@ def test_log_cache_write_and_read(fix_test_cache: Path):
         assert cached_events[0].event_id == 'event-1'
         assert cached_events[1].event_id == 'event-2'
         assert cached_events[2].event_id == 'event-3'
+
+
+def test_log_cache_with_custom_config(fix_test_cache: Path):
+    """Ensure custom row group and schema settings are applied."""
+    cache_dir = fix_test_cache / 'cache_custom_config'
+    events = [_make_log_event(event_id=f'event-{i}', message=f'{{"value": {i}}}') for i in range(150)]
+
+    with LogCache(
+        cache_dir,
+        row_group_size=50,
+        infer_schema_length=25,
+        compression_level=5,
+    ) as cache:
+        start = datetime(2025, 1, 1, tzinfo=UTC)
+        end = datetime(2025, 1, 2, tzinfo=UTC)
+        cache_key = generate_cache_key('/aws/lambda/custom', start, end)
+
+        stats = cache.write(events, cache_key)
+
+        assert stats['total_events'] == 150
+        assert cache._row_group_size == 50
+        assert cache._infer_schema_length == 25
+
+        parquet_files = list(cache._parquet_dir.glob('*.parquet'))
+        assert len(parquet_files) == 1
+
+        parquet_file = pq.ParquetFile(parquet_files[0])
+        assert parquet_file.metadata is not None
+        assert parquet_file.metadata.num_row_groups == 3
+
+
+def test_log_cache_write_with_progress(fix_test_cache: Path):
+    """Verify progress callback integration."""
+    cache_dir = fix_test_cache / 'cache_progress'
+    events = [_make_log_event(event_id=f'event-{i}', message=f'{{"value": {i}}}') for i in range(1100)]
+    calls = []
+
+    def progress(current: int, total: int, status: str) -> None:
+        calls.append((current, total, status))
+
+    with LogCache(cache_dir) as cache:
+        start = datetime(2025, 1, 1, tzinfo=UTC)
+        end = datetime(2025, 1, 2, tzinfo=UTC)
+        cache_key = generate_cache_key('/aws/lambda/progress', start, end)
+
+        stats = cache.write(events, cache_key, progress_callback=progress)
+
+    assert stats['total_events'] == 1100
+    assert calls, 'Expected progress callback to be invoked'
+    statuses = {status for _, _, status in calls}
+    assert 'Parsing JSONL...' in statuses
+    assert 'Converting to Parquet...' in statuses
+    assert any(total == -1 for _, total, _ in calls)
+    assert any(total == 1100 for _, total, _ in calls)
 
 
 def test_log_cache_exists(fix_test_cache: Path):

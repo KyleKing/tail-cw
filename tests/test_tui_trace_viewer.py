@@ -528,7 +528,7 @@ async def test_trace_viewer_enter_shows_span_detail():
         cursor_node = tree.cursor_node
         assert cursor_node is not None
         assert cursor_node.data is not None
-        assert cursor_node.data.get('type') == 'span', f"Expected span node, got {cursor_node.data.get('type')}"
+        assert cursor_node.data.get('type') == 'span', f'Expected span node, got {cursor_node.data.get("type")}'
 
         # Call the action directly instead of pressing enter (more reliable in tests)
         screen.action_show_span_detail()

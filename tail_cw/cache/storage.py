@@ -11,7 +11,7 @@ import hashlib
 import json
 import re
 import tempfile
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from datetime import datetime
 from operator import itemgetter
 from pathlib import Path
@@ -20,6 +20,9 @@ import polars as pl
 from diskcache import Cache
 
 from tail_cw.aws.client import LogEvent
+
+# Progress callback signature: current progress, total (or -1 when unknown), status message.
+ProgressCallback = Callable[[int, int, str], None]
 
 # Precompiled regex for detecting ISO8601/RFC3339 timestamps at start of message
 # Matches formats like: 2025-01-01T12:00:00Z, 2025-01-01T12:00:00.123456+00:00
@@ -140,6 +143,7 @@ def is_jsonl_message(message: str) -> bool:
 def _log_events_to_ndjson_file(
     log_events: Iterable[LogEvent],
     output_path: Path,
+    progress_callback: ProgressCallback | None = None,
 ) -> tuple[int, int]:
     """Write LogEvent instances to a temporary NDJSON file.
 
@@ -150,6 +154,9 @@ def _log_events_to_ndjson_file(
     Args:
         log_events: Iterator of log events to write.
         output_path: Path where NDJSON file will be written.
+        progress_callback: Optional callable invoked every 1000 events with
+            the signature ``(current, total, status_message)``. The total value
+            is ``-1`` because the full size is unknown while streaming input.
 
     Returns:
         Tuple of (total_events, jsonl_events) counts.
@@ -163,6 +170,9 @@ def _log_events_to_ndjson_file(
     with output_path.open('w') as f:
         for event in log_events:
             total_events += 1
+
+            if progress_callback and total_events % 1000 == 0:
+                progress_callback(total_events, -1, 'Parsing JSONL...')
 
             # Create base record with all LogEvent fields
             record = {
@@ -194,6 +204,9 @@ def write_log_events_to_parquet(
     log_events: Iterable[LogEvent],
     output_path: Path,
     compression_level: int = 3,
+    row_group_size: int = 100_000,
+    infer_schema_length: int = 1000,
+    progress_callback: ProgressCallback | None = None,
 ) -> dict[str, int]:
     """Convert LogEvent instances to a compressed Parquet file.
 
@@ -210,6 +223,12 @@ def write_log_events_to_parquet(
         output_path: Path where Parquet file will be written.
         compression_level: ZSTD compression level (1-22). Higher = better
             compression but slower. Default 3 is a good balance.
+        row_group_size: Number of rows per Parquet row group. Larger values
+            improve scan performance at the cost of memory usage.
+        infer_schema_length: Number of rows read while inferring the schema
+            from NDJSON input.
+        progress_callback: Optional callable invoked during conversion with
+            ``(current, total, status_message)``.
 
     Returns:
         Statistics dict with keys:
@@ -250,7 +269,11 @@ def write_log_events_to_parquet(
             temp_file = Path(f.name)
 
         # Write events to NDJSON
-        total_events, jsonl_events = _log_events_to_ndjson_file(log_events, temp_file)
+        total_events, jsonl_events = _log_events_to_ndjson_file(
+            log_events,
+            temp_file,
+            progress_callback=progress_callback,
+        )
 
         if total_events == 0:
             # Clean up and raise error for empty input
@@ -258,14 +281,17 @@ def write_log_events_to_parquet(
             msg = 'Cannot create Parquet file from empty log events'
             raise ValueError(msg)
 
+        if progress_callback:
+            progress_callback(total_events, total_events, 'Converting to Parquet...')
+
         # Convert NDJSON to Parquet using Polars
         # Use scan_ndjson for lazy loading with schema inference
         (
-            pl.scan_ndjson(str(temp_file), infer_schema_length=1000).sink_parquet(
+            pl.scan_ndjson(str(temp_file), infer_schema_length=infer_schema_length).sink_parquet(
                 str(output_path),
                 compression='zstd',
                 compression_level=compression_level,
-                row_group_size=100_000,
+                row_group_size=row_group_size,
             )
         )
 
@@ -389,6 +415,9 @@ class LogCache:
         size_limit_mb: int = 1000,
         default_ttl_seconds: int | None = None,
         eviction_policy: str = 'least-recently-stored',
+        compression_level: int = 3,
+        row_group_size: int = 100_000,
+        infer_schema_length: int = 1000,
     ) -> None:
         """Initialize LogCache with specified configuration.
 
@@ -399,6 +428,10 @@ class LogCache:
                 None means no expiration. Default None.
             eviction_policy: DiskCache eviction policy. Default 'least-recently-stored'
                 for FIFO behavior. See DiskCache docs for other options.
+            compression_level: Default ZSTD compression level applied when
+                writing Parquet files.
+            row_group_size: Default Parquet row group size used during writes.
+            infer_schema_length: Number of rows scanned when inferring schemas.
 
         Raises:
             OSError: If cache directory cannot be created.
@@ -407,6 +440,9 @@ class LogCache:
         self._parquet_dir = cache_dir / 'parquet'
         self._default_ttl = default_ttl_seconds
         self._size_limit_bytes = size_limit_mb * 1024 * 1024
+        self._compression_level = compression_level
+        self._row_group_size = row_group_size
+        self._infer_schema_length = infer_schema_length
 
         # Create directories
         self._cache_dir.mkdir(parents=True, exist_ok=True)
@@ -500,6 +536,10 @@ class LogCache:
         log_events: Iterable[LogEvent],
         cache_key: str,
         ttl_seconds: int | None = None,
+        compression_level: int | None = None,
+        row_group_size: int | None = None,
+        infer_schema_length: int | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> dict[str, int]:
         """Write log events to cache.
 
@@ -508,6 +548,11 @@ class LogCache:
             cache_key: Cache key to store under. Use generate_cache_key() to create.
             ttl_seconds: TTL for this entry in seconds. If None, uses default_ttl_seconds.
                 Pass None explicitly to override default and use no expiration.
+            compression_level: Optional override for compression level used during
+                this write.
+            row_group_size: Optional override for Parquet row group size.
+            infer_schema_length: Optional override for schema inference length.
+            progress_callback: Optional callable notified of progress updates.
 
         Returns:
             Statistics dict from write_log_events_to_parquet().
@@ -521,8 +566,21 @@ class LogCache:
         parquet_filename = cache_key.replace(':', '_').replace('/', '_') + '.parquet'
         parquet_path = self._parquet_dir / parquet_filename
 
+        effective_compression = compression_level if compression_level is not None else self._compression_level
+        effective_row_group_size = row_group_size if row_group_size is not None else self._row_group_size
+        effective_infer_schema_length = (
+            infer_schema_length if infer_schema_length is not None else self._infer_schema_length
+        )
+
         # Write events to Parquet
-        stats = write_log_events_to_parquet(log_events, parquet_path)
+        stats = write_log_events_to_parquet(
+            log_events,
+            parquet_path,
+            compression_level=effective_compression,
+            row_group_size=effective_row_group_size,
+            infer_schema_length=effective_infer_schema_length,
+            progress_callback=progress_callback,
+        )
 
         # Store metadata in DiskCache with file size for efficient size tracking
         ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
