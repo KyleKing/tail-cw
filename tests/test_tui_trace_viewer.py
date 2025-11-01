@@ -1,6 +1,7 @@
 """Unit tests for the trace viewer TUI screen."""
 
-from datetime import UTC, datetime
+import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from textual.widgets import Input, Label, Tree
@@ -13,14 +14,17 @@ from tail_cw.tui.trace_viewer import TraceViewerScreen
 
 def _make_test_event(
     trace_id: str,
+    *,
     service_name: str = 'test-service',
     message: str = 'Test message',
     is_error: bool = False,
     timestamp: datetime | None = None,
 ) -> LogEvent:
-    """Create test LogEvent with trace metadata."""
-    import json
+    """Create test LogEvent with trace metadata.
 
+    Returns:
+        LogEvent populated with basic trace fields for testing.
+    """
     message_data = {
         'trace_id': trace_id,
         'service_name': service_name,
@@ -62,7 +66,7 @@ def _make_test_trace_group(
             service_name=f'service-{i % 2}',
             message=f'Span {i}',
             is_error=is_error,
-            timestamp=base_time.replace(second=base_time.second + i),
+            timestamp=base_time + timedelta(seconds=i),
         )
         span = log_event_to_trace_span(event, trace_id)
         spans.append(span)
@@ -142,7 +146,7 @@ async def test_trace_viewer_tree_structure():
                 trace_id=trace_id,
                 service_name=f'service-{service_idx}',
                 message=f'Span {span_idx}',
-                timestamp=base_time.replace(second=base_time.second + service_idx * 3 + span_idx),
+                timestamp=base_time + timedelta(seconds=service_idx * 3 + span_idx),
             )
             span = log_event_to_trace_span(event, trace_id)
             spans.append(span)
@@ -151,7 +155,7 @@ async def test_trace_viewer_tree_structure():
         trace_id=trace_id,
         spans=sorted(spans, key=lambda s: s.log_event.timestamp),
         start_time=base_time,
-        end_time=base_time.replace(second=base_time.second + 6),
+        end_time=base_time + timedelta(seconds=6),
         duration_ms=6000.0,
         service_names={'service-0', 'service-1'},
         error_count=0,
@@ -422,9 +426,9 @@ async def test_trace_viewer_chronological_ordering():
     # Create trace with known timestamps
     base_time = datetime.now(UTC)
     events = [
-        _make_test_event('trace-1', timestamp=base_time.replace(second=base_time.second + 2)),
+        _make_test_event('trace-1', timestamp=base_time + timedelta(seconds=2)),
         _make_test_event('trace-1', timestamp=base_time),
-        _make_test_event('trace-1', timestamp=base_time.replace(second=base_time.second + 1)),
+        _make_test_event('trace-1', timestamp=base_time + timedelta(seconds=1)),
     ]
     spans = [log_event_to_trace_span(e, 'trace-1') for e in events]
 
@@ -432,7 +436,7 @@ async def test_trace_viewer_chronological_ordering():
         trace_id='trace-1',
         spans=sorted(spans, key=lambda s: s.log_event.timestamp),
         start_time=base_time,
-        end_time=base_time.replace(second=base_time.second + 2),
+        end_time=base_time + timedelta(seconds=2),
         duration_ms=2000.0,
         service_names={'test-service'},
         error_count=0,

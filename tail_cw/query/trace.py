@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any, TypedDict
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.query.engine import query_parquet_file_to_log_events
@@ -26,6 +27,17 @@ DEFAULT_TRACE_ID_FIELDS = [
     'request_id',
     'requestId',
 ]
+
+ERROR_KEYWORDS = {'error', 'fatal', 'critical', 'exception'}
+ERROR_LEVEL_FIELDS = {'level', 'severity', 'loglevel'}
+STATUS_FIELDS = {'status', 'status_code', 'statuscode'}
+MESSAGE_FIELDS = {'message', 'msg', 'error_message'}
+ERROR_STATUS_THRESHOLD = 500
+SPAN_ID_FIELDS = ['span_id', 'spanId', 'id']
+PARENT_SPAN_FIELDS = ['parent_span_id', 'parentSpanId', 'parent_id']
+DURATION_FIELDS = ['duration', 'duration_ms', 'elapsed_ms', 'durationMs']
+MILLISECONDS_PER_SECOND = 1000
+MILLISECONDS_PER_MINUTE = 60 * MILLISECONDS_PER_SECOND
 
 
 @dataclass(frozen=True)
@@ -76,6 +88,14 @@ class TraceGroup:
     span_count: int
 
 
+class SpanMetadata(TypedDict):
+    """Structured metadata extracted from a log event."""
+
+    span_id: str | None
+    parent_span_id: str | None
+    duration_ms: float | None
+
+
 def extract_trace_id_from_event(
     event: LogEvent,
     trace_id_fields: list[str] = DEFAULT_TRACE_ID_FIELDS,
@@ -102,27 +122,42 @@ def extract_trace_id_from_event(
         >>> extract_trace_id_from_event(event)
         'xyz'
     """
-    # Try to parse message as JSON
-    parsed_data = None
-    with contextlib.suppress(json.JSONDecodeError, TypeError):
-        parsed_data = json.loads(event.message)
-
-    # Search in parsed message
-    if parsed_data and isinstance(parsed_data, dict):
-        trace_id = _search_for_trace_id(parsed_data, trace_id_fields)
-        if trace_id:
-            return trace_id
-
-    # Check if event has 'parsed' attribute from Parquet
-    if hasattr(event, 'parsed') and isinstance(event.parsed, dict):
-        trace_id = _search_for_trace_id(event.parsed, trace_id_fields)
+    for data in _iter_structured_event_data(event):
+        trace_id = _search_for_trace_id(data, trace_id_fields)
         if trace_id:
             return trace_id
 
     return None
 
 
-def _search_for_trace_id(data: dict, field_names: list[str]) -> str | None:
+def _load_json_dict(payload: str | None) -> dict[str, Any] | None:
+    """Safely load a JSON dict from payload.
+
+    Returns:
+        Parsed dict when payload is valid JSON, otherwise None.
+    """
+    if not payload:
+        return None
+
+    with contextlib.suppress(json.JSONDecodeError, TypeError):
+        parsed = json.loads(payload)
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _iter_structured_event_data(event: LogEvent) -> Iterator[dict[str, Any]]:
+    """Yield structured representations of a log event."""
+    message_data = _load_json_dict(event.message)
+    if message_data:
+        yield message_data
+
+    parsed_attr = getattr(event, 'parsed', None)
+    if isinstance(parsed_attr, dict):
+        yield parsed_attr
+
+
+def _search_for_trace_id(data: Mapping[str, Any], field_names: Iterable[str]) -> str | None:
     """Search for trace ID in a dict using field names.
 
     Supports nested paths like 'context.trace_id'.
@@ -134,34 +169,63 @@ def _search_for_trace_id(data: dict, field_names: list[str]) -> str | None:
     Returns:
         Trace ID string or None.
     """
-    # Try direct field lookup (case-insensitive)
     for field_name in field_names:
-        for key, value in data.items():
-            if key.lower() == field_name.lower() and value:
-                return str(value)
+        value = _resolve_field_path(data, field_name.split('.'))
+        if value:
+            return str(value)
+    return None
 
-    # Try nested paths
+
+def _resolve_field_path(data: Mapping[str, Any], path: list[str]) -> Any | None:
+    """Resolve a dotted field path using case-insensitive keys.
+
+    Returns:
+        Resolved value or None when any path segment is missing.
+    """
+    current: Any = data
+    for part in path:
+        if not isinstance(current, Mapping):
+            return None
+        current = _get_case_insensitive(current, part)
+        if current is None:
+            return None
+    return current
+
+
+def _get_case_insensitive(data: Mapping[str, Any], key: str) -> Any | None:
+    """Retrieve a value by key using case-insensitive lookup.
+
+    Returns:
+        Matching value, or None if no case-insensitive match exists.
+    """
+    lowered = key.lower()
+    for current_key, value in data.items():
+        if current_key.lower() == lowered:
+            return value
+    return None
+
+
+def _find_first_matching_field(data: Mapping[str, Any], field_names: Iterable[str]) -> str | None:
+    """Find the first value that matches any field name case-insensitively.
+
+    Returns:
+        Stringified value when a match is found, otherwise None.
+    """
     for field_name in field_names:
-        if '.' in field_name:
-            parts = field_name.split('.')
-            current = data
-            for part in parts:
-                if isinstance(current, dict):
-                    # Case-insensitive lookup
-                    found = False
-                    for key, value in current.items():
-                        if key.lower() == part.lower():
-                            current = value
-                            found = True
-                            break
-                    if not found:
-                        break
-                else:
-                    break
-            else:
-                if current:
-                    return str(current)
+        value = _get_case_insensitive(data, field_name)
+        if value:
+            return str(value)
+    return None
 
+
+def _coerce_to_float(value: Any) -> float | None:
+    """Convert value to float when possible.
+
+    Returns:
+        Float representation or None when conversion fails.
+    """
+    with contextlib.suppress(ValueError, TypeError):
+        return float(value)
     return None
 
 
@@ -179,23 +243,10 @@ def extract_service_name(event: LogEvent) -> str:
     """
     service_fields = ['service_name', 'service', 'serviceName', 'app', 'application']
 
-    # Try parsing message as JSON
-    try:
-        parsed_data = json.loads(event.message)
-        if isinstance(parsed_data, dict):
-            for field in service_fields:
-                for key, value in parsed_data.items():
-                    if key.lower() == field.lower() and value:
-                        return str(value)
-    except (json.JSONDecodeError, TypeError):
-        pass
-
-    # Check parsed attribute from Parquet
-    if hasattr(event, 'parsed') and isinstance(event.parsed, dict):
-        for field in service_fields:
-            for key, value in event.parsed.items():
-                if key.lower() == field.lower() and value:
-                    return str(value)
+    for data in _iter_structured_event_data(event):
+        value = _find_first_matching_field(data, service_fields)
+        if value:
+            return value
 
     # Fall back to log_group, strip common prefixes
     log_group = event.log_group
@@ -204,6 +255,45 @@ def extract_service_name(event: LogEvent) -> str:
             log_group = log_group[len(prefix) :]
             break
     return log_group
+
+
+def _message_contains_error_keyword(message: str) -> bool:
+    """Return True if the message contains an error keyword."""
+    message_lower = message.lower()
+    return any(keyword in message_lower for keyword in ERROR_KEYWORDS)
+
+
+def _structured_data_indicates_error(data: Mapping[str, Any]) -> bool:
+    """Inspect structured data for error indicators.
+
+    Returns:
+        True when error semantics are detected, otherwise False.
+    """
+    for key, value in data.items():
+        if not value:
+            continue
+
+        lowered_key = key.lower()
+        if lowered_key in ERROR_LEVEL_FIELDS and str(value).upper() in {'ERROR', 'FATAL', 'CRITICAL'}:
+            return True
+
+        if lowered_key in STATUS_FIELDS:
+            with contextlib.suppress(ValueError, TypeError):
+                if int(value) >= ERROR_STATUS_THRESHOLD:
+                    return True
+    return False
+
+
+def _structured_message_contains_error(data: Mapping[str, Any]) -> bool:
+    """Inspect structured message fields for error keywords.
+
+    Returns:
+        True when message-like fields contain error terms, otherwise False.
+    """
+    for key, value in data.items():
+        if key.lower() in MESSAGE_FIELDS and isinstance(value, str) and _message_contains_error_keyword(value):
+            return True
+    return False
 
 
 def is_error_event(event: LogEvent) -> bool:
@@ -217,49 +307,20 @@ def is_error_event(event: LogEvent) -> bool:
     Returns:
         True if event is an error.
     """
-    # Check message for error keywords
-    message_lower = event.message.lower()
-    error_keywords = ['error', 'fatal', 'critical', 'exception']
-    for keyword in error_keywords:
-        if keyword in message_lower:
+    structured_found = False
+
+    for data in _iter_structured_event_data(event):
+        structured_found = True
+        if _structured_data_indicates_error(data) or _structured_message_contains_error(data):
             return True
 
-    # Try parsing message as JSON
-    try:
-        parsed_data = json.loads(event.message)
-        if isinstance(parsed_data, dict):
-            # Check level field
-            for key, value in parsed_data.items():
-                if key.lower() in {'level', 'severity', 'loglevel'} and value:
-                    if str(value).upper() in {'ERROR', 'FATAL', 'CRITICAL'}:
-                        return True
-                # Check status code
-                if key.lower() in {'status', 'status_code', 'statuscode'} and value:
-                    try:
-                        if int(value) >= 500:
-                            return True
-                    except (ValueError, TypeError):
-                        pass
-    except (json.JSONDecodeError, TypeError):
-        pass
+    if structured_found:
+        return False
 
-    # Check parsed attribute from Parquet
-    if hasattr(event, 'parsed') and isinstance(event.parsed, dict):
-        for key, value in event.parsed.items():
-            if key.lower() in {'level', 'severity', 'loglevel'} and value:
-                if str(value).upper() in {'ERROR', 'FATAL', 'CRITICAL'}:
-                    return True
-            if key.lower() in {'status', 'status_code', 'statuscode'} and value:
-                try:
-                    if int(value) >= 500:
-                        return True
-                except (ValueError, TypeError):
-                    pass
-
-    return False
+    return _message_contains_error_keyword(event.message)
 
 
-def extract_span_metadata(event: LogEvent) -> dict:
+def extract_span_metadata(event: LogEvent) -> SpanMetadata:
     """Extract span metadata from LogEvent.
 
     Args:
@@ -268,79 +329,32 @@ def extract_span_metadata(event: LogEvent) -> dict:
     Returns:
         Dict with span_id, parent_span_id, duration_ms (None for missing fields).
     """
-    metadata = {
+    metadata: SpanMetadata = {
         'span_id': None,
         'parent_span_id': None,
         'duration_ms': None,
     }
 
-    span_id_fields = ['span_id', 'spanId', 'id']
-    parent_fields = ['parent_span_id', 'parentSpanId', 'parent_id']
-    duration_fields = ['duration', 'duration_ms', 'elapsed_ms', 'durationMs']
+    for data in _iter_structured_event_data(event):
+        if metadata['span_id'] is None:
+            span_value = _find_first_matching_field(data, SPAN_ID_FIELDS)
+            if span_value:
+                metadata['span_id'] = span_value
 
-    # Try parsing message as JSON
-    parsed_data = None
-    with contextlib.suppress(json.JSONDecodeError, TypeError):
-        parsed_data = json.loads(event.message)
+        if metadata['parent_span_id'] is None:
+            parent_value = _find_first_matching_field(data, PARENT_SPAN_FIELDS)
+            if parent_value:
+                metadata['parent_span_id'] = parent_value
 
-    if parsed_data and isinstance(parsed_data, dict):
-        # Extract span_id
-        for field in span_id_fields:
-            for key, value in parsed_data.items():
-                if key.lower() == field.lower() and value:
-                    metadata['span_id'] = str(value)
-                    break
-            if metadata['span_id']:
-                break
+        if metadata['duration_ms'] is None:
+            duration_value = _find_first_matching_field(data, DURATION_FIELDS)
+            if duration_value is not None:
+                duration = _coerce_to_float(duration_value)
+                if duration is not None:
+                    metadata['duration_ms'] = duration
 
-        # Extract parent_span_id
-        for field in parent_fields:
-            for key, value in parsed_data.items():
-                if key.lower() == field.lower() and value:
-                    metadata['parent_span_id'] = str(value)
-                    break
-            if metadata['parent_span_id']:
-                break
-
-        # Extract duration
-        for field in duration_fields:
-            for key, value in parsed_data.items():
-                if key.lower() == field.lower() and value:
-                    with contextlib.suppress(ValueError, TypeError):
-                        metadata['duration_ms'] = float(value)
-                    break
-            if metadata['duration_ms']:
-                break
-
-    # Check parsed attribute from Parquet
-    if hasattr(event, 'parsed') and isinstance(event.parsed, dict):
-        if not metadata['span_id']:
-            for field in span_id_fields:
-                for key, value in event.parsed.items():
-                    if key.lower() == field.lower() and value:
-                        metadata['span_id'] = str(value)
-                        break
-                if metadata['span_id']:
-                    break
-
-        if not metadata['parent_span_id']:
-            for field in parent_fields:
-                for key, value in event.parsed.items():
-                    if key.lower() == field.lower() and value:
-                        metadata['parent_span_id'] = str(value)
-                        break
-                if metadata['parent_span_id']:
-                    break
-
-        if not metadata['duration_ms']:
-            for field in duration_fields:
-                for key, value in event.parsed.items():
-                    if key.lower() == field.lower() and value:
-                        with contextlib.suppress(ValueError, TypeError):
-                            metadata['duration_ms'] = float(value)
-                        break
-                if metadata['duration_ms']:
-                    break
+        if metadata['span_id'] and metadata['parent_span_id'] and metadata['duration_ms'] is not None:
+            break
 
     return metadata
 
@@ -348,14 +362,12 @@ def extract_span_metadata(event: LogEvent) -> dict:
 def log_event_to_trace_span(
     event: LogEvent,
     trace_id: str,
-    trace_id_fields: list[str] = DEFAULT_TRACE_ID_FIELDS,
 ) -> TraceSpan:
     """Convert LogEvent to TraceSpan.
 
     Args:
         event: The log event.
         trace_id: The trace ID (already extracted).
-        trace_id_fields: Field names for extraction.
 
     Returns:
         Constructed TraceSpan instance.
@@ -393,7 +405,7 @@ def group_events_by_trace(
     for event in events:
         trace_id = extract_trace_id_from_event(event, trace_id_fields)
         if trace_id:
-            span = log_event_to_trace_span(event, trace_id, trace_id_fields)
+            span = log_event_to_trace_span(event, trace_id)
             if trace_id not in grouped:
                 grouped[trace_id] = []
             grouped[trace_id].append(span)
@@ -530,19 +542,21 @@ def find_traces_with_errors(
     return error_traces
 
 
-def format_trace_duration(duration_ms: float) -> str:
+def format_trace_duration(duration_ms: float | int) -> str:  # noqa: PYI041
     """Format duration for display.
 
     Args:
-        duration_ms: Duration in milliseconds.
+        duration_ms: Duration in milliseconds (int or float).
 
     Returns:
         Formatted duration (e.g., '1.23s', '456ms', '1m 23s').
     """
-    if duration_ms < 1000:
-        return f'{int(duration_ms)}ms'
-    if duration_ms < 60000:
-        return f'{duration_ms / 1000:.2f}s'
-    minutes = int(duration_ms / 60000)
-    seconds = int((duration_ms % 60000) / 1000)
+    duration_value = float(duration_ms)
+
+    if duration_value < MILLISECONDS_PER_SECOND:
+        return f'{int(duration_value)}ms'
+    if duration_value < MILLISECONDS_PER_MINUTE:
+        return f'{duration_value / MILLISECONDS_PER_SECOND:.2f}s'
+    minutes = int(duration_value / MILLISECONDS_PER_MINUTE)
+    seconds = int((duration_value % MILLISECONDS_PER_MINUTE) / MILLISECONDS_PER_SECOND)
     return f'{minutes}m {seconds}s'

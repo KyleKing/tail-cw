@@ -6,7 +6,7 @@ hierarchical tree structure, grouped by service with chronological ordering.
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from rich.text import Text
 from textual.app import ComposeResult
@@ -18,6 +18,9 @@ from textual.widgets.tree import TreeNode
 
 from tail_cw.query.trace import TraceGroup, TraceSpan, format_trace_duration
 from tail_cw.tui.record_detail import RecordDetailScreen
+
+MESSAGE_PREVIEW_LENGTH = 80
+TRACE_ID_PREVIEW_LENGTH = 8
 
 
 class TraceViewerScreen(Screen[None]):
@@ -78,7 +81,7 @@ class TraceViewerScreen(Screen[None]):
         self._trace_groups = trace_groups
         self._all_trace_groups = trace_groups  # Keep original for search reset
         self._title = title
-        self._tree: Tree | None = None
+        self._tree: Tree[Any] | None = None
         self._search_input: Input | None = None
         self._status_label: Label | None = None
 
@@ -88,10 +91,11 @@ class TraceViewerScreen(Screen[None]):
         Yields:
             Header, search input, tree container, footer.
         """
+        placeholder = f'Search {self._title} by ID or service...'
         yield Header(show_clock=True)
-        yield Input(placeholder='Search traces by ID or service...', id='trace_search')
+        yield Input(placeholder=placeholder, id='trace_search')
         with Container():
-            yield Tree('Traces', id='trace_tree')
+            yield Tree(Text('Traces'), id='trace_tree')
             yield Label('No traces loaded', id='trace_status')
         yield Footer()
 
@@ -107,12 +111,15 @@ class TraceViewerScreen(Screen[None]):
         self._build_trace_tree()
         self._update_status()
 
+        if self._tree is not None:
+            self._tree.focus()
+
     def _build_trace_tree(self) -> None:
         """Populate tree with trace groups.
 
         Creates hierarchical structure: trace root -> service nodes -> span nodes.
         """
-        if not self._tree:
+        if self._tree is None:
             return
 
         self._tree.clear()
@@ -169,7 +176,8 @@ class TraceViewerScreen(Screen[None]):
             # Expand trace root by default
             trace_node.expand()
 
-    def _format_trace_node_label(self, trace_group: TraceGroup) -> Text:
+    @staticmethod
+    def _format_trace_node_label(trace_group: TraceGroup) -> Text:
         """Format trace root node label.
 
         Args:
@@ -178,8 +186,8 @@ class TraceViewerScreen(Screen[None]):
         Returns:
             Rich Text with formatted label.
         """
-        trace_id_short = trace_group.trace_id[:8]
-        if len(trace_group.trace_id) > 8:
+        trace_id_short = trace_group.trace_id[:TRACE_ID_PREVIEW_LENGTH]
+        if len(trace_group.trace_id) > TRACE_ID_PREVIEW_LENGTH:
             trace_id_short += '...'
 
         duration_str = format_trace_duration(trace_group.duration_ms)
@@ -201,7 +209,8 @@ class TraceViewerScreen(Screen[None]):
 
         return text
 
-    def _format_service_node_label(self, service_name: str, spans: list[TraceSpan]) -> Text:
+    @staticmethod
+    def _format_service_node_label(service_name: str, spans: list[TraceSpan]) -> Text:
         """Format service node label.
 
         Args:
@@ -240,7 +249,8 @@ class TraceViewerScreen(Screen[None]):
 
         return text
 
-    def _format_span_node_label(self, span: TraceSpan) -> Text:
+    @staticmethod
+    def _format_span_node_label(span: TraceSpan) -> Text:
         """Format span node label.
 
         Args:
@@ -250,8 +260,8 @@ class TraceViewerScreen(Screen[None]):
             Rich Text with formatted label.
         """
         timestamp_str = span.log_event.timestamp.strftime('%H:%M:%S.%f')[:-3]
-        message = span.log_event.message[:80]
-        if len(span.log_event.message) > 80:
+        message = span.log_event.message[:MESSAGE_PREVIEW_LENGTH]
+        if len(span.log_event.message) > MESSAGE_PREVIEW_LENGTH:
             message += '...'
 
         duration_str = format_trace_duration(span.duration_ms) if span.duration_ms is not None else 'N/A'
@@ -295,7 +305,7 @@ class TraceViewerScreen(Screen[None]):
 
     def action_expand_all(self) -> None:
         """Expand all tree nodes."""
-        if not self._tree:
+        if self._tree is None:
             return
 
         self._tree.root.expand_all()
@@ -304,7 +314,7 @@ class TraceViewerScreen(Screen[None]):
 
     def action_collapse_all(self) -> None:
         """Collapse all tree nodes except trace roots."""
-        if not self._tree:
+        if self._tree is None:
             return
 
         for trace_node in self._tree.root.children:
@@ -316,7 +326,7 @@ class TraceViewerScreen(Screen[None]):
 
     def action_next_error(self) -> None:
         """Jump to next error span."""
-        if not self._tree:
+        if self._tree is None:
             return
 
         error_nodes = self._find_error_nodes(self._tree)
@@ -344,7 +354,7 @@ class TraceViewerScreen(Screen[None]):
 
     def action_prev_error(self) -> None:
         """Jump to previous error span."""
-        if not self._tree:
+        if self._tree is None:
             return
 
         error_nodes = self._find_error_nodes(self._tree)
@@ -399,7 +409,7 @@ Trace Viewer Shortcuts:
         """
         self.app.notify(help_text.strip())
 
-    def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+    def on_tree_node_selected(self, event: Tree.NodeSelected[Any]) -> None:
         """Handle node selection.
 
         Args:
@@ -466,7 +476,8 @@ Trace Viewer Shortcuts:
         if event.input.id == 'trace_search' and self._tree:
             self._tree.focus()
 
-    def _find_error_nodes(self, tree: Tree) -> list[TreeNode]:
+    @staticmethod
+    def _find_error_nodes(tree: Tree[Any]) -> list[TreeNode[Any]]:
         """Find all error span nodes in tree.
 
         Args:
@@ -475,9 +486,9 @@ Trace Viewer Shortcuts:
         Returns:
             List of error span nodes.
         """
-        error_nodes = []
+        error_nodes: list[TreeNode[Any]] = []
 
-        def visit_node(node: TreeNode) -> None:
+        def visit_node(node: TreeNode[Any]) -> None:
             if node.data and node.data.get('type') == 'span':
                 span: TraceSpan = node.data['span']
                 if span.is_error:
@@ -490,7 +501,8 @@ Trace Viewer Shortcuts:
 
         return error_nodes
 
-    def _expand_parents(self, node: TreeNode) -> None:
+    @staticmethod
+    def _expand_parents(node: TreeNode[Any]) -> None:
         """Expand all parent nodes to make node visible.
 
         Args:

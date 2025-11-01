@@ -177,6 +177,9 @@ class LogTailApp(App[None]):
         else:
             self._update_status('No logs loaded')
 
+        if self._table is not None:
+            self._table.focus()
+
     def _setup_table_columns(self) -> None:
         """Configure DataTable columns.
 

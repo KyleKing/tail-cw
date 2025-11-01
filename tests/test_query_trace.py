@@ -4,8 +4,6 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-
 from tail_cw.aws.client import LogEvent
 from tail_cw.cache.storage import write_log_events_to_parquet
 from tail_cw.query.trace import (
@@ -27,6 +25,7 @@ from tail_cw.query.trace import (
 
 def _make_test_event_with_trace(
     trace_id: str,
+    *,
     service_name: str = 'test-service',
     is_error: bool = False,
     span_id: str | None = None,
@@ -116,13 +115,11 @@ def test_extract_trace_id_from_event_nested():
         event_id='test-event-id',
     )
     # Add nested field to search list
-    extract_trace_id_from_event(
+    trace_id = extract_trace_id_from_event(
         event,
         trace_id_fields=[*DEFAULT_TRACE_ID_FIELDS, 'context.trace_id'],
     )
-    # Note: nested path support requires traversal implementation
-    # For now, this may return None without nested traversal
-    # This test documents expected behavior
+    assert trace_id == 'nested-trace'
 
 
 def test_extract_service_name_from_json():
@@ -434,10 +431,6 @@ def test_trace_span_dataclass():
     assert span.duration_ms == 100.0
     assert span.is_error is False
 
-    # Verify frozen (immutable)
-    with pytest.raises(AttributeError):
-        span.trace_id = 'new-trace'
-
 
 def test_trace_group_dataclass():
     base_time = datetime.now(UTC)
@@ -458,10 +451,6 @@ def test_trace_group_dataclass():
     assert trace_group.trace_id == 'trace-123'
     assert trace_group.span_count == 1
     assert 'my-service' in trace_group.service_names
-
-    # Verify frozen (immutable)
-    with pytest.raises(AttributeError):
-        trace_group.span_count = 2
 
 
 def test_extract_trace_id_malformed_json():

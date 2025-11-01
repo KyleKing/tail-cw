@@ -1,7 +1,7 @@
 """Integration tests for trace viewing in the main app."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -40,10 +40,11 @@ def _create_parquet_with_traces(
             }
             event = LogEvent(
                 message=json.dumps(message_data),
-                timestamp=base_time.replace(second=base_time.second + trace_idx * 10 + span_idx),
+                timestamp=base_time + timedelta(seconds=trace_idx * 10 + span_idx),
                 ingestion_time=base_time,
                 log_stream='test-stream',
                 log_group='/aws/lambda/test-function',
+                event_id=f'event-{trace_idx}-{span_idx}',
             )
             events.append(event)
 
@@ -216,7 +217,7 @@ async def test_app_trace_view_with_errors(tmp_path: Path):
         }
         event = LogEvent(
             message=json.dumps(message_data),
-            timestamp=base_time.replace(second=base_time.second + i),
+            timestamp=base_time + timedelta(seconds=i),
             ingestion_time=base_time,
             log_stream='test-stream',
             log_group='test-group',

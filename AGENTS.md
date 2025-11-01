@@ -38,10 +38,13 @@ Agents should run tests and lint/type checks before finishing a task and fix any
 - Types and contracts
     - Add precise type hints. Prefer `collections.abc` for callables/iterables.
     - Document inputs/outputs and error modes in docstrings; raise specific exceptions.
+    - Runtime type checking (beartype) enforces annotations exactly; use explicit unions or helper types when accepting multiple numeric kinds instead of relying on implicit coercion.
 - Testing
     - Unit-test pure functions thoroughly. Add at least one edge/boundary test per function.
     - For I/O, isolate adapters and test with fakes; avoid network calls in tests.
     - Keep tests fast and deterministic; avoid sleeps and random without seeding.
+    - When synthesising datetimes, use `timedelta` arithmetic instead of `datetime.replace` to stay within valid ranges.
+    - Make boolean parameters keyword-only in helpers/fixtures to avoid Ruff FBT warnings and improve readability.
 
 ## Textual-specific guidance (performance & architecture)
 
@@ -89,6 +92,8 @@ References:
 - Prefer touching the smallest surface area; avoid broad refactors unless asked.
 - If you’re unsure between feature breadth and testability, choose testability.
 - When in doubt about performance in Textual, profile and reduce work per frame; batch and reuse renderables.
+- Trace heuristics should inspect structured fields (levels, status, message bodies) before falling back to free-text keyword scans to avoid misclassifying IDs like `trace-error` as failures.
+- Give Textual shortcuts a usable default focus (table/tree) so bindings like `t`, `e`, and `c` fire even before the user switches focus manually.
 
 ---
 
