@@ -17,10 +17,12 @@ from tail_cw.tui.log_viewer import (
     get_column_definitions,
 )
 from tail_cw.tui.record_detail import RecordDetailScreen
+from tail_cw.tui.trace_viewer import TraceViewerScreen
 
 __all__ = [
     'LogTailApp',
     'RecordDetailScreen',
+    'TraceViewerScreen',
     'batch_format_log_events',
     'format_log_event_detail',
     'format_log_event_for_table',

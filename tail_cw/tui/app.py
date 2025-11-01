@@ -24,8 +24,10 @@ from textual.worker import get_current_worker
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.query import parse_extended_filter, parse_filter_pattern, query_parquet_file_to_log_events
+from tail_cw.query.trace import extract_trace_id_from_event, query_traces_from_parquet
 from tail_cw.tui.log_viewer import batch_format_log_events, get_column_definitions
 from tail_cw.tui.record_detail import RecordDetailScreen
+from tail_cw.tui.trace_viewer import TraceViewerScreen
 
 
 class LogTailApp(App[None]):
@@ -48,6 +50,8 @@ class LogTailApp(App[None]):
         - /: Focus search (placeholder for future phase)
         - Enter: Show detail modal for selected row
         - r: Refresh data (placeholder)
+        - t: Toggle trace view (shows all traces)
+        - T: Show trace for selected log event
         - ?: Show help
 
     Args:
@@ -98,6 +102,8 @@ class LogTailApp(App[None]):
         Binding('/', 'focus_search', 'Search', show=True),
         Binding('enter', 'show_detail', 'Detail', show=True),
         Binding('r', 'refresh', 'Refresh', show=True),
+        Binding('t', 'toggle_trace_view', 'Trace View', show=True),
+        Binding('shift+t', 'show_trace_for_selected', 'Show Trace', show=True),
         Binding('?', 'help', 'Help', show=False),
     ]
 
@@ -323,6 +329,105 @@ class LogTailApp(App[None]):
         Could trigger re-fetching from cache or AWS in future phases.
         """
         self.notify('Refresh functionality coming soon', severity='information')
+
+    def action_toggle_trace_view(self) -> None:
+        """Toggle between log table and trace view.
+
+        Queries all traces from the Parquet data source and displays them
+        in a hierarchical tree view. Requires a Parquet data source.
+        """
+        if self._parquet_path is None:
+            self.notify(
+                'Trace view requires Parquet data source',
+                severity='warning',
+            )
+            return
+
+        try:
+            # Query for all traces
+            self._update_status('Loading traces...')
+            trace_groups = query_traces_from_parquet(self._parquet_path)
+
+            if not trace_groups:
+                self.notify(
+                    'No traces found in current data',
+                    severity='information',
+                )
+                self._update_status('No traces found')
+                return
+
+            # Push trace viewer screen
+            self.push_screen(TraceViewerScreen(trace_groups))
+
+        except Exception as e:
+            self.notify(
+                f'Failed to load traces: {e}',
+                severity='error',
+            )
+            self._update_status(f'Trace loading error: {e}')
+
+    def action_show_trace_for_selected(self) -> None:
+        """Show trace for currently selected log event.
+
+        Extracts the trace ID from the selected event and displays
+        all events in that trace.
+        """
+        if self._parquet_path is None:
+            self.notify(
+                'Trace view requires Parquet data source',
+                severity='warning',
+            )
+            return
+
+        if self._table is None:
+            return
+
+        row_index = self._table.cursor_row
+        if row_index < 0 or not self._log_events:
+            self.notify('No row selected', severity='warning')
+            return
+
+        # Get the selected LogEvent
+        try:
+            log_event = self._log_events[row_index]
+        except IndexError:
+            self.notify('Invalid row selection', severity='error')
+            return
+
+        # Extract trace ID
+        trace_id = extract_trace_id_from_event(log_event)
+        if not trace_id:
+            self.notify(
+                'No trace ID found in selected event',
+                severity='information',
+            )
+            return
+
+        try:
+            # Query for specific trace
+            self._update_status(f'Loading trace {trace_id[:8]}...')
+            trace_groups = query_traces_from_parquet(
+                self._parquet_path,
+                trace_id=trace_id,
+            )
+
+            if not trace_groups:
+                self.notify(
+                    f'Trace not found in current data: {trace_id}',
+                    severity='information',
+                )
+                self._update_status('Trace not found')
+                return
+
+            # Push trace viewer screen with single trace
+            self.push_screen(TraceViewerScreen(trace_groups, title=f'Trace: {trace_id[:16]}...'))
+
+        except Exception as e:
+            self.notify(
+                f'Failed to load trace: {e}',
+                severity='error',
+            )
+            self._update_status(f'Trace loading error: {e}')
 
     def action_help(self) -> None:
         """Show help information about keyboard shortcuts.
