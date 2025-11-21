@@ -5,6 +5,8 @@ with automatic backend selection between DuckDB (for complex queries) and
 Polars (for simple queries and full scans).
 
 Supports CloudWatch-style filter patterns translated to backend-specific queries.
+Includes memory guards to prevent OOM errors by automatically falling back to
+DuckDB when datasets are too large for Polars to load into RAM.
 """
 
 from __future__ import annotations
@@ -19,11 +21,14 @@ from typing import Any
 
 import duckdb
 import polars as pl
+import psutil
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.query.parser import FilterNode, FilterNodeType
 
 MAX_POLARS_FIELD_DEPTH = 2
+# Threshold: Use DuckDB if file size > this fraction of available RAM
+MEMORY_SAFETY_THRESHOLD = 0.5  # 50% of available RAM
 
 
 class QueryBackend(Enum):
@@ -68,7 +73,7 @@ def query_parquet_file(
     # Select backend
     selected_backend = backend
     if backend == QueryBackend.AUTO:
-        selected_backend = _select_backend(filter_node)
+        selected_backend = _select_backend(filter_node, parquet_path)
 
     # Execute query with selected backend
     if selected_backend == QueryBackend.DUCKDB:
@@ -77,18 +82,49 @@ def query_parquet_file(
         yield from _query_with_polars(parquet_path, filter_node, limit)
 
 
-def _select_backend(filter_node: FilterNode | None) -> QueryBackend:
-    """Automatically select optimal backend based on query characteristics.
+def _should_use_duckdb_for_memory(parquet_path: Path) -> bool:
+    """Check if DuckDB should be used due to memory constraints.
 
-    Heuristics:
-    - No filter (full scan): Polars (faster for full scans)
-    - Complex nested JSON field access (>2 levels): DuckDB (better SQL support)
-    - Regex patterns: DuckDB (better regex support)
-    - Simple text search or single-level JSON: Polars (faster)
-    - Default: Polars
+    Compares file size against available RAM. If the file is larger than
+    the safety threshold (50% of available RAM), recommend DuckDB since
+    it can spill to disk while Polars loads everything into memory.
+
+    Args:
+        parquet_path: Path to Parquet file
+
+    Returns:
+        True if DuckDB should be used for memory safety
+
+    Examples:
+        >>> # On a system with 8GB available RAM and a 5GB file
+        >>> _should_use_duckdb_for_memory(Path('large.parquet'))
+        True  # 5GB > 4GB threshold
+    """
+    try:
+        file_size_bytes = parquet_path.stat().st_size
+        available_ram_bytes = psutil.virtual_memory().available
+        threshold_bytes = available_ram_bytes * MEMORY_SAFETY_THRESHOLD
+    except (OSError, AttributeError):
+        # If we can't check memory, assume it's safe
+        return False
+    else:
+        return file_size_bytes > threshold_bytes
+
+
+def _select_backend(filter_node: FilterNode | None, parquet_path: Path | None = None) -> QueryBackend:
+    """Automatically select optimal backend based on query characteristics and memory.
+
+    Heuristics (in priority order):
+    1. Memory constraints: DuckDB if file too large for available RAM
+    2. Complex nested JSON field access (>2 levels): DuckDB (better SQL support)
+    3. Regex patterns: DuckDB (better regex support)
+    4. No filter (full scan): Polars (faster for full scans)
+    5. Simple text search or single-level JSON: Polars (faster)
+    6. Default: Polars
 
     Args:
         filter_node: Parsed filter AST
+        parquet_path: Optional path to Parquet file for memory checks
 
     Returns:
         Selected backend (DUCKDB or POLARS)
@@ -97,6 +133,10 @@ def _select_backend(filter_node: FilterNode | None) -> QueryBackend:
         >>> _select_backend(None)
         QueryBackend.POLARS
     """
+    # Check memory constraints first (safety)
+    if parquet_path and _should_use_duckdb_for_memory(parquet_path):
+        return QueryBackend.DUCKDB
+
     if filter_node is None:
         # No filter - use Polars for fast full scan
         return QueryBackend.POLARS

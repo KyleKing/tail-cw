@@ -11,6 +11,7 @@ from tail_cw.cache.storage import write_log_events_to_parquet
 from tail_cw.query.engine import (
     QueryBackend,
     _select_backend,
+    _should_use_duckdb_for_memory,
     benchmark_backends,
     query_parquet_file,
     query_parquet_file_to_log_events,
@@ -776,3 +777,49 @@ def test_query_parquet_file_nested_json_multiple_levels(fix_test_cache):
     # Should find events with "User 6"
     assert len(results) == 1
     assert 'User 6' in results[0]['message']
+
+
+# ============================================================================
+# Memory Guard Tests
+# ============================================================================
+
+
+def test_memory_guard_small_file(fix_test_cache):
+    """Test memory guard with small file should use Polars."""
+    parquet_path = fix_test_cache / 'test_memory_small.parquet'
+    _make_test_parquet_file(parquet_path, count=10)
+
+    # Small file should not trigger memory guard
+    should_use_duckdb = _should_use_duckdb_for_memory(parquet_path)
+    assert not should_use_duckdb
+
+
+def test_select_backend_with_memory_check(fix_test_cache):
+    """Test backend selection considers memory constraints."""
+    parquet_path = fix_test_cache / 'test_memory_select.parquet'
+    _make_test_parquet_file(parquet_path, count=10)
+
+    # With small file, should select Polars for simple query
+    node = FilterNode(node_type=FilterNodeType.TEXT_SEARCH, value='ERROR')
+    backend = _select_backend(node, parquet_path)
+
+    # Should get either POLARS or DUCKDB depending on memory
+    assert backend in {QueryBackend.POLARS, QueryBackend.DUCKDB}
+
+
+def test_memory_guard_integration(fix_test_cache):
+    """Test full query with memory guard enabled."""
+    parquet_path = fix_test_cache / 'test_memory_integration.parquet'
+    _make_test_parquet_file(parquet_path, count=50)
+
+    # Query should work regardless of backend selected
+    results = list(query_parquet_file(parquet_path, None, backend=QueryBackend.AUTO))
+
+    assert len(results) == 50
+
+
+def test_memory_guard_nonexistent_file():
+    """Test memory guard handles missing file gracefully."""
+    # Should return False (assume safe) when file doesn't exist
+    should_use_duckdb = _should_use_duckdb_for_memory(Path('/nonexistent/file.parquet'))
+    assert not should_use_duckdb

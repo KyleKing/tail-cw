@@ -46,7 +46,7 @@ class CacheConfig:
     """
 
     cache_dir: Path | None = None
-    size_limit_mb: int = 1000
+    size_limit_mb: int = 10_000  # 10GB default (increased from 1GB)
     default_ttl_seconds: int | None = None
     eviction_policy: str = 'least-recently-stored'
 
@@ -267,7 +267,7 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             '# Customize settings and remove comments as needed.\n\n'
             '[cache]\n'
             '# cache_dir = "/path/to/cache"\n'
-            'size_limit_mb = 1000\n'
+            'size_limit_mb = 10000  # 10GB default (increased for better performance)\n'
             'default_ttl_seconds = 3600  # 1 hour\n'
             'eviction_policy = "least-recently-stored"\n\n'
             '[parquet]\n'

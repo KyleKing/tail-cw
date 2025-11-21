@@ -32,7 +32,7 @@ Cache files created by the application are stored separately in the XDG cache di
 ```toml
 [cache]
 # cache_dir = "/custom/cache/path"
-size_limit_mb = 1024
+size_limit_mb = 10000  # 10GB default (recommended for better performance)
 default_ttl_seconds = 3600                # 1 hour
 eviction_policy = "least-recently-stored"
 
@@ -61,11 +61,51 @@ The helper performs an atomic write and sets restrictive permissions on POSIX sy
 
 ## Performance Tuning
 
+- **Cache size**: Default increased to 10GB (from 1GB) for better performance with large log volumes. Adjust based on available disk space.
 - **Row group size**: larger values improve Parquet scan throughput at the cost of additional memory during writes. Reduce the value when writing on memory constrained machines.
 - **Compression level**: higher ZSTD levels produce smaller files but increase CPU usage. Level 3 is a balanced default; try values between 1 and 6 when iterating.
 - **Schema inference length**: increase when NDJSON payloads contain highly variable structures so late fields are discovered during conversion.
 - **TUI chunk threshold / size**: lower thresholds trigger incremental loading sooner, which can help when working with deep scrollback buffers.
 - **Search limit**: limit the number of rows collected from Parquet queries to keep the interface responsive when exploring large datasets.
+
+### Memory Management
+
+The query engine includes automatic memory guards to prevent out-of-memory errors:
+
+- **Automatic backend selection**: When a Parquet file is larger than 50% of available RAM, the system automatically uses DuckDB (which can spill to disk) instead of Polars (which loads everything into RAM).
+- **Memory threshold**: This threshold is configurable via the `MEMORY_SAFETY_THRESHOLD` constant if you need to adjust it for your system.
+- **Monitoring**: The system checks available RAM using `psutil` before executing queries.
+
+### Async Performance
+
+For improved performance when fetching from CloudWatch:
+
+- **Parallel stream fetching**: When querying multiple log streams, the async client fetches up to 5 streams concurrently.
+- **Automatic concurrency limiting**: Uses semaphores to prevent overwhelming the CloudWatch API.
+- **Progress tracking**: Async operations support progress callbacks for better visibility into long-running fetches.
+
+To use the async client:
+```python
+import asyncio
+from datetime import datetime, timezone, timedelta
+from tail_cw.aws.async_client import fetch_log_events_async
+
+async def main():
+    start = datetime.now(tz=timezone.utc) - timedelta(hours=1)
+    end = datetime.now(tz=timezone.utc)
+
+    # Fetch from multiple streams concurrently
+    streams = ['stream1', 'stream2', 'stream3']
+    async for event in fetch_log_events_async(
+        '/aws/lambda/my-function',
+        start,
+        end,
+        log_stream_names=streams
+    ):
+        print(f"{event.timestamp}: {event.message}")
+
+asyncio.run(main())
+```
 
 ## Troubleshooting
 

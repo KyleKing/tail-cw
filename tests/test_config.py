@@ -40,7 +40,7 @@ def test_default_config_values():
     config = TailCWConfig()
 
     assert config.cache.cache_dir is None
-    assert config.cache.size_limit_mb == 1000
+    assert config.cache.size_limit_mb == 10_000  # Updated to 10GB
     assert config.cache.default_ttl_seconds is None
     assert config.cache.eviction_policy == 'least-recently-stored'
 
