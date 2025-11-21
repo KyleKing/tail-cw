@@ -153,7 +153,7 @@ async def _fetch_single_query(
     Yields:
         LogEvent instances
     """
-    async with await _create_async_logs_client(region_name=region_name) as client:
+    async with _create_async_logs_client(region_name=region_name) as client:
         # Build request parameters
         kwargs = {
             'logGroupName': log_group_name,
@@ -284,7 +284,7 @@ async def _fetch_multiple_streams_concurrent(
     Yields:
         LogEvent instances in chronological order
     """
-    async with await _create_async_logs_client(region_name=region_name) as client:
+    async with _create_async_logs_client(region_name=region_name) as client:
         # Create semaphore to limit concurrency
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_STREAMS)
 

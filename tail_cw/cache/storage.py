@@ -497,7 +497,7 @@ class LogCache:
             stat = parquet_file.stat()
             size = stat.st_size
             # Use birthtime if available, otherwise ctime
-            ctime = stat.st_birthtime if hasattr(stat, 'st_birthtime') else stat.st_ctime
+            ctime = getattr(stat, 'st_birthtime', stat.st_ctime)
             parquet_files.append((parquet_file, size, ctime))
             total_size += size
 

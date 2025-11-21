@@ -77,6 +77,7 @@ def test_epoch_ms_to_datetime():
 def test_create_logs_client():
     """Test logs client creation with retry configuration."""
     with patch('tail_cw.aws.client.boto3.client') as mock_client:
+        # Test without region (defaults to None)
         client = _create_logs_client()
 
         # Verify boto3.client was called correctly
@@ -109,7 +110,7 @@ def test_create_logs_client_with_region():
 def test_fetch_log_events_single_page():
     """Test fetching logs with a single page of results."""
     # Create mock client and stub
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     # Prepare mock events
@@ -173,7 +174,7 @@ def test_fetch_log_events_single_page():
 
 def test_fetch_log_events_multiple_pages():
     """Test pagination with multiple pages."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     # First page with nextToken
@@ -238,7 +239,7 @@ def test_fetch_log_events_multiple_pages():
 
 def test_fetch_log_events_empty_page():
     """Test handling of empty pages."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     # First page: empty with nextToken
@@ -433,7 +434,7 @@ def test_fetch_log_events_without_progress_callback():
 
 def test_fetch_log_events_with_filter_pattern():
     """Test with CloudWatch filter pattern."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     events = [_make_cw_event()]
@@ -476,7 +477,7 @@ def test_fetch_log_events_with_filter_pattern():
 
 def test_fetch_log_events_with_log_streams():
     """Test filtering by specific log streams."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     events = [_make_cw_event()]
@@ -519,7 +520,7 @@ def test_fetch_log_events_with_log_streams():
 
 def test_fetch_log_events_without_ingestion_time():
     """Test handling events without ingestionTime field."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     # Create event without ingestionTime
@@ -556,7 +557,7 @@ def test_fetch_log_events_without_ingestion_time():
 
 def test_fetch_log_events_client_error():
     """Test error handling for boto3 client errors."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     # Add a client error
@@ -585,7 +586,7 @@ def test_fetch_log_events_client_error():
 
 def test_fetch_log_events_time_conversion():
     """Test datetime to epoch milliseconds conversion."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     # Create specific datetime with known epoch values
@@ -639,7 +640,7 @@ def test_log_event_dataclass_immutability():
 
 def test_fetch_log_events_interleaved_false():
     """Test with interleaved=False."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     events = [_make_cw_event()]
@@ -676,7 +677,7 @@ def test_fetch_log_events_interleaved_false():
 
 def test_fetch_log_events_large_time_range():
     """Test with very large time range."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     # 30 days time range
@@ -711,7 +712,7 @@ def test_fetch_log_events_large_time_range():
 
 def test_fetch_log_events_microsecond_precision():
     """Test datetime with microsecond precision."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     # Create datetime with microseconds
@@ -746,7 +747,7 @@ def test_fetch_log_events_microsecond_precision():
 
 def test_fetch_log_events_special_characters_in_log_group():
     """Test log group names with special characters."""
-    client = _create_logs_client()
+    client = _create_logs_client(region_name='us-east-1')
     stub = Stubber(client)
 
     log_group = '/aws/lambda/my-function-name_v2'
