@@ -1,6 +1,6 @@
 [build-system]
-build-backend = "hatchling.build"
-requires = ["hatchling"]
+build-backend = "uv_build"
+requires = ["uv_build>=0.9.26,<2.0"]
 
 [dependency-groups]
 all = [
@@ -21,7 +21,7 @@ cache = [
   "diskcache>=5.6.0",
 ]
 dev = [
-  "calcipy[doc, lint, nox, tags, test, types]>=5.0.0",
+  "calcipy[recommended]>=6.0.1",
   "pytest-asyncio>=0.23.0",
   "types-psutil>=6.0.0",
 ]
@@ -39,14 +39,13 @@ tui = [
 authors = [{email = "dev.act.kyle@gmail.com", name = "Kyle King"}]
 classifiers = [
   "Development Status :: 1 - Planning",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-  "corallium>=2.0.1",
+  "corallium>=2.2.0",
   "platformdirs>=4.0.0",
   "psutil>=6.0.0",
 ]
@@ -64,11 +63,12 @@ tail-cw = "tail_cw.__main__:main"
 
 [project.urls]
 "Bug Tracker" = "https://github.com/kyleking/tail-cw/issues"
-Changelog = "https://github.com/kyleking/tail-cw/blob/main/docs/docs/CHANGELOG.md"
-Documentation = "https://tail-cw.kyleking.me"
-Repository = "https://github.com/kyleking/tail-cw"
+"Changelog" = "https://github.com/kyleking/tail-cw/blob/main/docs/docs/CHANGELOG.md"
+"Documentation" = "https://tail-cw.kyleking.me"
+"Repository" = "https://github.com/kyleking/tail-cw"
 
 [tool.commitizen]
+pre_bump_hooks = ["uv lock"]
 version = "0.0.1"
 version_files = ["pyproject.toml:^version", "tail_cw/__init__.py:^__version"]
 
@@ -114,8 +114,7 @@ line-length = 120
 target-version = 'py311'
 
 [tool.ruff.format]
-# For backward compatibility
-quote-style = "single"
+quote-style = 'single'
 
 [tool.ruff.lint]
 ignore = [
@@ -123,14 +122,18 @@ ignore = [
   'ANN003', # Missing type annotation for `**kwargs`
   'ANN401', # Dynamically typed expressions (typing.Any) are disallowed in `pop_key`
   'BLE001', # Do not catch blind exception: `Exception`
+  'COM812', # Conflicts with formatter
   'CPY001', # Missing copyright notice at top of file
   'D203', # "1 blank line required before class docstring" (Conflicts with D211)
   'D213', # "Multi-line docstring summary should start at the second line" (Conflicts with D212)
+  'DOC201', # Missing "Returns" in docstring; prefer minimal docstrings
+  'DOC501', # Raised exception `RuntimeError` missing from docstring
   'EM101', # Exception must not use a string literal, assign to variable first
   'FIX001', # Line contains FIXME
   'FIX002', # Line contains TODO
   'FIX004', # Line contains HACK
   'PLR0913', # Too many arguments in function definition (6 > 5)
+  'RUF067', # `__init__` module should only contain docstrings and re-exports
   'TC001', # Move application import `tail_jsonl.config.Config` into a type-checking block (Conflicts with Beartype)
   'TC002', # Move third-party import `rich.console.Console` into a type-checking block (Conflicts with Beartype)
   'TC003', # Move standard library import `argparse` into a type-checking block (Conflicts with Beartype)
@@ -187,6 +190,7 @@ known-first-party = ['tail_cw']
   'D100', # Missing docstring in public module
   'D103', # Missing docstring in public function
   'PLC2701', # Private name import `_<>` from external module
+  'PLR0917', # Too many positional arguments (6/5)
   'PLR2004', # Magic value used in comparison (acceptable in tests)
   'PT004', # flake8-pytest-style: fixture does not return
   'S101', # Use of `assert` detected
@@ -202,8 +206,12 @@ convention = "google"
 [tool.tomlsort]
 all = true
 in_place = true
-sort_first = ["python"]
 trailing_comma_inline_array = true
 
 [tool.uv]
 default-groups = ["all", "dev"]
+required-version = ">=0.9.0"
+
+[tool.uv.build-backend]
+module-name = "tail_cw"
+module-root = ""

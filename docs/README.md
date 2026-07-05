@@ -11,14 +11,14 @@ Tail and Filter AWS CloudWatch Logs
     ```sh
     import tail_cw
 
-    # < TODO: Add example code here >
+    # TODO: [Replace with your example code]
     ```
 
 1. ...
 
 ## Usage
 
-<!-- < TODO: Show an example (screenshots, terminal recording, etc.) > -->
+<!-- TODO: [Add screenshots or terminal recording demonstrating usage] -->
 
 For more example code, see the [scripts] directory or the [tests].
 
