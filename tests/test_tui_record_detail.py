@@ -222,8 +222,8 @@ async def test_modal_q_key():
 
 
 @pytest.mark.asyncio
-async def test_modal_copy_placeholder():
-    """Test copy binding shows notification."""
+async def test_modal_copy_to_clipboard():
+    """Test copy binding places the formatted event details on the clipboard."""
     event = _make_test_event()
     app = LogTailApp()
 
@@ -235,8 +235,8 @@ async def test_modal_copy_placeholder():
         await pilot.press('c')
         await pilot.pause()
 
-        # Should not crash (notification is shown)
-        # Can't easily assert notification content, but no error means it worked
+        assert event.message in app.clipboard
+        assert event.event_id in app.clipboard
 
 
 @pytest.mark.asyncio

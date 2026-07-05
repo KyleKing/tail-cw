@@ -11,8 +11,10 @@ formatting logic extracted to separate modules (log_viewer.py).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -25,6 +27,7 @@ from textual.widgets import DataTable, Footer, Header, Input, Label
 from textual.worker import get_current_worker
 
 from tail_cw.aws.client import LogEvent
+from tail_cw.cli import FetchRequest
 from tail_cw.config import TailCWConfig, load_config
 from tail_cw.query import parse_extended_filter, parse_filter_pattern, query_parquet_file_to_log_events
 from tail_cw.query.trace import extract_trace_id_from_event, query_traces_from_parquet
@@ -75,7 +78,7 @@ class LogTailApp(App[None]):
         - q: Quit the application
         - /: Focus search (placeholder for future phase)
         - Enter: Show detail modal for selected row
-        - r: Refresh data (placeholder)
+        - r: Refresh data (re-fetch the current range extended to now)
         - t: Toggle trace view (shows all traces)
         - T: Show trace for selected log event
         - ?: Show help
@@ -161,6 +164,8 @@ class LogTailApp(App[None]):
         self._search_input: Input | None = None
         self._parquet_path: Path | None = parquet_path
         self._search_debounce_timer: str | None = None  # For debouncing search
+        self._fetch_request: FetchRequest | None = None
+        self._refetch: Callable[[FetchRequest], Path | None] | None = None
         trace_fields = trace_id_fields if trace_id_fields is not None else list(self._config.trace.trace_id_fields)
         self._trace_id_fields: list[str] = trace_fields
 
@@ -209,6 +214,8 @@ class LogTailApp(App[None]):
         if self._log_events:
             self._load_log_events()
             self._update_status(f'Loaded {len(self._log_events)} events')
+        elif self._parquet_path is not None:
+            self.set_parquet_source(self._parquet_path)
         else:
             self._update_status('No logs loaded')
 
@@ -373,12 +380,57 @@ class LogTailApp(App[None]):
 
         self._search_input.focus()
 
-    def action_refresh(self) -> None:
-        """Placeholder for refresh functionality.
+    def set_fetch_context(
+        self,
+        request: FetchRequest,
+        refetch: Callable[[FetchRequest], Path | None],
+    ) -> None:
+        """Store the fetch parameters and re-fetch callable used by refresh.
 
-        Could trigger re-fetching from cache or AWS in future phases.
+        Args:
+            request: Parameters of the fetch that produced the current data.
+            refetch: Callable that resolves a request to a Parquet path,
+                returning None when no events match.
         """
-        self.notify('Refresh functionality coming soon', severity='information')
+        self._fetch_request = request
+        self._refetch = refetch
+
+    def action_refresh(self) -> None:
+        """Re-fetch the current log group with the end time extended to now.
+
+        Requires a fetch context (set via set_fetch_context when launched from
+        the CLI); otherwise shows a notification.
+        """
+        if self._fetch_request is None or self._refetch is None:
+            self.notify('Refresh requires a fetch context (launch via tail-cw fetch)', severity='information')
+            return
+
+        updated = replace(self._fetch_request, end_time=datetime.now(tz=UTC))
+        self._update_status('Refreshing...')
+        self.run_worker(
+            partial(self._refresh_from_source, updated),
+            name='refresh',
+            exclusive=True,
+            thread=True,
+        )
+
+    def _refresh_from_source(self, request: FetchRequest) -> None:
+        if self._refetch is None:
+            return
+        try:
+            parquet_path = self._refetch(request)
+        except Exception as err:
+            self.call_from_thread(self.notify, f'Refresh failed: {err}', severity='error')
+            self.call_from_thread(self._update_status, f'Refresh error: {err}')
+            return
+
+        if parquet_path is None:
+            self.call_from_thread(self.notify, 'No events found for the refreshed range', severity='warning')
+            self.call_from_thread(self._update_status, 'Refresh found no events')
+            return
+
+        self._fetch_request = request
+        self.call_from_thread(self.set_parquet_source, parquet_path)
 
     def action_toggle_trace_view(self) -> None:
         """Toggle between log table and trace view.

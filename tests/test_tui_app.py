@@ -1,11 +1,14 @@
 """Unit tests for the TUI application (LogTailApp)."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from textual.widgets import DataTable, Label
 
 from tail_cw.aws.client import LogEvent
+from tail_cw.cache.storage import write_log_events_to_parquet
+from tail_cw.cli import FetchRequest
 from tail_cw.config import TailCWConfig, TUIConfig
 from tail_cw.tui.app import LogTailApp, ProgressUpdate
 
@@ -518,3 +521,68 @@ async def test_empty_message():
 
         # Should load without error
         assert table.row_count == 1
+
+
+@pytest.mark.asyncio
+async def test_parquet_source_loaded_on_mount(tmp_path):
+    """A parquet_path given to the constructor should populate the table on mount."""
+    events = _make_test_log_events(3)
+    parquet_path = tmp_path / 'events.parquet'
+    write_log_events_to_parquet(events, parquet_path)
+
+    app = LogTailApp(parquet_path=parquet_path)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        table = app.query_one('#log_table', DataTable)
+
+        assert table.row_count == 3
+        assert app._parquet_path == parquet_path
+
+
+@pytest.mark.asyncio
+async def test_refresh_with_fetch_context(tmp_path):
+    """Pressing 'r' should re-fetch with the end time extended to now."""
+    events = _make_test_log_events(4)
+    parquet_path = tmp_path / 'events.parquet'
+    write_log_events_to_parquet(events, parquet_path)
+
+    request = FetchRequest(
+        log_group='/aws/test/group0',
+        start_time=datetime.now(tz=UTC) - timedelta(hours=2),
+        end_time=datetime.now(tz=UTC) - timedelta(hours=1),
+    )
+    refetch_calls: list[FetchRequest] = []
+
+    def refetch(updated: FetchRequest) -> Path:
+        refetch_calls.append(updated)
+        return parquet_path
+
+    app = LogTailApp()
+    app.set_fetch_context(request, refetch)
+
+    async with app.run_test() as pilot:
+        await pilot.press('r')
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        table = app.query_one('#log_table', DataTable)
+        assert table.row_count == 4
+
+    assert len(refetch_calls) == 1
+    assert refetch_calls[0].log_group == request.log_group
+    assert refetch_calls[0].start_time == request.start_time
+    assert refetch_calls[0].end_time > request.end_time
+    assert app._fetch_request == refetch_calls[0]
+
+
+@pytest.mark.asyncio
+async def test_refresh_without_fetch_context_notifies():
+    """Refresh without a fetch context should fall back to a notification."""
+    app = LogTailApp()
+
+    async with app.run_test() as pilot:
+        await pilot.press('r')
+        await pilot.pause()
+
+        assert app._fetch_request is None

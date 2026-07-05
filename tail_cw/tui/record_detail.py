@@ -38,7 +38,7 @@ class RecordDetailScreen(ModalScreen[None]):
     Keyboard shortcuts:
         - Escape: Close the modal
         - q: Close the modal (alternative)
-        - c: Copy to clipboard (placeholder for future)
+        - c: Copy event details to clipboard (OSC 52)
 
     Args:
         log_event: The LogEvent instance to display
@@ -133,11 +133,10 @@ class RecordDetailScreen(ModalScreen[None]):
         self.dismiss()
 
     def action_copy_to_clipboard(self) -> None:
-        """Placeholder for copy to clipboard functionality.
+        """Copy the formatted event details to the clipboard.
 
-        This will be implemented in a future phase. Would require a clipboard
-        library (e.g., pyperclip), which would be a new dependency.
-
-        Shows a notification to inform the user this is coming soon.
+        Uses Textual's built-in OSC 52 clipboard support, which requires a
+        terminal emulator that handles the escape sequence.
         """
-        self.app.notify('Copy to clipboard coming soon', severity='information')
+        self.app.copy_to_clipboard(self._format_content())
+        self.app.notify('Copied event details to clipboard', severity='information')

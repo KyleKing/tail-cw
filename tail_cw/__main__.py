@@ -1,70 +1,41 @@
-"""Entry point for running the tail-cw TUI application.
+"""Entry point for the tail-cw command line interface.
 
-This module provides the main() function that serves as the entry point
-for the CloudWatch Logs viewer TUI. It can be invoked in multiple ways:
-
-    1. As a module: python -m tail_cw
-    2. Via console script: tail-cw (after installation)
-    3. With uv: uv run tail-cw
-
-The entry point handles initialization of the LogTailApp, graceful shutdown
-on keyboard interrupt, and error reporting to stderr.
-
-Future enhancements:
-    - CLI argument parsing for log group, stream, time range
-    - Command-line overrides for configuration and AWS credentials
-    - Option to load from cache vs. fetch from AWS
+Argument parsing and the fetch pipeline live in ``tail_cw.cli``; this module
+wires in the Textual TUI runner and handles top-level error reporting. It can
+be invoked as ``python -m tail_cw``, via the ``tail-cw`` console script, or
+with ``uv run tail-cw``.
 """
 
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
+from pathlib import Path
 
-from tail_cw.config import load_config
+from tail_cw.cli import FetchRequest, resolve_parquet_path, run_cli
+from tail_cw.config import TailCWConfig
 from tail_cw.tui.app import LogTailApp
 
 
-def main() -> int:
-    """Main entry point for the TUI application.
+def _run_tui(config: TailCWConfig, parquet_path: Path, request: FetchRequest) -> None:
+    app = LogTailApp(config=config, parquet_path=parquet_path)
 
-    Loads configuration from the default location and runs a LogTailApp
-    instance. Currently starts with no data loaded; future versions will
-    support CLI arguments for specifying log sources and filters.
+    def refetch(updated: FetchRequest) -> Path | None:
+        return resolve_parquet_path(updated, config)
 
-    Returns:
-        Exit code: 0 for success, 1 for error
+    app.set_fetch_context(request, refetch)
+    app.run()
 
-    Example:
-        >>> # From command line
-        >>> # python -m tail_cw
-        >>> # or
-        >>> # tail-cw
-    """
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the tail-cw CLI and return the process exit code."""
     try:
-        config = load_config()
-    except (OSError, ValueError) as exc:
-        sys.stderr.write(f'Configuration error: {exc}\n')
-        return 1
-
-    try:
-        # Create the app with no initial data
-        # TODO: Add CLI argument parsing for log group, time range, and config path override.
-        app = LogTailApp(config=config)
-
-        # Run the TUI
-        app.run()
-
+        return run_cli(argv, _run_tui)
     except KeyboardInterrupt:
-        # User pressed Ctrl+C, exit gracefully
         return 0
-
-    except Exception as e:
-        # Unexpected error, log and exit with error code
-        sys.stderr.write(f'Error: {e}\n')
+    except Exception as err:
+        sys.stderr.write(f'Error: {err}\n')
         return 1
-
-    else:
-        return 0
 
 
 if __name__ == '__main__':

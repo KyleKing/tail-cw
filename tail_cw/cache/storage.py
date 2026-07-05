@@ -38,6 +38,7 @@ def generate_cache_key(
     filter_pattern: str | None = None,
     log_stream_names: list[str] | None = None,
     region_name: str | None = None,
+    profile_name: str | None = None,
 ) -> str:
     """Generate a deterministic cache key from CloudWatch query parameters.
 
@@ -56,6 +57,9 @@ def generate_cache_key(
         log_stream_names: Optional list of log stream names. Order is normalized
             for determinism.
         region_name: Optional AWS region name.
+        profile_name: Optional AWS profile name. Included so results fetched
+            with different profiles (potentially different accounts) do not
+            collide in the cache.
 
     Returns:
         Cache key in format: cache:v1:{base64url_digest}
@@ -86,6 +90,9 @@ def generate_cache_key(
 
     if region_name is not None:
         canonical['region_name'] = region_name
+
+    if profile_name is not None:
+        canonical['profile_name'] = profile_name
 
     # Create stable JSON representation
     json_bytes = json.dumps(
@@ -649,22 +656,34 @@ class LogCache:
         Returns:
             True if key exists and is valid, False otherwise.
         """
+        return self.get_parquet_path(cache_key) is not None
+
+    def get_parquet_path(self, cache_key: str) -> Path | None:
+        """Return the Parquet file path for a cache key.
+
+        Args:
+            cache_key: Cache key to look up.
+
+        Returns:
+            Path to the cached Parquet file, or None when the key is missing,
+            expired, or the file was deleted externally (stale metadata is
+            cleaned up).
+        """
         metadata_value = self._metadata.get(cache_key)
 
         if metadata_value is None:
-            return False
+            return None
 
         # Handle both old string format and new tuple format
         parquet_path_str = str(metadata_value[0]) if isinstance(metadata_value, tuple) else str(metadata_value)
 
-        # Verify file exists
         parquet_path = Path(parquet_path_str)
         if not parquet_path.exists():
             # Clean up stale metadata
             self._metadata.delete(cache_key)
-            return False
+            return None
 
-        return True
+        return parquet_path
 
     def evict_expired(self) -> int:
         """Manually trigger expiration of TTL entries and clean up orphaned files.

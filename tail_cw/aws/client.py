@@ -51,12 +51,14 @@ def _epoch_ms_to_datetime(epoch_ms: int) -> datetime:
     return datetime.fromtimestamp(epoch_ms / 1000.0, tz=UTC)
 
 
-def _create_logs_client(region_name: str | None = None) -> Any:
+def _create_logs_client(region_name: str | None = None, profile_name: str | None = None) -> Any:
     """Create a boto3 CloudWatch Logs client with retry configuration.
 
     Args:
         region_name: Optional AWS region name. If None, uses boto3's default
             region resolution (environment variables, config files, etc.).
+        profile_name: Optional AWS profile name. If provided, credentials are
+            resolved through a boto3 Session for that profile.
 
     Returns:
         Configured boto3 CloudWatch Logs client.
@@ -67,6 +69,9 @@ def _create_logs_client(region_name: str | None = None) -> Any:
             'mode': 'standard',
         },
     )
+    if profile_name is not None:
+        session = boto3.Session(profile_name=profile_name, region_name=region_name)
+        return session.client('logs', config=config)
     return boto3.client('logs', config=config, region_name=region_name)
 
 
@@ -78,6 +83,7 @@ def fetch_log_events(
     filter_pattern: str | None = None,
     log_stream_names: list[str] | None = None,
     interleaved: bool = True,
+    profile_name: str | None = None,
     region_name: str | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> Iterator[LogEvent]:
@@ -97,6 +103,7 @@ def fetch_log_events(
             searches all streams in the log group.
         interleaved: Whether to interleave events from multiple streams
             chronologically. Default is True.
+        profile_name: Optional AWS profile name for credential resolution.
         region_name: Optional AWS region override. If None, uses boto3's default
             region resolution.
         progress_callback: Optional callable invoked every 100 events fetched.
@@ -122,7 +129,7 @@ def fetch_log_events(
     end_time_ms = int(end_time.timestamp() * 1000)
 
     # Create logs client
-    client = _create_logs_client(region_name=region_name)
+    client = _create_logs_client(region_name=region_name, profile_name=profile_name)
 
     # Build request parameters
     kwargs = {
