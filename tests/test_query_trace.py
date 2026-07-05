@@ -4,6 +4,8 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from tail_cw.aws.client import LogEvent
 from tail_cw.cache.storage import write_log_events_to_parquet
 from tail_cw.query.trace import (
@@ -205,7 +207,7 @@ def test_extract_span_metadata():
     metadata = extract_span_metadata(event)
     assert metadata['span_id'] == 'span-123'
     assert metadata['parent_span_id'] == 'parent-456'
-    assert metadata['duration_ms'] == 123.45
+    assert metadata['duration_ms'] == pytest.approx(123.45)
 
 
 def test_log_event_to_trace_span():
@@ -428,7 +430,7 @@ def test_trace_span_dataclass():
     assert span.trace_id == 'trace-123'
     assert span.span_id == 'span-456'
     assert span.service_name == 'my-service'
-    assert span.duration_ms == 100.0
+    assert span.duration_ms == pytest.approx(100.0)
     assert span.is_error is False
 
 
