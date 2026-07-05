@@ -51,7 +51,7 @@ Repository Settings → Environments:
 
 PyPI: https://pypi.org/manage/project/tail_cw/settings/publishing/
 - Owner: `kyleking`
-- Repository: `tail_cw`
+- Repository: `tail-cw`
 - Workflow: `publish.yml`
 - Environment: `pypi`
     - Or environment `testpypi` (for [TestPyPI](https://test.pypi.org/manage/account/publishing))
