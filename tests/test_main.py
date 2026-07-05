@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import tail_cw.__main__
 from tail_cw.__main__ import main
-from tail_cw.cli import FetchRequest
+from tail_cw.cli import FetchRequest, TailRequest
 from tail_cw.config import TailCWConfig
 
 
@@ -77,4 +77,20 @@ def test_run_tui_wires_app(tmp_path):
     mock_app.assert_called_once_with(config=config, parquet_path=parquet_path)
     instance.set_fetch_context.assert_called_once()
     assert instance.set_fetch_context.call_args.args[0] is request
+    instance.run.assert_called_once_with()
+
+
+def test_run_tail_tui_wires_live_stream():
+    """The tail TUI runner should start live mode with a stream factory."""
+    config = TailCWConfig()
+    request = TailRequest(log_groups=('/g',))
+
+    with patch('tail_cw.__main__.LogTailApp') as mock_app:
+        instance = mock_app.return_value
+
+        tail_cw.__main__._run_tail_tui(config, request)
+
+    mock_app.assert_called_once_with(config=config, title='CloudWatch Live Tail')
+    instance.start_live_tail.assert_called_once()
+    assert callable(instance.start_live_tail.call_args.args[0])
     instance.run.assert_called_once_with()

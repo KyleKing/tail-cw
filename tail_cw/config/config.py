@@ -78,6 +78,8 @@ class TUIConfig:
         chunk_size: Number of rows appended per incremental update.
         initial_load_limit: Initial number of rows to load when opening a
             Parquet dataset.
+        live_buffer_limit: Maximum number of live tail events retained in the
+            in-memory ring buffer; the oldest events are dropped once exceeded.
         search_limit: Maximum number of search results returned from queries.
         trace_limit: Maximum number of trace groups fetched when toggling the
             trace view.
@@ -86,6 +88,7 @@ class TUIConfig:
     chunk_threshold: int = 5000
     chunk_size: int = 1000
     initial_load_limit: int = 1000
+    live_buffer_limit: int = 10_000
     search_limit: int = 10_000
     trace_limit: int = 100
 
@@ -278,6 +281,7 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'chunk_threshold = 5000\n'
             'chunk_size = 1000\n'
             'initial_load_limit = 1000\n'
+            'live_buffer_limit = 10000\n'
             'search_limit = 10000\n'
             'trace_limit = 100\n\n'
             '[trace]\n'

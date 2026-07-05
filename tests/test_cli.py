@@ -11,10 +11,13 @@ import pytest
 from tail_cw.aws.client import LogEvent
 from tail_cw.cli import (
     FetchRequest,
+    TailRequest,
     build_parser,
+    iter_tail_events,
     parse_time,
     resolve_parquet_path,
     run_cli,
+    stream_ndjson,
     write_ndjson,
 )
 from tail_cw.config import CacheConfig, TailCWConfig
@@ -52,6 +55,24 @@ class _RecordingTui:
 
     def __call__(self, config, parquet_path, request) -> None:
         self.calls.append((config, parquet_path, request))
+
+
+class _RecordingTailTui:
+    def __init__(self) -> None:
+        self.calls: list[tuple[TailCWConfig, TailRequest]] = []
+
+    def __call__(self, config, request) -> None:
+        self.calls.append((config, request))
+
+
+class _FakeStreamer:
+    def __init__(self, events: list[LogEvent]) -> None:
+        self.events = events
+        self.calls: list[dict[str, object]] = []
+
+    def __call__(self, log_groups, **kwargs) -> Iterator[LogEvent]:
+        self.calls.append({'log_groups': log_groups, **kwargs})
+        return iter(self.events)
 
 
 def _make_config(tmp_path: Path) -> TailCWConfig:
@@ -310,6 +331,212 @@ def test_run_cli_json_mode_no_events(tmp_path, capsys):
     captured = capsys.readouterr()
     assert not captured.out
     assert 'No events found' in captured.err
+
+
+def test_build_parser_tail_defaults():
+    args = build_parser().parse_args(['tail', '/aws/lambda/fn'])
+
+    assert args.command == 'tail'
+    assert args.log_groups == ['/aws/lambda/fn']
+    assert args.backfill is None
+    assert args.filter_pattern is None
+    assert args.profile is None
+    assert args.region is None
+    assert args.config_path is None
+    assert args.json_output is False
+
+
+def test_build_parser_tail_multiple_groups_and_flags(tmp_path):
+    args = build_parser().parse_args(
+        [
+            'tail',
+            '/group/one',
+            '/group/two',
+            '--backfill',
+            '15m',
+            '--config',
+            str(tmp_path / 'config.toml'),
+            '--filter',
+            'ERROR',
+            '--json',
+            '--profile',
+            'dev',
+            '--region',
+            'us-west-2',
+        ]
+    )
+
+    assert args.log_groups == ['/group/one', '/group/two']
+    assert args.backfill == '15m'
+    assert args.filter_pattern == 'ERROR'
+    assert args.json_output is True
+    assert args.profile == 'dev'
+    assert args.region == 'us-west-2'
+
+
+def test_run_cli_tail_rejects_more_than_ten_groups(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+    groups = [f'/group/{index}' for index in range(11)]
+
+    result = run_cli(['tail', *groups, '--json', '--config', str(config_path)], _RecordingTui())
+
+    assert result == 2
+    assert 'At most 10 log groups' in capsys.readouterr().err
+
+
+def test_run_cli_tail_invalid_backfill(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+
+    result = run_cli(['tail', '/g', '--backfill', 'bogus', '--config', str(config_path)], _RecordingTui())
+
+    assert result == 2
+    assert 'Invalid time' in capsys.readouterr().err
+
+
+def test_run_cli_tail_json_streams_ndjson(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+    streamer = _FakeStreamer(_make_events(3))
+
+    result = run_cli(
+        ['tail', '/aws/test/group', '--json', '--filter', 'ERROR', '--config', str(config_path)],
+        _RecordingTui(),
+        stream_events=streamer,
+    )
+
+    assert result == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert len(lines) == 3
+    records = [json.loads(line) for line in lines]
+    assert {record['event_id'] for record in records} == {'event-0000', 'event-0001', 'event-0002'}
+    call = streamer.calls[0]
+    assert call['log_groups'] == ('/aws/test/group',)
+    assert call['filter_pattern'] == 'ERROR'
+
+
+def test_run_cli_tail_json_backfill_before_live(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+    backfill_events = _make_events(2)
+    live_events = [
+        LogEvent(
+            log_group='/aws/test/group',
+            log_stream='stream-live',
+            timestamp=NOW,
+            message='live',
+            event_id='live-0001',
+            ingestion_time=None,
+        ),
+    ]
+    fetcher = _FakeFetcher(backfill_events)
+    streamer = _FakeStreamer(live_events)
+
+    result = run_cli(
+        ['tail', '/aws/test/group', '--json', '--backfill', '15m', '--config', str(config_path)],
+        _RecordingTui(),
+        fetch_events=fetcher,
+        stream_events=streamer,
+    )
+
+    assert result == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    records = [json.loads(line) for line in lines]
+    assert [record['event_id'] for record in records] == ['event-0000', 'event-0001', 'live-0001']
+    fetch_call = fetcher.calls[0]
+    assert fetch_call['log_group'] == '/aws/test/group'
+    start_time, end_time = fetch_call['start_time'], fetch_call['end_time']
+    assert isinstance(start_time, datetime)
+    assert isinstance(end_time, datetime)
+    assert end_time - start_time == timedelta(minutes=15)
+
+
+def test_run_cli_tail_json_keyboard_interrupt_exits_cleanly(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+
+    def interrupted_stream(log_groups, **kwargs) -> Iterator[LogEvent]:
+        yield from _make_events(1)
+        raise KeyboardInterrupt
+
+    result = run_cli(
+        ['tail', '/aws/test/group', '--json', '--config', str(config_path)],
+        _RecordingTui(),
+        stream_events=interrupted_stream,
+    )
+
+    assert result == 0
+    assert len(capsys.readouterr().out.strip().splitlines()) == 1
+
+
+def test_run_cli_tail_tui_mode(tmp_path):
+    config_path = _write_config_file(tmp_path)
+    tail_tui = _RecordingTailTui()
+
+    result = run_cli(
+        ['tail', '/group/one', '/group/two', '--filter', 'ERROR', '--profile', 'dev', '--config', str(config_path)],
+        _RecordingTui(),
+        run_tail_tui=tail_tui,
+    )
+
+    assert result == 0
+    assert len(tail_tui.calls) == 1
+    _config, request = tail_tui.calls[0]
+    assert request.log_groups == ('/group/one', '/group/two')
+    assert request.filter_pattern == 'ERROR'
+    assert request.profile == 'dev'
+    assert request.backfill_start is None
+
+
+def test_run_cli_tail_tui_mode_requires_runner(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+
+    result = run_cli(['tail', '/g', '--config', str(config_path)], _RecordingTui())
+
+    assert result == 1
+    assert 'unavailable' in capsys.readouterr().err
+
+
+def test_iter_tail_events_without_backfill_skips_fetch():
+    fetcher = _FakeFetcher(_make_events(2))
+    streamer = _FakeStreamer(_make_events(1))
+    request = TailRequest(log_groups=('/aws/test/group',))
+
+    events = list(iter_tail_events(request, now=NOW, fetch_events=fetcher, stream_events=streamer))
+
+    assert len(events) == 1
+    assert fetcher.calls == []
+
+
+def test_iter_tail_events_backfills_each_group():
+    fetcher = _FakeFetcher(_make_events(1))
+    streamer = _FakeStreamer([])
+    request = TailRequest(
+        log_groups=('/group/one', '/group/two'),
+        backfill_start=NOW - timedelta(minutes=5),
+        filter_pattern='ERROR',
+    )
+
+    events = list(iter_tail_events(request, now=NOW, fetch_events=fetcher, stream_events=streamer))
+
+    assert len(events) == 2
+    assert [call['log_group'] for call in fetcher.calls] == ['/group/one', '/group/two']
+    assert all(call['filter_pattern'] == 'ERROR' for call in fetcher.calls)
+
+
+def test_stream_ndjson_flushes_per_line():
+    class _FlushCountingStream(io.StringIO):
+        def __init__(self) -> None:
+            super().__init__()
+            self.flush_count = 0
+
+        def flush(self) -> None:
+            self.flush_count += 1
+            super().flush()
+
+    stream = _FlushCountingStream()
+
+    count = stream_ndjson(_make_events(3), stream)
+
+    assert count == 3
+    assert stream.flush_count == 3
+    assert len(stream.getvalue().strip().splitlines()) == 3
 
 
 def test_run_cli_tui_mode(tmp_path):

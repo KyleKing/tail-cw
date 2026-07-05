@@ -7,5 +7,6 @@ IAM roles).
 """
 
 from tail_cw.aws.client import LogEvent, fetch_log_events
+from tail_cw.aws.live_tail import LiveTailSessionError, stream_live_tail
 
-__all__ = ['LogEvent', 'fetch_log_events']
+__all__ = ['LiveTailSessionError', 'LogEvent', 'fetch_log_events', 'stream_live_tail']

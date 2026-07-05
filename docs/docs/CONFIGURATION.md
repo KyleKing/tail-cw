@@ -45,6 +45,7 @@ infer_schema_length = 200
 chunk_threshold = 4000
 chunk_size = 500
 initial_load_limit = 1500
+live_buffer_limit = 10000
 search_limit = 20000
 trace_limit = 150
 
@@ -65,6 +66,7 @@ The helper performs an atomic write and sets restrictive permissions on POSIX sy
 - **Compression level**: higher ZSTD levels produce smaller files but increase CPU usage. Level 3 is a balanced default; try values between 1 and 6 when iterating.
 - **Schema inference length**: increase when NDJSON payloads contain highly variable structures so late fields are discovered during conversion.
 - **TUI chunk threshold / size**: lower thresholds trigger incremental loading sooner, which can help when working with deep scrollback buffers.
+- **Live buffer limit**: bounds memory during `tail-cw tail` sessions; older events are evicted from the in-memory ring buffer once the limit is reached. Increase it for longer in-session scrollback, decrease it on memory constrained machines.
 - **Search limit**: limit the number of rows collected from Parquet queries to keep the interface responsive when exploring large datasets.
 
 ## Troubleshooting

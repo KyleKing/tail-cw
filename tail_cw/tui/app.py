@@ -11,7 +11,8 @@ formatting logic extracted to separate modules (log_viewer.py).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections import deque
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from functools import partial
@@ -34,6 +35,10 @@ from tail_cw.query.trace import extract_trace_id_from_event, query_traces_from_p
 from tail_cw.tui.log_viewer import batch_format_log_events, get_column_definitions
 from tail_cw.tui.record_detail import RecordDetailScreen
 from tail_cw.tui.trace_viewer import TraceViewerScreen
+
+LiveStreamFactory = Callable[[], Iterator[LogEvent]]
+
+_LIVE_FLUSH_INTERVAL_SECONDS = 0.25
 
 
 @dataclass(slots=True, init=False)
@@ -131,6 +136,7 @@ class LogTailApp(App[None]):
         Binding('/', 'focus_search', 'Search', show=True),
         Binding('enter', 'show_detail', 'Detail', show=True),
         Binding('r', 'refresh', 'Refresh', show=True),
+        Binding('space', 'toggle_live_pause', 'Pause/Resume', show=False),
         Binding('t', 'toggle_trace_view', 'Trace View', show=True),
         Binding('shift+t', 'show_trace_for_selected', 'Show Trace', show=True),
         Binding('?', 'help', 'Help', show=False),
@@ -168,6 +174,13 @@ class LogTailApp(App[None]):
         self._refetch: Callable[[FetchRequest], Path | None] | None = None
         trace_fields = trace_id_fields if trace_id_fields is not None else list(self._config.trace.trace_id_fields)
         self._trace_id_fields: list[str] = trace_fields
+        self._live_stream_factory: LiveStreamFactory | None = None
+        self._live_buffer: deque[LogEvent] = deque(maxlen=self._config.tui.live_buffer_limit)
+        self._pending_live_events: deque[LogEvent] = deque()
+        self._live_active = False
+        self._live_paused = False
+        self._live_sampled = False
+        self._live_event_count = 0
 
     def compose(self) -> ComposeResult:  # noqa: PLR6301
         """Build the UI hierarchy.
@@ -208,7 +221,7 @@ class LogTailApp(App[None]):
         self._all_events = self._log_events.copy() if self._log_events else []
 
         # Hide search input if no data source
-        if self._parquet_path is None and not self._all_events:
+        if self._parquet_path is None and not self._all_events and self._live_stream_factory is None:
             self._search_input.display = False
 
         if self._log_events:
@@ -216,8 +229,11 @@ class LogTailApp(App[None]):
             self._update_status(f'Loaded {len(self._log_events)} events')
         elif self._parquet_path is not None:
             self.set_parquet_source(self._parquet_path)
-        else:
+        elif self._live_stream_factory is None:
             self._update_status('No logs loaded')
+
+        if self._live_stream_factory is not None:
+            self._begin_live_tail()
 
         if self._table is not None:
             self._table.focus()
@@ -431,6 +447,112 @@ class LogTailApp(App[None]):
 
         self._fetch_request = request
         self.call_from_thread(self.set_parquet_source, parquet_path)
+
+    def start_live_tail(self, stream_factory: LiveStreamFactory) -> None:
+        """Enable live streaming mode fed by the given stream factory.
+
+        The factory is invoked once, in a background thread, after the app is
+        mounted. Events are coalesced into a bounded ring buffer and rendered
+        in batches; call this before ``run()`` or while the app is running.
+        """
+        self._live_stream_factory = stream_factory
+        self._live_buffer = deque(maxlen=self._config.tui.live_buffer_limit)
+        if self._table is not None:
+            self._begin_live_tail()
+
+    def _begin_live_tail(self) -> None:
+        if self._live_stream_factory is None or self._live_active:
+            return
+        self._live_active = True
+        self._update_live_status()
+        self.set_interval(_LIVE_FLUSH_INTERVAL_SECONDS, self._flush_live_events)
+        self.run_worker(
+            self._consume_live_stream,
+            name='live_tail',
+            group='live_tail',
+            exclusive=True,
+            thread=True,
+        )
+
+    def _consume_live_stream(self) -> None:
+        if self._live_stream_factory is None:
+            return
+        worker = get_current_worker()
+        try:
+            for event in self._live_stream_factory():
+                if worker.is_cancelled:
+                    return
+                self._pending_live_events.append(event)
+        except Exception as err:
+            self.call_from_thread(self._finish_live_tail, f'Live tail stopped: {err}')
+            return
+        self.call_from_thread(self._finish_live_tail, 'Live tail stream ended')
+
+    def _finish_live_tail(self, message: str) -> None:
+        self._flush_live_events()
+        self._live_active = False
+        self.notify(message, severity='warning')
+        self._update_live_status()
+
+    def note_live_sampled(self, sampled: bool) -> None:  # noqa: FBT001
+        """Record whether the server is sampling the live stream (thread-safe)."""
+        self._live_sampled = sampled
+
+    def _flush_live_events(self) -> None:
+        drained: list[LogEvent] = []
+        while self._pending_live_events:
+            drained.append(self._pending_live_events.popleft())
+        if drained:
+            self._live_event_count += len(drained)
+            self._live_buffer.extend(drained)
+            self._all_events = list(self._live_buffer)
+            if not self._live_paused and not self._live_search_active():
+                self._render_live_batch(drained)
+        if drained or self._live_active:
+            self._update_live_status()
+
+    def _render_live_batch(self, drained: list[LogEvent]) -> None:
+        if self._table is None:
+            return
+        limit = self._live_buffer.maxlen or len(self._all_events)
+        rebuild_slack = max(100, limit // 10)
+        if self._table.row_count + len(drained) > limit + rebuild_slack:
+            self._rebuild_live_table()
+        else:
+            self._log_events.extend(drained)
+            self._table.add_rows(batch_format_log_events(drained, truncate_message=100))
+
+    def _rebuild_live_table(self) -> None:
+        if self._table is None:
+            return
+        self._log_events = list(self._live_buffer)
+        self._table.clear(columns=False)
+        self._table.add_rows(batch_format_log_events(self._log_events, truncate_message=100))
+
+    def _live_search_active(self) -> bool:
+        return self._search_input is not None and bool(self._search_input.value.strip())
+
+    def action_toggle_live_pause(self) -> None:
+        """Pause or resume rendering of new live events (the buffer keeps filling)."""
+        if self._live_stream_factory is None:
+            return
+        self._live_paused = not self._live_paused
+        if not self._live_paused and not self._live_search_active():
+            self._rebuild_live_table()
+        self._update_live_status()
+
+    def _update_live_status(self) -> None:
+        if self._live_paused:
+            state = 'Paused'
+        elif self._live_active:
+            state = 'Live'
+        else:
+            state = 'Stopped'
+        sampled = ' (sampled)' if self._live_sampled else ''
+        limit = self._live_buffer.maxlen or 0
+        self._update_status(
+            f'{state}{sampled} · {self._live_event_count} events · buffer {len(self._live_buffer)}/{limit}',
+        )
 
     def action_toggle_trace_view(self) -> None:
         """Toggle between log table and trace view.
