@@ -5,8 +5,7 @@
 ```sh
 git clone https://github.com/kyleking/tail-cw.git
 cd tail-cw
-uv sync
-uv run calcipy-pack pack.install-extras
+uv sync --all-extras
 
 # See the available tasks
 uv run calcipy
@@ -19,3 +18,56 @@ uv run calcipy
 # Make code changes and run specific tasks as needed:
 ./run lint.fix test
 ```
+
+### Maintenance
+
+Dependency upgrades can be accomplished with:
+
+```sh
+uv lock --upgrade
+uv sync --all-extras
+```
+
+## Publishing
+
+Publishing is automated via GitHub Actions using PyPI Trusted Publishing. Tag creation triggers automated publishing.
+
+```sh
+./run release              # Bumps version, creates tag, pushes → triggers publish
+./run release --suffix=rc  # For pre-releases
+```
+
+### Initial Setup
+
+One-time setup to enable PyPI Trusted Publishing:
+
+**Configure GitHub Environments**
+
+Repository Settings → Environments:
+- Create `testpypi` environment (no protection rules)
+- Create `pypi` environment with "Required reviewers" enabled
+
+**Register Trusted Publishers**
+
+PyPI: https://pypi.org/manage/project/tail_cw/settings/publishing/
+- Owner: `kyleking`
+- Repository: `tail_cw`
+- Workflow: `publish.yml`
+- Environment: `pypi`
+    - Or environment `testpypi` (for [TestPyPI](https://test.pypi.org/manage/account/publishing))
+
+### Manual Publishing
+
+For emergency manual publish:
+
+```sh
+export UV_PUBLISH_TOKEN=pypi-...
+uv build
+uv publish
+```
+
+## Current Status
+
+<!-- {cts} COVERAGE -->
+
+<!-- {cte} -->
