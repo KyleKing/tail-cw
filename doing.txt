@@ -1,0 +1,3 @@
+Need to test against AWS for real!
+
+Then build out the streaming path further, followed by M2 ((log group discovery: tail-cw groups, fuzzy find, last-write/size/retention metadata, sample-a-group schema inference) - now reshaped to highlight flexible log group matching

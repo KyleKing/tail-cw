@@ -1,6 +1,6 @@
 # Roadmap: make tail-cw a daily-driver CloudWatch tool
 
-Written 2026-07-05, based on a code capability review and a survey of the CloudWatch tooling landscape.
+Written 2026-07-05, based on a code capability review and a survey of the CloudWatch tooling landscape. Updated 2026-07-06 to prioritize navigation-first UX (M2) after M0/M1 shipped.
 
 ## Problem
 
@@ -54,13 +54,34 @@ Goal: `tail-cw tail <group...>` streams via `StartLiveTail`; the existing filter
 - one filter expression evaluated three ways: pushed down to Live Tail's server filter where expressible, `FilterLogEvents` pattern for backfill, query engine for cached data
 - `--json` streaming NDJSON mode for agents and piping
 
-### M2 (Avenue A): discovery and orientation
+### M2 (Avenue A): navigation-first discovery
 
-Goal: answer "what log groups exist, which are active, what shape are the logs" without the console.
+Goal: the user should never need to know an exact log group name. Every entry point either resolves a loose pattern or drops into an interactive browser.
 
-- `tail-cw groups` (and TUI opening screen): `DescribeLogGroups` with fuzzy find, last-event time, stored bytes, retention, log class
-- "sample this group" action: pull N recent events, show inferred JSON field schema from the existing JSONL detection
-- group presets/favorites in config
+How comparable tools handle this, and what we take from each:
+
+| Tool                 | Group selection UX                                                         | Takeaway                                                     |
+| -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `aws logs tail`      | Exact name required; community wraps it in `describe-log-groups \| fzf`    | The gap to close; don't require exact names                  |
+| utern / cw / awslogs | Group argument is a regex/prefix resolved against all groups               | Accept patterns everywhere a group is accepted               |
+| CloudWatch console   | Multi-select up to 10, surfaces recently accessed groups first             | Keep local recents and sort them to the top                  |
+| k9s                  | Never type a resource name: `/` fuzzy-filters a live list, Enter drills in | The browser is the home screen, not a subcommand you look up |
+| stern (k8s)          | Pod query is a regex; new matches join the tail automatically              | Pattern selection composes with live tail                    |
+
+Deliverables, in order:
+
+1. Group resolution layer (pure function, CLI-first)
+    - anywhere a `<group>` is accepted (`tail`, `fetch`), resolve in stages: exact match, then server-side `logGroupNamePrefix`, then server-side `logGroupNamePattern` (substring, verified in botocore), then client-side fnmatch for `*` globs
+    - unambiguous single match proceeds silently; multiple matches for `tail` expand up to the 10-group Live Tail cap; multiple matches for `fetch` or >10 for `tail` open the picker pre-filtered (TTY) or list candidates to stderr and exit 1 (non-TTY/`--json`)
+1. `tail-cw groups [pattern]` subcommand
+    - `DescribeLogGroups` metadata table: name, last-event time, stored bytes, retention, log class; `--json` NDJSON for agents and for piping into fzf
+    - sorted by last-event time descending by default so active groups surface first
+1. Recents and presets
+    - record each resolved group selection in local state (XDG data dir, not config); picker and `groups` sort recents first, mirroring the console's recently-accessed behavior
+    - named presets in config (`[presets] api = ["/aws/lambda/api-a", "/ecs/api-b"]`), usable as `tail-cw tail @api`
+1. Interactive group browser as the TUI home screen
+    - bare `tail-cw` (TTY) opens the browser instead of exiting 2: fuzzy find over the metadata table, space multi-selects up to 10, Enter starts live tail, `f` fetches a recent window (supersedes the M0 bare-command behavior; non-TTY keeps help + exit 2)
+    - preview pane for the highlighted group: last N events via a small `FilterLogEvents` call plus inferred JSON field schema from the existing JSONL detection, so groups are identifiable by content, not just name
 
 ### M3 (Avenue C): investigation tools
 
@@ -72,3 +93,5 @@ Goal: answer "what log groups exist, which are active, what shape are the logs" 
 ## Sequencing rationale
 
 M1 before M2 because dev-loop tailing is the daily driver. M2 before M3 because pivot and pattern tools need group discovery to be usable. Each milestone ships CLI + tests green (ruff, mypy, pyright, pytest) before the next starts.
+
+M0 and M1 shipped 2026-07-05. M2 was then elevated from "a groups listing" to navigation-first UX: requiring exact group names is the single largest friction left (it is also the gap every fzf-wrapper workaround exists to paper over), and pattern resolution plus the browser make `tail` and `fetch` usable from a cold start. `DescribeLogGroups` is free, so none of this adds cost pressure.
