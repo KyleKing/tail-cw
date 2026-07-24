@@ -1,6 +1,8 @@
 # ADR 0005: Dashboards, metrics, and terminal charts
 
-Date: 2026-07-24 Status: Accepted
+Date: 2026-07-24 Status: Accepted (rendering superseded by ADR 0006)
+
+The import, translation, and cost decisions below still hold. The rendering choice (matplotlib PNGs over the Kitty graphics protocol) did not survive contact with a real terminal and was replaced by native plotext rendering; see [ADR 0006](./0006-dashboard-rendering-and-interaction.md).
 
 ## Problem
 
