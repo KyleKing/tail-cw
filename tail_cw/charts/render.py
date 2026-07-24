@@ -63,6 +63,7 @@ def render_timeseries_png(
     height_px: int,
     kind: ChartKind = ChartKind.LINE,
     dark: bool = True,
+    colors: list[str] | None = None,
 ) -> bytes:
     """Render metric series to PNG bytes at an exact pixel size.
 
@@ -76,6 +77,7 @@ def render_timeseries_png(
         height_px: Target height in pixels.
         kind: Line or bar rendering.
         dark: Use the dark palette when True, else the light palette.
+        colors: Optional per-series colors; falls back to the categorical palette.
 
     Returns:
         PNG image bytes.
@@ -89,7 +91,7 @@ def render_timeseries_png(
     try:
         ax = fig.add_subplot(111)
         ax.set_facecolor(bg)
-        _draw_series(ax, series, kind=kind)
+        _draw_series(ax, series, kind=kind, colors=colors)
         _style_axes(ax, title=title, fg=fg, grid=grid, series_count=len(series), font_px=font_px)
         fig.tight_layout(pad=0.5)
         return _figure_to_png(fig)
@@ -97,9 +99,10 @@ def render_timeseries_png(
         plt.close(fig)
 
 
-def _draw_series(ax: Axes, series: list[MetricSeries], *, kind: ChartKind) -> None:
+def _draw_series(ax: Axes, series: list[MetricSeries], *, kind: ChartKind, colors: list[str] | None = None) -> None:
+    palette = colors or list(_SERIES_COLORS)
     for index, item in enumerate(series):
-        color = _SERIES_COLORS[index % len(_SERIES_COLORS)]
+        color = palette[index % len(palette)]
         if not item.timestamps:
             continue
         if kind == ChartKind.BAR:

@@ -1,10 +1,12 @@
 """Textual app that renders a CloudWatch dashboard in the terminal.
 
-Lays the dashboard's widgets into rows, fetches each metric widget's series via
-an injected callable, and renders them as inline charts. The focused panel takes
-keyboard inputs to change the shared time window, the statistic, and the period,
-re-rendering only what changed. Diving from a chart or log widget opens the
-existing log table filtered to that widget's window and log group.
+The dashboard never scrolls. Every widget shows as a compact, color-coded cell
+in a fit-to-screen grid (cheap Rich sparklines, no image protocol, so nothing
+ghosts). Focusing a metric promotes it to a full matplotlib chart on a stage
+above the grid; a second focus gives a two-up; reset returns to the even grid.
+Only the one or two focused charts use the terminal graphics protocol, which is
+what keeps rendering clean. Diving from a chart or log widget opens the existing
+log table for that window and log group.
 
 The app depends only on injected callables for AWS access so it can be driven
 headless in tests with no network.
@@ -12,18 +14,18 @@ headless in tests with no network.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from datetime import UTC, datetime
-from itertools import groupby
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Footer, Header, Label, Markdown, Static
+from textual.containers import Container, Horizontal
+from textual.widgets import Footer, Header, Label, Static
 
 from tail_cw.aws.dashboards import (
     AlarmWidget,
@@ -35,7 +37,9 @@ from tail_cw.aws.dashboards import (
     Widget,
 )
 from tail_cw.aws.metrics import MetricSeries, build_metric_data_queries
+from tail_cw.charts.palette import role_color, series_color
 from tail_cw.charts.render import ChartKind
+from tail_cw.charts.sparkline import ReduceMode, build_compact
 from tail_cw.cli import DashboardRequest
 from tail_cw.config import TailCWConfig
 from tail_cw.tui.chart_widget import ChartWidget
@@ -45,20 +49,10 @@ FetchMetrics = Callable[[Sequence[dict[str, object]], datetime, datetime], list[
 ResolveLogs = Callable[[str, datetime, datetime], Path | None]
 
 _DEFAULT_PERIOD = 300
-_ROW_UNIT_CELLS = 3
-_MIN_ROW_CELLS = 8
+_MAX_FOCUS = 2
 _STAT_CYCLE = ('Average', 'Sum', 'Minimum', 'Maximum', 'p95')
+_PERIOD_CYCLE = (60, 300, 900, 3600, 21600)
 _SOURCE_RE = re.compile(r"SOURCE\s+'([^']+)'")
-
-
-def _widget_rows(widgets: Sequence[Widget]) -> list[list[Widget]]:
-    """Group widgets into visual rows by their y coordinate, ordered left to right."""
-    ordered = sorted(widgets, key=lambda w: (w.layout.y, w.layout.x))
-    return [sorted(group, key=lambda w: w.layout.x) for _, group in groupby(ordered, key=lambda w: w.layout.y)]
-
-
-def _row_height_cells(row: Sequence[Widget]) -> int:
-    return max(_MIN_ROW_CELLS, max(widget.layout.height for widget in row) * _ROW_UNIT_CELLS)
 
 
 def resolve_log_group_for_widget(widget: Widget) -> str | None:
@@ -77,34 +71,95 @@ def resolve_log_group_for_widget(widget: Widget) -> str | None:
             return None
 
 
+def _grid_dimensions(count: int) -> tuple[int, int]:
+    if count <= 1:
+        return 1, 1
+    columns = 3 if count <= 9 else 4  # noqa: PLR2004
+    return columns, math.ceil(count / columns)
+
+
+class CompactPanel(Static):
+    """A focusable overview cell rendering a widget compactly (no image)."""
+
+    DEFAULT_CSS = """
+    CompactPanel {
+        border: round $panel-lighten-1;
+        padding: 0 1;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        scrollbar-size: 0 0;
+    }
+    CompactPanel:focus {
+        border: round $accent;
+    }
+    """
+
+    def __init__(self, index: int, widget: Widget) -> None:
+        """Create the cell for the widget at the given dashboard index."""
+        super().__init__(id=f'cell-{index}')
+        self.index = index
+        self.widget = widget
+        self.can_focus = True
+        self._series: list[MetricSeries] = []
+        self._reduce_mode = ReduceMode.BAND
+        self._percentile = 50.0
+
+    def set_series(self, series: list[MetricSeries]) -> None:
+        """Store the metric series and render the compact sparkline."""
+        self._series = series
+        self._render_compact()
+
+    def render_static(self, renderable: Any) -> None:
+        """Render fixed content (used for log, text, and alarm cells)."""
+        self.update(renderable)
+
+    def on_resize(self) -> None:
+        """Re-render the compact sparkline at the new width."""
+        if isinstance(self.widget, MetricWidget) and self._series:
+            self._render_compact()
+
+    def _render_compact(self) -> None:
+        if not isinstance(self.widget, MetricWidget):
+            return
+        width = self.content_size.width or 24
+        self.update(
+            build_compact(
+                self.widget.title,
+                self.widget.view,
+                self._series,
+                width=width,
+                reduce_mode=self._reduce_mode,
+                percentile=self._percentile,
+            ),
+        )
+
+
 @dataclass
-class _MetricPanel:
-    widget: MetricWidget
-    chart: ChartWidget
+class _Panel:
+    widget: Widget
+    cell: CompactPanel
+    series: list[MetricSeries] = field(default_factory=list)
     stat_override: str | None = None
     period_override: int | None = None
 
 
 class DashboardApp(App[None]):
-    """Renders one dashboard and drives metric exploration and log dives."""
+    """Renders one dashboard as a no-scroll grid with a focus-expand stage."""
 
     CSS = """
-    #dashboard_scroll {
+    #stage {
+        height: 0;
+        display: none;
+    }
+    #stage.active {
+        height: 60%;
+        display: block;
+    }
+    #grid {
+        layout: grid;
+        grid-gutter: 1;
         height: 1fr;
-    }
-    .dash_row {
-        width: 100%;
-    }
-    .panel {
-        border: round $panel-lighten-2;
-        padding: 0 1;
-    }
-    .panel:focus-within, .panel:focus {
-        border: round $accent;
-    }
-    .panel_text {
-        border: round $panel-lighten-2;
-        padding: 0 1;
     }
     #dash_status {
         dock: bottom;
@@ -116,18 +171,17 @@ class DashboardApp(App[None]):
     """
 
     BINDINGS: ClassVar[Sequence[Binding]] = [  # type: ignore[assignment]
-        Binding('q', 'quit', 'Quit', show=True),
-        Binding('j', 'focus_next', 'Next', show=True),
-        Binding('k', 'focus_prev', 'Prev', show=True),
-        Binding('r', 'refresh', 'Refresh', show=True),
-        Binding('s', 'cycle_stat', 'Stat', show=True),
-        Binding('p', 'cycle_period', 'Period', show=True),
-        Binding('h', 'pan_earlier', 'Pan <', show=True),
-        Binding('l', 'pan_later', 'Pan >', show=True),
-        Binding('minus', 'zoom_out', 'Zoom out', show=False, key_display='-'),
-        Binding('plus', 'zoom_in', 'Zoom in', show=False, key_display='+'),
-        Binding('d', 'dive', 'Dive to logs', show=True),
-        Binding('?', 'help', 'Help', show=False),
+        Binding('q', 'quit', 'Quit'),
+        Binding('j', 'focus_next', 'Next'),
+        Binding('k', 'focus_prev', 'Prev'),
+        Binding('enter', 'promote', 'Focus'),
+        Binding('space', 'add_focus', '+Focus'),
+        Binding('escape', 'reset_focus', 'Reset'),
+        Binding('s', 'cycle_stat', 'Stat'),
+        Binding('p', 'cycle_period', 'Period'),
+        Binding('h', 'pan_earlier', 'Pan <'),
+        Binding('l', 'pan_later', 'Pan >'),
+        Binding('d', 'dive', 'Dive'),
     ]
 
     def __init__(
@@ -148,84 +202,76 @@ class DashboardApp(App[None]):
         self._resolve_logs = resolve_logs
         self._start = request.start_time
         self._end = request.end_time
-        self._panels: list[_MetricPanel] = []
-        self._panel_by_widget_id: dict[int, _MetricPanel] = {}
-        self._widget_by_focusable: dict[int, Widget] = {}
+        self._panels: list[_Panel] = []
+        self._panel_by_cell_id: dict[int, _Panel] = {}
+        self._focused: list[int] = []
 
     def compose(self) -> ComposeResult:
-        """Lay the dashboard's widgets into rows of panels.
+        """Build the header, the focus stage, the compact grid, and the status line.
 
         Yields:
-            The header, one row container per widget row, a status label, and the footer.
+            The header, the stage container, the grid container, a status label, and the footer.
         """
         yield Header(show_clock=True)
-        with VerticalScroll(id='dashboard_scroll'):
-            for row in _widget_rows(self._dashboard.widgets):
-                height = _row_height_cells(row)
-                with Horizontal(classes='dash_row') as container:
-                    container.styles.height = height
-                    for widget in row:
-                        yield from self._compose_panel(widget)
+        yield Horizontal(id='stage')
+        with Container(id='grid'):
+            for index, widget in enumerate(self._dashboard.widgets):
+                cell = CompactPanel(index, widget)
+                panel = _Panel(widget=widget, cell=cell)
+                self._panels.append(panel)
+                self._panel_by_cell_id[id(cell)] = panel
+                yield cell
         yield Label('', id='dash_status')
         yield Footer()
 
-    def _compose_panel(self, widget: Widget) -> ComposeResult:
-        span = max(1, widget.layout.width)
-        match widget:
-            case MetricWidget():
-                kind = ChartKind.BAR if widget.view == 'bar' else ChartKind.LINE
-                chart = ChartWidget(title=widget.title or '(untitled)', kind=kind)
-                chart.styles.width = f'{span}fr'
-                chart.add_class('panel')
-                chart.can_focus = True
-                panel = _MetricPanel(widget=widget, chart=chart)
-                self._panels.append(panel)
-                self._panel_by_widget_id[id(chart)] = panel
-                self._widget_by_focusable[id(chart)] = widget
-                yield chart
-            case LogWidget():
-                body = Static(f'[b]{widget.title or "Logs"}[/b]\n\n{widget.query}', classes='panel_text')
-                body.styles.width = f'{span}fr'
-                body.can_focus = True
-                self._widget_by_focusable[id(body)] = widget
-                yield body
-            case TextWidget():
-                markdown = Markdown(widget.markdown, classes='panel_text')
-                markdown.styles.width = f'{span}fr'
-                yield markdown
-            case AlarmWidget():
-                names = '\n'.join(alarm.rsplit(':', 1)[-1] for alarm in widget.alarms) or '(no alarms)'
-                alarm_body = Static(f'[b]{widget.title or "Alarms"}[/b]\n\n{names}', classes='panel_text')
-                alarm_body.styles.width = f'{span}fr'
-                yield alarm_body
-            case UnknownWidget():
-                unknown_body = Static(f'[dim]Unsupported widget: {widget.widget_type}[/dim]', classes='panel_text')
-                unknown_body.styles.width = f'{span}fr'
-                yield unknown_body
-
     def on_mount(self) -> None:
-        """Fetch every metric panel and focus the first chart."""
+        """Size the grid to fit, render fixed cells, fetch metrics, focus the first cell."""
+        columns, rows = _grid_dimensions(len(self._panels))
+        grid = self.query_one('#grid')
+        grid.styles.grid_size_columns = columns
+        grid.styles.grid_size_rows = rows
+        for panel in self._panels:
+            self._render_fixed_cell(panel)
         self._update_status()
         self._load_all_metrics()
         if self._panels:
-            self._panels[0].chart.focus()
+            self._panels[0].cell.focus()
+
+    @staticmethod
+    def _render_fixed_cell(panel: _Panel) -> None:
+        widget = panel.widget
+        match widget:
+            case LogWidget():
+                accent = role_color(widget.title or 'logs')
+                panel.cell.render_static(f'[bold {accent}]{widget.title or "Logs"}[/]\n[dim]{widget.query[:120]}[/]')
+            case TextWidget():
+                panel.cell.render_static(widget.markdown)
+            case AlarmWidget():
+                names = '\n'.join(alarm.rsplit(':', 1)[-1] for alarm in widget.alarms) or '(no alarms)'
+                panel.cell.render_static(f'[bold]{widget.title or "Alarms"}[/]\n{names}')
+            case UnknownWidget():
+                panel.cell.render_static(f'[dim]Unsupported widget: {widget.widget_type}[/]')
+            case _:
+                pass
 
     def _load_all_metrics(self) -> None:
         for panel in self._panels:
-            self._load_panel(panel)
+            if isinstance(panel.widget, MetricWidget):
+                self._load_panel(panel)
 
-    def _load_panel(self, panel: _MetricPanel) -> None:
-        panel.chart.set_message('Loading...')
+    def _load_panel(self, panel: _Panel) -> None:
         self.run_worker(
             lambda: self._fetch_panel(panel),
             name='metric_fetch',
-            group=f'metric_fetch_{id(panel.chart)}',
+            group=f'metric_fetch_{panel.cell.index}',
             exclusive=True,
             thread=True,
         )
 
-    def _fetch_panel(self, panel: _MetricPanel) -> None:
+    def _fetch_panel(self, panel: _Panel) -> None:
         widget = panel.widget
+        if not isinstance(widget, MetricWidget):
+            return
         queries = build_metric_data_queries(
             widget.metrics,
             widget_stat=panel.stat_override or widget.stat,
@@ -233,43 +279,77 @@ class DashboardApp(App[None]):
             default_period=_DEFAULT_PERIOD,
         )
         if not queries:
-            self.call_from_thread(panel.chart.set_message, 'No metrics defined')
             return
         try:
             series = self._fetch_metrics(queries, self._start, self._end)
         except Exception as err:
-            self.call_from_thread(panel.chart.set_message, f'Error: {err}')
+            self.call_from_thread(panel.cell.render_static, f'[red]error:[/] {err}')
             return
-        if not any(item.values for item in series):
-            self.call_from_thread(panel.chart.set_message, 'No data in window')
-            return
-        self.call_from_thread(panel.chart.set_series, [item for item in series if item.values])
+        visible = [item for item in series if item.values]
+        panel.series = visible
+        self.call_from_thread(panel.cell.set_series, visible)
+        if panel.cell.index in self._focused:
+            self.call_from_thread(self._rebuild_stage)
 
-    def _focused_metric_panel(self) -> _MetricPanel | None:
-        focused = self.focused
-        return self._panel_by_widget_id.get(id(focused)) if focused is not None else None
+    def _focused_panel(self) -> _Panel | None:
+        return self._panel_by_cell_id.get(id(self.focused)) if self.focused is not None else None
 
     def action_focus_next(self) -> None:
-        """Move focus to the next panel."""
+        """Move focus to the next cell."""
         self.screen.focus_next()
 
     def action_focus_prev(self) -> None:
-        """Move focus to the previous panel."""
+        """Move focus to the previous cell."""
         self.screen.focus_previous()
 
-    def action_refresh(self) -> None:
-        """Re-fetch every panel with the window's end extended to now."""
-        span = self._end - self._start
-        self._end = datetime.now(tz=UTC)
-        self._start = self._end - span
+    def action_promote(self) -> None:
+        """Focus the current metric cell as the only chart on the stage."""
+        panel = self._focused_panel()
+        if panel is None or not isinstance(panel.widget, MetricWidget):
+            return
+        self._focused = [panel.cell.index]
+        self._rebuild_stage()
+
+    def action_add_focus(self) -> None:
+        """Add the current metric cell as a second chart on the stage."""
+        panel = self._focused_panel()
+        if panel is None or not isinstance(panel.widget, MetricWidget):
+            return
+        if panel.cell.index in self._focused:
+            return
+        self._focused.append(panel.cell.index)
+        self._focused = self._focused[-_MAX_FOCUS:]
+        self._rebuild_stage()
+
+    def action_reset_focus(self) -> None:
+        """Clear the stage and return to the even grid."""
+        self._focused = []
+        self._rebuild_stage()
+
+    def _rebuild_stage(self) -> None:
+        stage = self.query_one('#stage', Horizontal)
+        for child in list(stage.children):
+            child.remove()
+        if not self._focused:
+            stage.remove_class('active')
+            self._update_status()
+            return
+        for index in self._focused:
+            panel = self._panels[index]
+            if not isinstance(panel.widget, MetricWidget):
+                continue
+            kind = ChartKind.BAR if panel.widget.view == 'bar' else ChartKind.LINE
+            colors = [role_color(panel.widget.title)] if len(panel.series) == 1 else _series_colors(panel.series)
+            chart = ChartWidget(title=panel.widget.title or '(untitled)', kind=kind, colors=colors)
+            stage.mount(chart)
+            chart.set_series(panel.series)
+        stage.add_class('active')
         self._update_status()
-        self._load_all_metrics()
 
     def action_cycle_stat(self) -> None:
-        """Cycle the statistic on the focused chart and re-fetch it."""
-        panel = self._focused_metric_panel()
-        if panel is None:
-            self.notify('Focus a metric chart to change its statistic', severity='information')
+        """Cycle the statistic on the focused metric cell and re-fetch it."""
+        panel = self._focused_panel()
+        if panel is None or not isinstance(panel.widget, MetricWidget):
             return
         current = panel.stat_override or panel.widget.stat or _STAT_CYCLE[0]
         index = (_STAT_CYCLE.index(current) + 1) % len(_STAT_CYCLE) if current in _STAT_CYCLE else 0
@@ -278,15 +358,13 @@ class DashboardApp(App[None]):
         self._load_panel(panel)
 
     def action_cycle_period(self) -> None:
-        """Cycle the period on the focused chart and re-fetch it."""
-        panel = self._focused_metric_panel()
-        if panel is None:
-            self.notify('Focus a metric chart to change its period', severity='information')
+        """Cycle the period on the focused metric cell and re-fetch it."""
+        panel = self._focused_panel()
+        if panel is None or not isinstance(panel.widget, MetricWidget):
             return
-        periods = (60, 300, 900, 3600, 21600)
         current = panel.period_override or panel.widget.period or _DEFAULT_PERIOD
-        index = (periods.index(current) + 1) % len(periods) if current in periods else 1
-        panel.period_override = periods[index]
+        index = (_PERIOD_CYCLE.index(current) + 1) % len(_PERIOD_CYCLE) if current in _PERIOD_CYCLE else 1
+        panel.period_override = _PERIOD_CYCLE[index]
         self._update_status(f'{panel.widget.title}: period -> {panel.period_override}s')
         self._load_panel(panel)
 
@@ -294,15 +372,6 @@ class DashboardApp(App[None]):
         delta = (self._end - self._start) * factor
         self._start += delta
         self._end += delta
-        self._update_status()
-        self._load_all_metrics()
-
-    def _zoom_window(self, factor: float) -> None:
-        span = self._end - self._start
-        center = self._start + span / 2
-        half = span * factor / 2
-        self._start = center - half
-        self._end = center + half
         self._update_status()
         self._load_all_metrics()
 
@@ -314,21 +383,12 @@ class DashboardApp(App[None]):
         """Shift the window a quarter-span later."""
         self._shift_window(0.25)
 
-    def action_zoom_out(self) -> None:
-        """Double the window around its center."""
-        self._zoom_window(2.0)
-
-    def action_zoom_in(self) -> None:
-        """Halve the window around its center."""
-        self._zoom_window(0.5)
-
     def action_dive(self) -> None:
         """Open the log table for the focused widget's log group and window."""
-        widget = self._focused_widget()
-        if widget is None:
-            self.notify('Focus a chart or log widget to dive', severity='information')
+        panel = self._focused_panel()
+        if panel is None:
             return
-        log_group = resolve_log_group_for_widget(widget)
+        log_group = resolve_log_group_for_widget(panel.widget)
         if log_group is None:
             self.notify('No log source resolved for this widget', severity='warning')
             return
@@ -358,17 +418,12 @@ class DashboardApp(App[None]):
         title = f'{log_group} · {start:%H:%M}-{end:%H:%M}'
         self.call_from_thread(self.push_screen, LogResultsScreen(parquet_path, self._config, title=title))
 
-    def _focused_widget(self) -> Widget | None:
-        focused = self.focused
-        return self._widget_by_focusable.get(id(focused)) if focused is not None else None
-
-    def action_help(self) -> None:
-        """Show the keyboard shortcuts as a notification."""
-        lines = [f'{binding.key_display or binding.key}: {binding.description}' for binding in self.BINDINGS]
-        self.notify('\n'.join(lines), title='Dashboard shortcuts', timeout=10)
-
     def _update_status(self, message: str | None = None) -> None:
         window = f'{self._start:%Y-%m-%d %H:%M} -> {self._end:%H:%M} UTC'
-        label = self.query_one('#dash_status', Label)
-        base = f'{len(self._panels)} metric panels · window {window}'
-        label.update(f'{base} · {message}' if message else base)
+        focus = f' · {len(self._focused)} focused' if self._focused else ''
+        base = f'{len(self._panels)} panels · window {window}{focus}'
+        self.query_one('#dash_status', Label).update(f'{base} · {message}' if message else base)
+
+
+def _series_colors(series: list[MetricSeries]) -> list[str]:
+    return [series_color(index) for index in range(len(series))]

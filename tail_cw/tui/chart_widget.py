@@ -28,10 +28,14 @@ class ChartWidget(Widget):
     ChartWidget {
         width: 1fr;
         height: 1fr;
+        overflow: hidden;
+        scrollbar-size: 0 0;
     }
     ChartWidget > Image {
         width: 1fr;
         height: 1fr;
+        overflow: hidden;
+        scrollbar-size: 0 0;
     }
     ChartWidget > #chart_placeholder {
         width: 1fr;
@@ -47,12 +51,14 @@ class ChartWidget(Widget):
         title: str,
         kind: ChartKind = ChartKind.LINE,
         dark: bool = True,
+        colors: list[str] | None = None,
     ) -> None:
-        """Store the chart title, kind, and theme; series arrive via set_series."""
+        """Store the chart title, kind, theme, and series colors; series arrive via set_series."""
         super().__init__()
         self._title = title
         self._kind = kind
         self._dark = dark
+        self._colors = colors
         self._series: list[MetricSeries] = []
         self._image = Image()
         self._placeholder = Static('Loading...', id='chart_placeholder')
@@ -122,6 +128,7 @@ class ChartWidget(Widget):
             height_px=height_px,
             kind=self._kind,
             dark=self._dark,
+            colors=self._colors,
         )
         self.app.call_from_thread(self._apply_png, png)
 
