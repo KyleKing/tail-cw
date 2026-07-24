@@ -32,6 +32,7 @@ from tail_cw.aws.dashboards import (
 from tail_cw.aws.live_tail import MAX_LIVE_TAIL_LOG_GROUPS, stream_live_tail
 from tail_cw.cache.storage import LogCache, generate_cache_key, read_parquet_to_log_events
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
+from tail_cw.demo import demo_dashboard
 
 FetchEvents = Callable[..., Iterator[LogEvent]]
 StreamEvents = Callable[..., Iterator[LogEvent]]
@@ -114,6 +115,7 @@ class DashboardRequest:
     end_time: datetime
     profile: str | None = None
     region: str | None = None
+    demo: bool = False
 
 
 def _duration_to_timedelta(amount: int, unit: str) -> timedelta:
@@ -219,8 +221,14 @@ def build_parser() -> argparse.ArgumentParser:
         'dashboard',
         help='Open a CloudWatch dashboard in the TUI (or emit its structure as JSON).',
     )
-    dashboard.add_argument('name', nargs='?', default=None, help='Dashboard name (omit when using --file)')
+    dashboard.add_argument('name', nargs='?', default=None, help='Dashboard name (omit when using --file or --demo)')
     dashboard.add_argument('--config', dest='config_path', type=Path, default=None, help='Config file path override')
+    dashboard.add_argument(
+        '--demo',
+        dest='demo',
+        action='store_true',
+        help='Open a synthetic dashboard with generated seed data (no AWS calls)',
+    )
     dashboard.add_argument(
         '--end',
         default=None,
@@ -429,8 +437,8 @@ def _run_dashboard_command(  # noqa: PLR0911
     now: datetime,
     run_dashboard_tui: RunDashboardTui | None,
 ) -> int:
-    if args.name is None and args.dashboard_file is None:
-        sys.stderr.write('Provide a dashboard name or --file\n')
+    if not args.demo and args.name is None and args.dashboard_file is None:
+        sys.stderr.write('Provide a dashboard name, --file, or --demo\n')
         return 2
     try:
         start_time = parse_time(args.start, now=now)
@@ -444,7 +452,9 @@ def _run_dashboard_command(  # noqa: PLR0911
         return 1
 
     try:
-        if args.dashboard_file is not None:
+        if args.demo:
+            dashboard = demo_dashboard()
+        elif args.dashboard_file is not None:
             dashboard = load_dashboard_file(args.dashboard_file)
         else:
             dashboard = get_dashboard(str(args.name), profile_name=args.profile, region_name=args.region)
@@ -466,6 +476,7 @@ def _run_dashboard_command(  # noqa: PLR0911
         end_time=end_time,
         profile=args.profile,
         region=args.region,
+        demo=args.demo,
     )
     run_dashboard_tui(config, dashboard, request)
     return 0

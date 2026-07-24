@@ -27,6 +27,7 @@ from tail_cw.cli import (
     run_cli,
 )
 from tail_cw.config import TailCWConfig
+from tail_cw.demo import demo_fetch_metrics, demo_resolve_logs
 from tail_cw.tui.app import LogTailApp
 from tail_cw.tui.dashboard_app import DashboardApp
 
@@ -60,6 +61,17 @@ def _run_tail_tui(config: TailCWConfig, request: TailRequest) -> None:
 
 
 def _run_dashboard_tui(config: TailCWConfig, dashboard: Dashboard, request: DashboardRequest) -> None:
+    if request.demo:
+        app = DashboardApp(
+            dashboard,
+            request,
+            config,
+            fetch_metrics=demo_fetch_metrics,
+            resolve_logs=demo_resolve_logs,
+        )
+        app.run()
+        return
+
     def fetch_metrics(queries: Sequence[dict[str, object]], start: datetime, end: datetime) -> list[MetricSeries]:
         return fetch_metric_data(queries, start, end, profile_name=request.profile, region_name=request.region)
 
