@@ -90,7 +90,7 @@ def test_load_config_valid_toml(xdg_paths: tuple[Path, Path], tmp_path: Path):
         '\n'.join(
             [
                 '[cache]',
-                f'cache_dir = "{custom_cache_dir}"',
+                f'cache_dir = "{custom_cache_dir.as_posix()}"',
                 'size_limit_mb = 512',
                 'default_ttl_seconds = 600',
                 'eviction_policy = "least-frequently-stored"',
@@ -221,7 +221,7 @@ def test_config_integration(tmp_path: Path):
         '\n'.join(
             [
                 '[cache]',
-                f'cache_dir = "{cache_path}"',
+                f'cache_dir = "{cache_path.as_posix()}"',
                 'size_limit_mb = 256',
                 '',
                 '[parquet]',
@@ -257,6 +257,7 @@ def test_config_integration(tmp_path: Path):
 
 def test_config_with_custom_cache_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
     config_path = tmp_path / 'config.toml'
     config_path.write_text(
         '[cache]\ncache_dir = "~/custom_cache"',

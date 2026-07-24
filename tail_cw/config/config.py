@@ -159,7 +159,7 @@ def get_default_cache_dir() -> Path:
         Absolute path to ``~/.cache/tail-cw`` (or the platform equivalent).
         The directory is created when missing.
     """
-    return Path(user_cache_dir('tail-cw', ensure_exists=True))
+    return Path(user_cache_dir('tail-cw', opinion=False, ensure_exists=True))
 
 
 def _to_cache_path(value: str | os.PathLike[str] | None) -> Path | None:

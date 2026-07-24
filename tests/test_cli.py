@@ -261,7 +261,7 @@ def test_write_ndjson():
 def _write_config_file(tmp_path: Path) -> Path:
     config_path = tmp_path / 'config.toml'
     cache_dir = tmp_path / 'cache'
-    config_path.write_text(f'[cache]\ncache_dir = "{cache_dir}"\n', encoding='utf-8')
+    config_path.write_text(f'[cache]\ncache_dir = "{cache_dir.as_posix()}"\n', encoding='utf-8')
     return config_path
 
 
