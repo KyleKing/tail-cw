@@ -7,12 +7,11 @@ all = [
   "boto3>=1.35.0",
   "diskcache>=5.6.0",
   "duckdb>=1.1.0",
-  "matplotlib>=3.9",
   "numpy>=2.3.4",
   "polars>=1.13.0",
   "pyarrow>=18.0.0",
+  "textual-plotext>=1.0.1",
   "textual>=1.0.0",
-  "textual-image>=0.8.5",
 ]
 aws = [
   "boto3>=1.35.0",
@@ -21,8 +20,7 @@ cache = [
   "diskcache>=5.6.0",
 ]
 charts = [
-  "matplotlib>=3.9",
-  "textual-image>=0.8.5",
+  "textual-plotext>=1.0.1",
 ]
 dev = [
   "calcipy[recommended]>=6.0.1",
@@ -184,10 +182,6 @@ known-first-party = ['tail_cw']
   'PLR0917', # Too many positional arguments (6/5) - cache key needs all parameters
   'PLW1514', # Text mode without explicit encoding (UTF-8 default is fine)
   'PYI034', # __enter__ should return Self (LogCache is fine for this use case)
-]
-'tail_cw/tui/chart_widget.py' = [
-  'E501', # textual-image widget classes have no __all__; keep the import on one line so the type-ignore lands
-  'I001', # (same) do not let isort wrap the single-line import
 ]
 'tests/*.py' = [
   'ANN001', # Missing type annotation for function argument

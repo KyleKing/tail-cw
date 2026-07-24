@@ -17,6 +17,7 @@ from tail_cw.aws.metrics import MetricSeries
 from tail_cw.cli import DashboardRequest
 from tail_cw.config import load_config
 from tail_cw.tui.dashboard_app import DashboardApp, _grid_dimensions, resolve_log_group_for_widget
+from tail_cw.tui.plot_widget import PlotChart
 
 
 def _metric(title: str, *, view: str = 'timeSeries') -> MetricWidget:
@@ -82,6 +83,17 @@ async def test_first_metric_is_focused_by_default() -> None:
     async with app.run_test(size=(160, 48)) as pilot:
         await pilot.pause()
         assert app._focused == [1]  # the metric, not the text widget
+
+
+@pytest.mark.asyncio
+async def test_focus_mounts_a_native_plot_chart() -> None:
+    dashboard = Dashboard(name='demo', widgets=[_metric('one')])
+    app = DashboardApp(dashboard, _request(), load_config(), fetch_metrics=lambda *_: _series(_request().start_time))
+    async with app.run_test(size=(160, 48)) as pilot:
+        await pilot.pause()
+        await pilot.press('enter')
+        await pilot.pause()
+        assert len(list(app.query(PlotChart))) == 1
 
 
 @pytest.mark.asyncio

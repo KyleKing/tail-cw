@@ -1,12 +1,11 @@
 """Textual app that renders a CloudWatch dashboard in the terminal.
 
 The dashboard never scrolls. Every widget shows as a compact, color-coded cell
-in a fit-to-screen grid (cheap Rich sparklines, no image protocol, so nothing
-ghosts). Focusing a metric promotes it to a full matplotlib chart on a stage
-above the grid; a second focus gives a two-up; reset returns to the even grid.
-Only the one or two focused charts use the terminal graphics protocol, which is
-what keeps rendering clean. Diving from a chart or log widget opens the existing
-log table for that window and log group.
+in a fit-to-screen grid (Rich sparklines). Focusing a metric promotes it to a
+full plotext chart on a stage above the grid; a second focus gives a two-up;
+reset returns to the even grid. Charts are drawn with native terminal cells, no
+graphics protocol, so nothing ghosts. Diving from a chart or log widget opens
+the existing log table for that window and log group.
 
 The app depends only on injected callables for AWS access so it can be driven
 headless in tests with no network.
@@ -39,13 +38,13 @@ from tail_cw.aws.dashboards import (
     Widget,
 )
 from tail_cw.aws.metrics import MetricSeries, build_metric_data_queries
+from tail_cw.charts import ChartKind
 from tail_cw.charts.palette import role_color, series_color
-from tail_cw.charts.render import ChartKind
 from tail_cw.charts.sparkline import ReduceMode, build_compact, sparkline_text
 from tail_cw.cli import DashboardRequest
 from tail_cw.config import TailCWConfig
-from tail_cw.tui.chart_widget import ChartWidget
 from tail_cw.tui.log_results import LogResultsScreen
+from tail_cw.tui.plot_widget import PlotChart
 
 FetchMetrics = Callable[[Sequence[dict[str, object]], datetime, datetime], list[MetricSeries]]
 ResolveLogs = Callable[[str, datetime, datetime], Path | None]
@@ -430,7 +429,7 @@ class DashboardApp(App[None]):
         if isinstance(widget, MetricWidget):
             kind = ChartKind.BAR if widget.view == 'bar' else ChartKind.LINE
             colors = [role_color(widget.title)] if len(panel.series) == 1 else _series_colors(panel.series)
-            chart = ChartWidget(title=widget.title or '(untitled)', kind=kind, colors=colors)
+            chart = PlotChart(title=widget.title or '(untitled)', kind=kind, colors=colors)
             chart.set_series(panel.series)
             return chart
         return VerticalScroll(_full_content(widget))
