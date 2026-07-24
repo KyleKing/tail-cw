@@ -21,6 +21,14 @@ from pathlib import Path
 from beartype.typing import Protocol
 
 from tail_cw.aws.client import LogEvent, fetch_log_events
+from tail_cw.aws.dashboards import (
+    Dashboard,
+    DashboardSummary,
+    dashboard_to_dict,
+    get_dashboard,
+    list_dashboards,
+    load_dashboard_file,
+)
 from tail_cw.aws.live_tail import MAX_LIVE_TAIL_LOG_GROUPS, stream_live_tail
 from tail_cw.cache.storage import LogCache, generate_cache_key, read_parquet_to_log_events
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
@@ -85,6 +93,25 @@ class TailRequest:
     log_groups: tuple[str, ...]
     filter_pattern: str | None = None
     backfill_start: datetime | None = None
+    profile: str | None = None
+    region: str | None = None
+
+
+@dataclass(frozen=True)
+class DashboardRequest:
+    """Resolved parameters for opening a dashboard.
+
+    Attributes:
+        name: Dashboard name, or the local file stem when loaded from a file.
+        start_time: Start of the metric window (timezone-aware).
+        end_time: End of the metric window (timezone-aware).
+        profile: Optional AWS profile name.
+        region: Optional AWS region name.
+    """
+
+    name: str
+    start_time: datetime
+    end_time: datetime
     profile: str | None = None
     region: str | None = None
 
@@ -179,6 +206,46 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tail.add_argument('--profile', default=None, help='AWS profile name')
     tail.add_argument('--region', default=None, help='AWS region name')
+
+    dashboards = subparsers.add_parser('dashboards', help='List CloudWatch dashboards in the account.')
+    dashboards.add_argument('--config', dest='config_path', type=Path, default=None, help='Config file path override')
+    dashboards.add_argument(
+        '--json', dest='json_output', action='store_true', help='Write dashboards as NDJSON to stdout'
+    )
+    dashboards.add_argument('--profile', default=None, help='AWS profile name')
+    dashboards.add_argument('--region', default=None, help='AWS region name')
+
+    dashboard = subparsers.add_parser(
+        'dashboard',
+        help='Open a CloudWatch dashboard in the TUI (or emit its structure as JSON).',
+    )
+    dashboard.add_argument('name', nargs='?', default=None, help='Dashboard name (omit when using --file)')
+    dashboard.add_argument('--config', dest='config_path', type=Path, default=None, help='Config file path override')
+    dashboard.add_argument(
+        '--end',
+        default=None,
+        help='End of the metric window: duration (2h) or ISO-8601 datetime (default: now)',
+    )
+    dashboard.add_argument(
+        '--file',
+        dest='dashboard_file',
+        type=Path,
+        default=None,
+        help='Load a local dashboard JSON file (same schema as a CloudWatch DashboardBody)',
+    )
+    dashboard.add_argument(
+        '--json',
+        dest='json_output',
+        action='store_true',
+        help='Write the parsed dashboard structure as JSON to stdout instead of opening the TUI',
+    )
+    dashboard.add_argument('--profile', default=None, help='AWS profile name')
+    dashboard.add_argument('--region', default=None, help='AWS region name')
+    dashboard.add_argument(
+        '--start',
+        default='3h',
+        help='Start of the metric window: duration (15m, 2h, 3d) or ISO-8601 datetime (default: 3h)',
+    )
     return parser
 
 
@@ -334,6 +401,74 @@ def stream_ndjson(events: Iterable[LogEvent], stream: SupportsWriteFlushStr) -> 
 
 RunTui = Callable[[TailCWConfig, Path, FetchRequest], None]
 RunTailTui = Callable[[TailCWConfig, TailRequest], None]
+RunDashboardTui = Callable[[TailCWConfig, Dashboard, DashboardRequest], None]
+
+
+def _dashboard_summary_to_record(summary: DashboardSummary) -> dict[str, object]:
+    return {'name': summary.name, 'arn': summary.arn, 'size': summary.size}
+
+
+def _run_dashboards_command(args: argparse.Namespace) -> int:
+    if _load_config_or_report(args.config_path) is None:
+        return 1
+    summaries = list_dashboards(profile_name=args.profile, region_name=args.region)
+    if args.json_output:
+        for summary in summaries:
+            sys.stdout.write(json.dumps(_dashboard_summary_to_record(summary), separators=(',', ':')) + '\n')
+        return 0
+    if not summaries:
+        sys.stdout.write('No dashboards found\n')
+        return 0
+    for summary in summaries:
+        sys.stdout.write(f'{summary.name}\t{summary.size} bytes\n')
+    return 0
+
+
+def _run_dashboard_command(  # noqa: PLR0911
+    args: argparse.Namespace,
+    now: datetime,
+    run_dashboard_tui: RunDashboardTui | None,
+) -> int:
+    if args.name is None and args.dashboard_file is None:
+        sys.stderr.write('Provide a dashboard name or --file\n')
+        return 2
+    try:
+        start_time = parse_time(args.start, now=now)
+        end_time = parse_time(args.end, now=now) if args.end is not None else now
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+
+    config = _load_config_or_report(args.config_path)
+    if config is None:
+        return 1
+
+    try:
+        if args.dashboard_file is not None:
+            dashboard = load_dashboard_file(args.dashboard_file)
+        else:
+            dashboard = get_dashboard(str(args.name), profile_name=args.profile, region_name=args.region)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 1
+
+    if args.json_output:
+        sys.stdout.write(json.dumps(dashboard_to_dict(dashboard), separators=(',', ':')) + '\n')
+        return 0
+
+    if run_dashboard_tui is None:
+        sys.stderr.write('The dashboard TUI is unavailable in this entry point; use --json\n')
+        return 1
+
+    request = DashboardRequest(
+        name=dashboard.name,
+        start_time=start_time,
+        end_time=end_time,
+        profile=args.profile,
+        region=args.region,
+    )
+    run_dashboard_tui(config, dashboard, request)
+    return 0
 
 
 def _load_config_or_report(config_path: Path | None) -> TailCWConfig | None:
@@ -419,6 +554,7 @@ def run_cli(
     *,
     fetch_events: FetchEvents | None = None,
     run_tail_tui: RunTailTui | None = None,
+    run_dashboard_tui: RunDashboardTui | None = None,
     stream_events: StreamEvents | None = None,
 ) -> int:
     """Parse arguments and dispatch to the requested subcommand.
@@ -433,6 +569,10 @@ def run_cli(
             return _run_fetch_command(args, now, run_tui, fetch_events=fetch_events)
         case 'tail':
             return _run_tail_command(args, now, run_tail_tui, fetch_events=fetch_events, stream_events=stream_events)
+        case 'dashboards':
+            return _run_dashboards_command(args)
+        case 'dashboard':
+            return _run_dashboard_command(args, now, run_dashboard_tui)
         case _:
             parser.print_help(sys.stderr)
             return 2

@@ -51,6 +51,19 @@ def _epoch_ms_to_datetime(epoch_ms: int) -> datetime:
     return datetime.fromtimestamp(epoch_ms / 1000.0, tz=UTC)
 
 
+def build_client(service_name: str, *, region_name: str | None = None, profile_name: str | None = None) -> Any:
+    """Build a boto3 client for a service with the standard retry config.
+
+    Resolves credentials through a named profile when given, otherwise the
+    default credential chain.
+    """
+    config = Config(retries={'max_attempts': 10, 'mode': 'standard'})
+    if profile_name is not None:
+        session = boto3.Session(profile_name=profile_name, region_name=region_name)
+        return session.client(service_name, config=config)
+    return boto3.client(service_name, config=config, region_name=region_name)
+
+
 def _create_logs_client(region_name: str | None = None, profile_name: str | None = None) -> Any:
     """Create a boto3 CloudWatch Logs client with retry configuration.
 
