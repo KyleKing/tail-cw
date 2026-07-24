@@ -12,7 +12,7 @@ from tail_cw.aws.metrics import MetricSeries
 from tail_cw.cli import DashboardRequest
 from tail_cw.config import load_config
 from tail_cw.tui.command_bar import CommandLine
-from tail_cw.tui.dashboard_app import DashboardApp
+from tail_cw.tui.dashboard_app import DashboardApp, WhichKeyScreen
 
 
 def _metric(title: str) -> MetricWidget:
@@ -111,3 +111,27 @@ async def test_focus_command_matches_by_title() -> None:
         app._run_command('focus Requests')
         await pilot.pause()
         assert [app._panels[i].widget.title for i in app._focused] == ['Requests / 5 min']  # type: ignore[union-attr]
+
+
+@pytest.mark.asyncio
+async def test_filter_hides_non_matching_and_resets() -> None:
+    app = _app()
+    async with app.run_test(size=(160, 48)) as pilot:
+        await pilot.pause()
+        app._run_command('filter latency')
+        await pilot.pause()
+        visible = [p.widget.title for p in app._panels if p.cell.index not in app._hidden]  # type: ignore[union-attr]
+        assert visible == ['Latency (ms)']
+        app._run_command('filter all')
+        await pilot.pause()
+        assert app._hidden == set()
+
+
+@pytest.mark.asyncio
+async def test_leader_opens_which_key() -> None:
+    app = _app()
+    async with app.run_test(size=(160, 48)) as pilot:
+        await pilot.pause()
+        await pilot.press('comma')
+        await pilot.pause()
+        assert isinstance(app.screen, WhichKeyScreen)

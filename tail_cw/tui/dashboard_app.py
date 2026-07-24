@@ -26,7 +26,8 @@ from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, VerticalScroll
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.screen import ModalScreen
 from textual.widgets import Footer, Header, Input, Label, Markdown, Static
 
 from tail_cw.aws.dashboards import (
@@ -40,7 +41,7 @@ from tail_cw.aws.dashboards import (
 )
 from tail_cw.aws.metrics import MetricSeries, build_metric_data_queries
 from tail_cw.charts import ChartKind
-from tail_cw.charts.palette import role_color, series_color
+from tail_cw.charts.palette import MetricRole, role_color, role_for, series_color
 from tail_cw.charts.sparkline import ReduceMode, build_compact, sparkline_text
 from tail_cw.cli import DashboardRequest
 from tail_cw.config import TailCWConfig
@@ -146,6 +147,44 @@ class CompactPanel(Static):
         )
 
 
+class WhichKeyScreen(ModalScreen[None]):
+    """A dismissable reference of key bindings and ``:`` commands."""
+
+    DEFAULT_CSS = """
+    WhichKeyScreen {
+        align: center middle;
+        background: $background 60%;
+    }
+    WhichKeyScreen > Static {
+        width: auto;
+        max-width: 80%;
+        height: auto;
+        padding: 1 2;
+        border: round $accent;
+        background: $panel;
+    }
+    """
+
+    BINDINGS: ClassVar[Sequence[Binding]] = [Binding('escape,comma,q,question_mark', 'dismiss', 'Close')]  # type: ignore[assignment]
+
+    def __init__(self, keys: list[tuple[str, str]], commands: list[tuple[str, str]]) -> None:
+        """Show the given key bindings and command summaries."""
+        super().__init__()
+        self._keys = keys
+        self._commands = commands
+
+    def compose(self) -> ComposeResult:
+        """Render the reference panel.
+
+        Yields:
+            A single Static holding the keys-and-commands reference.
+        """
+        key_lines = '\n'.join(f'  [b]{key:<8}[/] {description}' for key, description in self._keys)
+        command_lines = '\n'.join(f'  [b]:{name:<7}[/] {summary}' for name, summary in self._commands)
+        body = f'[b]Keys[/]\n{key_lines}\n\n[b]Commands[/]\n{command_lines}\n\n[dim]esc to close[/]'
+        yield Static(body)
+
+
 @dataclass
 class _Panel:
     widget: Widget
@@ -165,6 +204,7 @@ def _build_commands() -> dict[str, _Command]:
     return {
         'add': _Command('Add a panel to the stage (matches by title)', ('<panel>',)),
         'dive': _Command('Open the logs behind the focused widget'),
+        'filter': _Command('Show only panels matching terms (roles or title text); "all" resets', ()),
         'focus': _Command('Focus one panel on the stage (matches by title)', ('<panel>',)),
         'help': _Command('List the available commands'),
         'period': _Command('Set the period, in seconds, of the focused metric', tuple(str(p) for p in _PERIOD_CYCLE)),
@@ -172,6 +212,14 @@ def _build_commands() -> dict[str, _Command]:
         'reset': _Command('Clear the stage'),
         'stat': _Command('Set the statistic of the focused metric', _STAT_CYCLE),
     }
+
+
+def _panel_matches(widget: Widget, terms: list[str]) -> bool:
+    """True when any term names the widget's role or appears in its title."""
+    title = (getattr(widget, 'title', '') or '').lower()
+    role = role_for(title)
+    role_name = role.value if isinstance(role, MetricRole) else ''
+    return any(term.lower() == role_name or term.lower() in title for term in terms)
 
 
 def _duration(text: str) -> timedelta | None:
@@ -199,6 +247,15 @@ class DashboardApp(App[None]):
         height: 1fr;
         overflow: hidden;
         scrollbar-size: 0 0;
+    }
+    #stage Vertical {
+        width: 1fr;
+    }
+    .chart_caption {
+        height: 1;
+        padding: 0 1;
+        color: $text-muted;
+        text-style: italic;
     }
     .stage_hint {
         width: 1fr;
@@ -228,6 +285,7 @@ class DashboardApp(App[None]):
         Binding('p', 'cycle_period', 'Period'),
         Binding('d', 'dive', 'Dive'),
         Binding('colon', 'command', 'Command', key_display=':'),
+        Binding('comma', 'which_key', 'Keys', key_display=','),
     ]
 
     def __init__(
@@ -253,6 +311,7 @@ class DashboardApp(App[None]):
         self._panels: list[_Panel] = []
         self._panel_by_cell_id: dict[int, _Panel] = {}
         self._focused: list[int] = []
+        self._hidden: set[int] = set()
         self._columns = 1
         self._commands = _build_commands()
 
@@ -291,7 +350,8 @@ class DashboardApp(App[None]):
             self._panels[0].cell.focus()
 
     def _resize_grid(self) -> None:
-        columns, rows = _grid_dimensions(len(self._panels))
+        visible = max(1, len(self._panels) - len(self._hidden))
+        columns, rows = _grid_dimensions(visible)
         self._columns = columns
         grid = self.query_one('#grid')
         grid.styles.grid_size_columns = columns
@@ -457,16 +517,38 @@ class DashboardApp(App[None]):
             stage.mount(self._stage_widget(self._panels[index]))
         self._update_status()
 
-    @staticmethod
-    def _stage_widget(panel: _Panel) -> Any:
+    def _stage_widget(self, panel: _Panel) -> Any:
         widget = panel.widget
         if isinstance(widget, MetricWidget):
             kind = ChartKind.BAR if widget.view == 'bar' else ChartKind.LINE
             colors = [role_color(widget.title)] if len(panel.series) == 1 else _series_colors(panel.series)
             chart = PlotChart(title=widget.title or '(untitled)', kind=kind, colors=colors)
             chart.set_series(panel.series)
-            return chart
+            caption = Label(self._metric_caption(panel), classes='chart_caption')
+            return Vertical(caption, chart)
         return VerticalScroll(_full_content(widget))
+
+    def _metric_caption(self, panel: _Panel) -> str:
+        widget = panel.widget
+        if not isinstance(widget, MetricWidget):
+            return ''
+        window = f'{self._start:%H:%M}-{self._end:%H:%M}'
+        queries = build_metric_data_queries(
+            widget.metrics,
+            widget_stat=panel.stat_override or widget.stat,
+            widget_period=panel.period_override or widget.period,
+            default_period=_DEFAULT_PERIOD,
+        )
+        stat = next((q['MetricStat']['Metric'] for q in queries if 'MetricStat' in q), None)
+        source = next(q['MetricStat'] for q in queries if 'MetricStat' in q) if stat else None
+        if stat is None or source is None:
+            return f'metric math · {window}'
+        dimensions = ', '.join(f'{dim["Name"]}={dim["Value"]}' for dim in stat['Dimensions'])
+        parts = [stat['Namespace'], stat['MetricName']]
+        if dimensions:
+            parts.append(dimensions)
+        parts.append(f'{source["Stat"]} · {source["Period"]}s · {window}')
+        return ' · '.join(parts)
 
     def action_cycle_stat(self) -> None:
         """Cycle the statistic on the focused metric cell and re-fetch it."""
@@ -529,6 +611,12 @@ class DashboardApp(App[None]):
         """Open the command line."""
         self.query_one(CommandLine).open()
 
+    def action_which_key(self) -> None:
+        """Show the keys and commands reference (nvim-style which-key)."""
+        keys = [(binding.key_display or binding.key, binding.description) for binding in self.BINDINGS]
+        commands = [(name, command.summary) for name, command in sorted(self._commands.items())]
+        self.push_screen(WhichKeyScreen(keys, commands))
+
     @on(Input.Submitted, '#command_line')
     def _on_command(self, event: Input.Submitted) -> None:
         event.stop()
@@ -578,6 +666,8 @@ class DashboardApp(App[None]):
                 self._command_period(argument)
             case 'range':
                 self._command_range(argument)
+            case 'filter':
+                self._command_filter(args)
             case 'help':
                 self._command_help()
             case _:
@@ -630,6 +720,22 @@ class DashboardApp(App[None]):
         self._update_status(f'window -> last {argument}')
         self._load_all_metrics()
         self._load_all_log_volumes()
+
+    def _command_filter(self, terms: list[str]) -> None:
+        if not terms or terms[0].lower() in {'all', 'clear'}:
+            self._hidden = set()
+        else:
+            self._hidden = {p.cell.index for p in self._panels if not _panel_matches(p.widget, terms)}
+        visible_count = len(self._panels) - len(self._hidden)
+        if visible_count == 0:
+            self.notify(f'No panels match {" ".join(terms)!r}', severity='warning')
+            self._hidden = set()
+        for panel in self._panels:
+            panel.cell.display = panel.cell.index not in self._hidden
+        self._focused = [index for index in self._focused if index not in self._hidden]
+        self._resize_grid()
+        self._rebuild_stage()
+        self._update_status('filtered' if self._hidden else None)
 
     def _command_help(self) -> None:
         lines = [f':{name} — {command.summary}' for name, command in sorted(self._commands.items())]
