@@ -2,5 +2,13 @@
 DISABLE_MKDOCS_2_WARNING = "true"
 _.python.venv = {path = ".venv"}
 
+[tasks.demo]
+description = "Launch the offline demo dashboard (screenshot this in a Kitty-graphics terminal like WezTerm)"
+run = "uv run tail-cw dashboard --demo"
+
+[tasks.gif]
+description = "Record the demo interaction to docs/images/demo.gif with VHS (VHS lacks the Kitty graphics protocol, so charts show the Unicode fallback; use WezTerm screenshots for the real charts)"
+run = "vhs docs/demo.tape"
+
 [tools]
 python = ["3.11.11", "3.13.11"]
