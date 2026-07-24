@@ -225,6 +225,12 @@ def demo_resolve_logs(_log_group: str, start: datetime, end: datetime) -> Path |
     return output
 
 
+def demo_log_volume(_source: str, start: datetime, end: datetime) -> list[float]:
+    """Synthetic error-log volume per bucket, peaking during the incident."""
+    timestamps = _timestamps(start, end)
+    return [round(2 + 60 * _incident_factor(index / max(1, len(timestamps) - 1))) for index in range(len(timestamps))]
+
+
 def demo_window(now: datetime | None = None) -> tuple[datetime, datetime]:
     """Return a fixed 6-hour demo window ending at ``now`` (default: current time)."""
     end = now if now is not None else datetime.now(tz=UTC)

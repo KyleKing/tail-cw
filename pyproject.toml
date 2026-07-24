@@ -185,6 +185,10 @@ known-first-party = ['tail_cw']
   'PLW1514', # Text mode without explicit encoding (UTF-8 default is fine)
   'PYI034', # __enter__ should return Self (LogCache is fine for this use case)
 ]
+'tail_cw/tui/chart_widget.py' = [
+  'E501', # textual-image widget classes have no __all__; keep the import on one line so the type-ignore lands
+  'I001', # (same) do not let isort wrap the single-line import
+]
 'tests/*.py' = [
   'ANN001', # Missing type annotation for function argument
   'ANN201', # Missing return type annotation for public function

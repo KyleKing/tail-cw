@@ -9,16 +9,31 @@ half-blocks automatically.
 
 from __future__ import annotations
 
+# pyright: reportPrivateImportUsage=false
+
 import io
+import os
 
 from textual.widget import Widget
 from textual.widgets import Static
-from textual_image.widget import Image, get_cell_size  # type: ignore[attr-defined]
+from textual_image.widget import BaseImage, HalfcellImage, Image, SixelImage, TGPImage, UnicodeImage, get_cell_size  # type: ignore[attr-defined]
 
 from tail_cw.aws.metrics import MetricSeries
 from tail_cw.charts.render import ChartKind, render_timeseries_png
 
 _FALLBACK_CELL_PX = (10, 20)
+_IMAGE_MODES: dict[str, type[BaseImage]] = {
+    'auto': Image,
+    'tgp': TGPImage,
+    'sixel': SixelImage,
+    'halfcell': HalfcellImage,
+    'unicode': UnicodeImage,
+}
+
+
+def _image_class() -> type[BaseImage]:
+    """Pick the image widget class from ``TAILCW_IMAGE`` (auto, tgp, sixel, halfcell, unicode)."""
+    return _IMAGE_MODES.get(os.environ.get('TAILCW_IMAGE', 'auto').lower(), Image)
 
 
 class ChartWidget(Widget):
@@ -31,7 +46,7 @@ class ChartWidget(Widget):
         overflow: hidden;
         scrollbar-size: 0 0;
     }
-    ChartWidget > Image {
+    ChartWidget > #chart_image {
         width: 1fr;
         height: 1fr;
         overflow: hidden;
@@ -60,7 +75,7 @@ class ChartWidget(Widget):
         self._dark = dark
         self._colors = colors
         self._series: list[MetricSeries] = []
-        self._image = Image()
+        self._image = _image_class()(id='chart_image')
         self._placeholder = Static('Loading...', id='chart_placeholder')
         self._last_size_px: tuple[int, int] = (0, 0)
         self._loaded = False
@@ -100,7 +115,12 @@ class ChartWidget(Widget):
             cell_w, cell_h = cell.width, cell.height
         except Exception:
             cell_w, cell_h = _FALLBACK_CELL_PX
-        return self.content_size.width * cell_w, self.content_size.height * cell_h
+        # Render one cell shy of the box in each axis so the graphics-protocol image
+        # never bleeds into the neighbouring row (the stray bright strip) or pushes
+        # the footer down (the doubled footer) when the terminal rounds cell sizes up.
+        columns = max(1, self.content_size.width - 1)
+        rows = max(1, self.content_size.height - 1)
+        return columns * cell_w, rows * cell_h
 
     def _rerender(self) -> None:
         width_px, height_px = self._target_pixels()

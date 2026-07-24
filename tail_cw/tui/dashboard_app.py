@@ -22,6 +22,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
+from rich.console import Group
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, VerticalScroll
@@ -39,7 +41,7 @@ from tail_cw.aws.dashboards import (
 from tail_cw.aws.metrics import MetricSeries, build_metric_data_queries
 from tail_cw.charts.palette import role_color, series_color
 from tail_cw.charts.render import ChartKind
-from tail_cw.charts.sparkline import ReduceMode, build_compact
+from tail_cw.charts.sparkline import ReduceMode, build_compact, sparkline_text
 from tail_cw.cli import DashboardRequest
 from tail_cw.config import TailCWConfig
 from tail_cw.tui.chart_widget import ChartWidget
@@ -47,6 +49,7 @@ from tail_cw.tui.log_results import LogResultsScreen
 
 FetchMetrics = Callable[[Sequence[dict[str, object]], datetime, datetime], list[MetricSeries]]
 ResolveLogs = Callable[[str, datetime, datetime], Path | None]
+LogVolume = Callable[[str, datetime, datetime], list[float]]
 
 _DEFAULT_PERIOD = 300
 _MAX_FOCUS = 2
@@ -204,6 +207,7 @@ class DashboardApp(App[None]):
         *,
         fetch_metrics: FetchMetrics,
         resolve_logs: ResolveLogs | None = None,
+        log_volume: LogVolume | None = None,
     ) -> None:
         """Store the dashboard, its metric window, and the injected AWS callables."""
         super().__init__()
@@ -212,6 +216,7 @@ class DashboardApp(App[None]):
         self._config = config
         self._fetch_metrics = fetch_metrics
         self._resolve_logs = resolve_logs
+        self._log_volume = log_volume
         self._start = request.start_time
         self._end = request.end_time
         self._panels: list[_Panel] = []
@@ -248,6 +253,7 @@ class DashboardApp(App[None]):
         self._rebuild_stage()
         self._update_status()
         self._load_all_metrics()
+        self._load_all_log_volumes()
         if self._panels:
             self._panels[0].cell.focus()
 
@@ -272,12 +278,15 @@ class DashboardApp(App[None]):
         match widget:
             case LogWidget():
                 accent = role_color(widget.title or 'logs')
-                panel.cell.render_static(f'[bold {accent}]{widget.title or "Logs"}[/]\n[dim]{widget.query[:120]}[/]')
+                source = resolve_log_group_for_widget(widget) or 'logs'
+                panel.cell.render_static(f'[bold {accent}]{widget.title or "Logs"}[/]\n[dim]{source}[/]')
             case TextWidget():
-                panel.cell.render_static(widget.markdown)
+                heading = next((line for line in widget.markdown.splitlines() if line.strip()), '')
+                panel.cell.render_static(f'[dim]{heading.lstrip("# ").strip()[:60]}[/]')
             case AlarmWidget():
-                names = '\n'.join(alarm.rsplit(':', 1)[-1] for alarm in widget.alarms) or '(no alarms)'
-                panel.cell.render_static(f'[bold]{widget.title or "Alarms"}[/]\n{names}')
+                accent = role_color(widget.title or 'alarms')
+                count = len(widget.alarms)
+                panel.cell.render_static(f'[bold {accent}]{widget.title or "Alarms"}[/]\n[dim]{count} alarms[/]')
             case UnknownWidget():
                 panel.cell.render_static(f'[dim]Unsupported widget: {widget.widget_type}[/]')
             case _:
@@ -287,6 +296,38 @@ class DashboardApp(App[None]):
         for panel in self._panels:
             if isinstance(panel.widget, MetricWidget):
                 self._load_panel(panel)
+
+    def _load_all_log_volumes(self) -> None:
+        if self._log_volume is None:
+            return
+        for panel in self._panels:
+            if isinstance(panel.widget, LogWidget):
+                self.run_worker(
+                    lambda p=panel: self._fetch_log_volume(p),
+                    name='log_volume',
+                    group=f'log_volume_{panel.cell.index}',
+                    exclusive=True,
+                    thread=True,
+                )
+
+    def _fetch_log_volume(self, panel: _Panel) -> None:
+        if self._log_volume is None or not isinstance(panel.widget, LogWidget):
+            return
+        source = resolve_log_group_for_widget(panel.widget) or panel.widget.title
+        try:
+            volume = self._log_volume(source, self._start, self._end)
+        except Exception:
+            return
+        self.call_from_thread(self._render_log_volume, panel, volume)
+
+    @staticmethod
+    def _render_log_volume(panel: _Panel, volume: list[float]) -> None:
+        title = getattr(panel.widget, 'title', '') or 'Logs'
+        accent = role_color(title)
+        latest = int(volume[-1]) if volume else 0
+        header = Text.assemble((title, f'bold {accent}'), ('  ', ''), (f'{latest}/bucket', 'dim'))
+        spark = sparkline_text(volume, color=accent, width=max(1, panel.cell.content_size.width), bars=True)
+        panel.cell.render_static(Group(header, spark))
 
     def _load_panel(self, panel: _Panel) -> None:
         self.run_worker(

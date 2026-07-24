@@ -27,7 +27,7 @@ from tail_cw.cli import (
     run_cli,
 )
 from tail_cw.config import TailCWConfig
-from tail_cw.demo import demo_fetch_metrics, demo_resolve_logs
+from tail_cw.demo import demo_fetch_metrics, demo_log_volume, demo_resolve_logs
 from tail_cw.tui.app import LogTailApp
 from tail_cw.tui.dashboard_app import DashboardApp
 
@@ -68,6 +68,7 @@ def _run_dashboard_tui(config: TailCWConfig, dashboard: Dashboard, request: Dash
             config,
             fetch_metrics=demo_fetch_metrics,
             resolve_logs=demo_resolve_logs,
+            log_volume=demo_log_volume,
         )
         app.run()
         return
