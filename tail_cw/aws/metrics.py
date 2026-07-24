@@ -22,6 +22,7 @@ from tail_cw.aws.client import build_client
 
 DEFAULT_STAT = 'Average'
 DITTO = '.'
+DITTO_ALL = '...'
 _ID_PREFIX = 'q'
 
 
@@ -59,10 +60,29 @@ def _positional_elements(row: Sequence[Any]) -> list[Any]:
     return list(row)
 
 
+def _expand_ellipsis(positional: list[Any], previous: list[Any] | None) -> list[Any]:
+    """Expand a ``...`` token into the run of previous-row elements it stands for.
+
+    ``["...", {opts}]`` copies the whole previous metric; ``["...", "Foo"]`` copies
+    all but the last element and overrides the tail. Expansion turns the ``...``
+    into the right number of single-element ``.`` placeholders for the position
+    pass to resolve.
+    """
+    if DITTO_ALL not in positional:
+        return positional
+    if previous is None:
+        msg = 'Ellipsis reference "..." has no previous row'
+        raise ValueError(msg)
+    index = positional.index(DITTO_ALL)
+    fill = max(0, len(previous) - (len(positional) - 1))
+    return positional[:index] + [DITTO] * fill + positional[index + 1 :]
+
+
 def _resolve_ditto(positional: list[Any], previous: list[Any] | None) -> list[str]:
-    """Replace ``.`` placeholders with the previous row's element at each index."""
+    """Replace ``.`` and ``...`` placeholders with the previous row's elements."""
+    expanded = _expand_ellipsis(positional, previous)
     resolved: list[str] = []
-    for index, element in enumerate(positional):
+    for index, element in enumerate(expanded):
         if element == DITTO:
             if previous is None or index >= len(previous):
                 msg = f'Ditto reference at position {index} has no previous value'
@@ -121,6 +141,8 @@ def build_metric_data_queries(
 
         positional = _positional_elements(row)
         resolved = _resolve_ditto(positional, previous_positional)
+        if len(resolved) < 2:  # noqa: PLR2004
+            continue
         previous_positional = resolved
 
         if provided_id is not None:

@@ -49,24 +49,31 @@ class ChartKind(StrEnum):
     BAR = 'bar'
 
 
+_MIN_WIDTH_PX = 240
+_MIN_HEIGHT_PX = 120
+_BASE_FONT_PX = 13.0
+_FONT_REFERENCE_HEIGHT_PX = 360.0
+
+
 def render_timeseries_png(
     series: list[MetricSeries],
     *,
     title: str,
-    width_cells: int,
-    height_cells: int,
-    cell_px: tuple[int, int] = (8, 16),
+    width_px: int,
+    height_px: int,
     kind: ChartKind = ChartKind.LINE,
     dark: bool = True,
 ) -> bytes:
-    """Render metric series to PNG bytes sized to a terminal cell grid.
+    """Render metric series to PNG bytes at an exact pixel size.
+
+    Font sizes scale with the panel height so text stays legible whether the
+    panel is a small tile or a full-width chart.
 
     Args:
         series: One or more aligned series to draw.
         title: Chart title drawn at the top.
-        width_cells: Target width in terminal cells.
-        height_cells: Target height in terminal cells.
-        cell_px: Pixel size of one terminal cell as (width, height).
+        width_px: Target width in pixels (the widget's allocated pixel area).
+        height_px: Target height in pixels.
         kind: Line or bar rendering.
         dark: Use the dark palette when True, else the light palette.
 
@@ -74,17 +81,17 @@ def render_timeseries_png(
         PNG image bytes.
     """
     fg, bg, grid = (_DARK_FG, _DARK_BG, _DARK_GRID) if dark else (_LIGHT_FG, _LIGHT_BG, _LIGHT_GRID)
-    cell_w, cell_h = cell_px
-    fig_w_in = max(1.0, width_cells * cell_w / _DPI)
-    fig_h_in = max(1.0, height_cells * cell_h / _DPI)
+    width = max(_MIN_WIDTH_PX, width_px)
+    height = max(_MIN_HEIGHT_PX, height_px)
+    font_px = _BASE_FONT_PX * min(1.6, max(0.85, height / _FONT_REFERENCE_HEIGHT_PX))
 
-    fig = Figure(figsize=(fig_w_in, fig_h_in), dpi=_DPI, facecolor=bg)
+    fig = Figure(figsize=(width / _DPI, height / _DPI), dpi=_DPI, facecolor=bg)
     try:
         ax = fig.add_subplot(111)
         ax.set_facecolor(bg)
         _draw_series(ax, series, kind=kind)
-        _style_axes(ax, title=title, fg=fg, grid=grid, series_count=len(series))
-        fig.tight_layout(pad=0.6)
+        _style_axes(ax, title=title, fg=fg, grid=grid, series_count=len(series), font_px=font_px)
+        fig.tight_layout(pad=0.5)
         return _figure_to_png(fig)
     finally:
         plt.close(fig)
@@ -115,16 +122,17 @@ def _style_axes(
     fg: str,
     grid: str,
     series_count: int,
+    font_px: float,
 ) -> None:
-    ax.set_title(title, color=fg, fontsize=10, loc='left', pad=6)
-    ax.tick_params(colors=fg, labelsize=7)
+    ax.set_title(title, color=fg, fontsize=font_px + 1, loc='left', pad=6)
+    ax.tick_params(colors=fg, labelsize=font_px - 2)
     for spine in ax.spines.values():
         spine.set_color(grid)
     ax.grid(visible=True, color=grid, linewidth=0.5, alpha=0.6)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     ax.xaxis.set_major_locator(mdates.AutoDateLocator())
     if series_count > 1:
-        legend = ax.legend(loc='upper left', fontsize=6, framealpha=0.0, ncols=min(series_count, 3))
+        legend = ax.legend(loc='upper left', fontsize=font_px - 2, framealpha=0.0, ncols=min(series_count, 3))
         for text in legend.get_texts():
             text.set_color(fg)
 

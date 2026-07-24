@@ -92,6 +92,35 @@ def test_generated_ids_are_unique_and_valid_when_absent() -> None:
     assert all(query_id[0].isalpha() for query_id in ids)
 
 
+def test_ellipsis_copies_whole_previous_metric() -> None:
+    shorthand: list[list[Any]] = [
+        ['AWS/ApplicationELB', 'TargetResponseTime', 'TargetGroup', 'tg/abc', {'stat': 'p50', 'id': 'a'}],
+        ['...', {'stat': 'p90', 'id': 'b'}],
+    ]
+    queries = build_metric_data_queries(shorthand, widget_stat=None, widget_period=60, default_period=300)
+    p90 = _query_by_id(queries, 'b')['MetricStat']
+    assert p90['Metric']['Namespace'] == 'AWS/ApplicationELB'
+    assert p90['Metric']['MetricName'] == 'TargetResponseTime'
+    assert p90['Metric']['Dimensions'] == [{'Name': 'TargetGroup', 'Value': 'tg/abc'}]
+    assert p90['Stat'] == 'p90'
+
+
+def test_ellipsis_with_trailing_override_replaces_last_element() -> None:
+    shorthand: list[list[Any]] = [
+        ['NS', 'M1', 'Dim', 'old', {'id': 'a'}],
+        ['...', 'new', {'id': 'b'}],
+    ]
+    queries = build_metric_data_queries(shorthand, widget_stat='Sum', widget_period=60, default_period=300)
+    dims = _query_by_id(queries, 'b')['MetricStat']['Metric']['Dimensions']
+    assert dims == [{'Name': 'Dim', 'Value': 'new'}]
+
+
+def test_options_only_row_is_skipped() -> None:
+    shorthand: list[list[Any]] = [['NS', 'M1', {'id': 'a'}], [{'label': 'orphan'}]]
+    queries = build_metric_data_queries(shorthand, widget_stat='Sum', widget_period=60, default_period=300)
+    assert [query['Id'] for query in queries] == ['a']
+
+
 def test_ditto_without_previous_row_raises() -> None:
     with pytest.raises(ValueError, match='Ditto reference'):
         build_metric_data_queries([['.', 'M1', {'id': 'a'}]], widget_stat='Sum', widget_period=300, default_period=300)

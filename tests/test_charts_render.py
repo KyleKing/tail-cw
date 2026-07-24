@@ -22,22 +22,28 @@ def _series(count: int = 12) -> list[MetricSeries]:
 
 @pytest.mark.parametrize('kind', [ChartKind.LINE, ChartKind.BAR])
 def test_renders_valid_png(kind: ChartKind) -> None:
-    png = render_timeseries_png(_series(), title='t', width_cells=80, height_cells=24, kind=kind)
+    png = render_timeseries_png(_series(), title='t', width_px=800, height_px=400, kind=kind)
     assert png.startswith(_PNG_MAGIC)
 
 
-def test_dimensions_match_cell_grid() -> None:
-    png = render_timeseries_png(_series(), title='t', width_cells=80, height_cells=24, cell_px=(8, 16))
+def test_dimensions_match_requested_pixels() -> None:
+    png = render_timeseries_png(_series(), title='t', width_px=960, height_px=480)
     with Image.open(io.BytesIO(png)) as image:
-        assert image.size == (640, 384)
+        assert image.size == (960, 480)
+
+
+def test_tiny_size_clamps_to_minimum() -> None:
+    png = render_timeseries_png(_series(), title='t', width_px=10, height_px=10)
+    with Image.open(io.BytesIO(png)) as image:
+        assert image.size == (240, 120)
 
 
 def test_empty_series_still_renders() -> None:
-    png = render_timeseries_png([], title='empty', width_cells=40, height_cells=10)
+    png = render_timeseries_png([], title='empty', width_px=400, height_px=160)
     assert png.startswith(_PNG_MAGIC)
 
 
 def test_multiple_series_render_with_legend() -> None:
     series = [*_series(), MetricSeries(id='b', label='errs', timestamps=_series()[0].timestamps, values=[1.0] * 12)]
-    png = render_timeseries_png(series, title='two', width_cells=80, height_cells=24)
+    png = render_timeseries_png(series, title='two', width_px=800, height_px=400)
     assert png.startswith(_PNG_MAGIC)

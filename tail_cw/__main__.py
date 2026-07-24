@@ -13,12 +13,26 @@ from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.aws.live_tail import stream_live_tail
-from tail_cw.cli import FetchRequest, TailRequest, iter_tail_events, resolve_parquet_path, run_cli
+from tail_cw.aws.metrics import fetch_metric_data
+from tail_cw.cli import (
+    DashboardRequest,
+    FetchRequest,
+    TailRequest,
+    iter_tail_events,
+    resolve_parquet_path,
+    run_cli,
+)
 from tail_cw.config import TailCWConfig
 from tail_cw.tui.app import LogTailApp
+from tail_cw.tui.dashboard_app import DashboardApp
+
+if TYPE_CHECKING:
+    from tail_cw.aws.dashboards import Dashboard
+    from tail_cw.aws.metrics import MetricSeries
 
 
 def _run_tui(config: TailCWConfig, parquet_path: Path, request: FetchRequest) -> None:
@@ -45,10 +59,28 @@ def _run_tail_tui(config: TailCWConfig, request: TailRequest) -> None:
     app.run()
 
 
+def _run_dashboard_tui(config: TailCWConfig, dashboard: Dashboard, request: DashboardRequest) -> None:
+    def fetch_metrics(queries: Sequence[dict[str, object]], start: datetime, end: datetime) -> list[MetricSeries]:
+        return fetch_metric_data(queries, start, end, profile_name=request.profile, region_name=request.region)
+
+    def resolve_logs(log_group: str, start: datetime, end: datetime) -> Path | None:
+        log_request = FetchRequest(
+            log_group=log_group,
+            start_time=start,
+            end_time=end,
+            profile=request.profile,
+            region=request.region,
+        )
+        return resolve_parquet_path(log_request, config)
+
+    app = DashboardApp(dashboard, request, config, fetch_metrics=fetch_metrics, resolve_logs=resolve_logs)
+    app.run()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the tail-cw CLI and return the process exit code."""
     try:
-        return run_cli(argv, _run_tui, run_tail_tui=_run_tail_tui)
+        return run_cli(argv, _run_tui, run_tail_tui=_run_tail_tui, run_dashboard_tui=_run_dashboard_tui)
     except KeyboardInterrupt:
         return 0
     except Exception as err:
