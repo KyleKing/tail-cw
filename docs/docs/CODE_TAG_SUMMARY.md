@@ -1,11 +1,10 @@
 # Collected Code Tags
 
-| Type | Comment                                                       | Last Edit  | Source File            |
-|------|---------------------------------------------------------------|------------|------------------------|
-| TODO | Add example code here >                                       | 2025-10-28 | docs/README.md:14      |
-| TODO | Show an example (screenshots, terminal recording, etc.) > --> | 2025-10-28 | docs/README.md:21      |
-| TODO | Add CLI argument parsing for log group, time range, etc.      | 2025-10-29 | tail_cw/__main__.py:44 |
+| Type | Comment                                                         | Last Edit  | Source File                                                                                                                |
+|------|-----------------------------------------------------------------|------------|----------------------------------------------------------------------------------------------------------------------------|
+| TODO | [Replace with your example code]                                | 2026-07-05 | [docs/README.md:14](https://github.com/kyleking/tail-cw/blame/9dc12f93421c216558edb2e4a2b10969c5661e3a/docs/README.md#L14) |
+| TODO | [Add screenshots or terminal recording demonstrating usage] --> | 2026-07-05 | [docs/README.md:21](https://github.com/kyleking/tail-cw/blame/9dc12f93421c216558edb2e4a2b10969c5661e3a/docs/README.md#L21) |
 
-Found code tags for TODO (3)
+Found code tags for TODO (2)
 
-<!-- calcipy_skip_tags -->
+<!-- corallium_skip_tags -->
