@@ -85,10 +85,20 @@ Deliverables, in order:
 
 ### M3 (Avenue C): investigation tools
 
-- correlation-ID pivot: select a request/trace ID in any event, fan out a search across related log groups (builds on `query/trace.py`)
+- correlation-ID pivot: select a request/trace ID in any event, fan out a search across related log groups (builds on `query/trace.py`). VictoriaLogs proves this pattern with Grafana derived fields that jump from a `trace_id` in a log line to all related logs, so the design is sound; see [ADR 0007](../docs/docs/adr/0007-victorialogs-grafana-replacement-evaluation.md)
 - Logs Insights `pattern`/`diff` subcommand and TUI action for warning/error spelunking, with a scan-size estimate shown before running
 - time-bucketed histogram/sparkline of the current view for quick activity graphs
+- LogsQL-inspired query-engine features worth stealing (seen in the VictoriaLogs demo): surrounding-log context (`stream_context before N after N`), `stats by (field)` aggregation, and inline JSON field extraction (`unpack_json`) so structured fields are filterable without a regex
 - later: matcher hooks to auto-link events to Sentry/PostHog issues
+
+### Open question: is the custom stack the right vehicle? (added 2026-07-24)
+
+A parallel exploration weighed replacing tail-cw with VictoriaLogs, VictoriaTraces, and Grafana fed by a pull-based CloudWatch ingest (see `demo/` and [ADR 0007](../docs/docs/adr/0007-victorialogs-grafana-replacement-evaluation.md)). Two points bear on the roadmap:
+
+- Distributed tracing is a real gap. The founding use case (build a timeline across an API and its Kafka workers, explain a congestion root cause) is a span-based tracing problem, and tail-cw has none. The correlation-ID pivot at M3 is the closest we get. True tracing would be a large new subsystem
+- ADR 0007 sets a gate: do not build tracing into tail-cw until the replacement question resolves, because tracing is the largest piece of net-new code and the piece the candidate stack (VictoriaTraces over OTLP, Jaeger-compatible) most clearly already solves
+
+So no M5 tracing milestone is scheduled yet. If the evaluation keeps tail-cw (ADR 0007 options 1 or 3), tracing becomes its own milestone then.
 
 ### M4: CloudWatch dashboards and metric exploration (prioritized next, added 2026-07-24)
 

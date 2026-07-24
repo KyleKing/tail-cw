@@ -10,3 +10,4 @@ Decisions are numbered in the order they were accepted. Each record states the p
 | [0004](./0004-live-tail-via-startlivetail.md)            | Live tail via StartLiveTail              | Streaming wrapper, reconnects, ring-buffered rendering                                      |
 | [0005](./0005-dashboards-metrics-and-terminal-charts.md) | Dashboards, metrics, and terminal charts | GetDashboard import, GetMetricData translation, dive-to-logs (rendering superseded by 0006) |
 | [0006](./0006-dashboard-rendering-and-interaction.md)    | Dashboard rendering and interaction      | Why matplotlib/TGP failed, native plotext charts, no-scroll grid, command bar and filter    |
+| [0007](./0007-victorialogs-grafana-replacement-evaluation.md) | VictoriaLogs and Grafana replacement candidate | Open question on replacing the custom stack, tracing gap, LogsQL ideas, decision gate    |
