@@ -22,19 +22,17 @@ class CommandLine(Input):
     CommandLine {
         dock: bottom;
         height: 1;
-        border: none;
         padding: 0 1;
-        background: $panel;
+        border-left: thick $accent;
+        background: $accent 20%;
+        color: $text;
         display: none;
-    }
-    CommandLine:focus {
-        border: none;
     }
     """
 
     def __init__(self, *, completer: Completer) -> None:
         """Create the command line with a value completer."""
-        super().__init__(id='command_line')
+        super().__init__(id='command_line', placeholder=': run a command (Tab completes, Enter runs, Esc cancels)')
         self._completer = completer
         self._history: list[str] = []
         self._history_index = 0

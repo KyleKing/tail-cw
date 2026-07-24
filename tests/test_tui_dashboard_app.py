@@ -97,15 +97,16 @@ async def test_focus_mounts_a_native_plot_chart() -> None:
 
 
 @pytest.mark.asyncio
-async def test_space_toggles_focus_off() -> None:
+async def test_enter_focuses_and_escape_clears() -> None:
     dashboard = Dashboard(name='demo', widgets=[_metric('one'), _metric('two')])
     app = DashboardApp(dashboard, _request(), load_config(), fetch_metrics=lambda *_: _series(_request().start_time))
     async with app.run_test(size=(160, 48)) as pilot:
         await pilot.pause()
         assert app._focused == [0]
-        await pilot.press('space')  # toggle the already-focused selected cell off
+        await pilot.press('l')  # select the second cell
+        await pilot.press('enter')
         await pilot.pause()
-        assert app._focused == []
+        assert app._focused == [1]
         await pilot.press('escape')
         await pilot.pause()
         assert app._focused == []

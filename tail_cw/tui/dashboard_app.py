@@ -54,7 +54,6 @@ ResolveLogs = Callable[[str, datetime, datetime], Path | None]
 LogVolume = Callable[[str, datetime, datetime], list[float]]
 
 _DEFAULT_PERIOD = 300
-_MAX_FOCUS = 2
 _CELL_HEIGHT = 5
 _STAT_CYCLE = ('Average', 'Sum', 'Minimum', 'Maximum', 'p95')
 _PERIOD_CYCLE = (60, 300, 900, 3600, 21600)
@@ -202,10 +201,9 @@ class _Command:
 
 def _build_commands() -> dict[str, _Command]:
     return {
-        'add': _Command('Add a panel to the stage (matches by title)', ('<panel>',)),
         'dive': _Command('Open the logs behind the focused widget'),
         'filter': _Command('Show only panels matching terms (roles or title text); "all" resets', ()),
-        'focus': _Command('Focus one panel on the stage (matches by title)', ('<panel>',)),
+        'focus': _Command('Focus a panel on the stage (matches by title)', ('<panel>',)),
         'help': _Command('List the available commands'),
         'period': _Command('Set the period, in seconds, of the focused metric', tuple(str(p) for p in _PERIOD_CYCLE)),
         'range': _Command('Set the time window ending now', _RANGE_CHOICES),
@@ -279,7 +277,6 @@ class DashboardApp(App[None]):
         Binding('k', 'nav_up', 'Up'),
         Binding('l', 'nav_right', 'Right'),
         Binding('enter', 'promote', 'Focus'),
-        Binding('space', 'toggle_focus', 'Toggle'),
         Binding('escape', 'reset_focus', 'Clear'),
         Binding('s', 'cycle_stat', 'Stat'),
         Binding('p', 'cycle_period', 'Period'),
@@ -480,22 +477,11 @@ class DashboardApp(App[None]):
         self._move(-self._columns)
 
     def action_promote(self) -> None:
-        """Put the selected panel alone on the stage."""
+        """Put the selected panel on the stage."""
         panel = self._focused_panel()
         if panel is None:
             return
         self._focused = [panel.cell.index]
-        self._rebuild_stage()
-
-    def action_toggle_focus(self) -> None:
-        """Add the selected panel to the stage, or remove it if already there."""
-        panel = self._focused_panel()
-        if panel is None:
-            return
-        if panel.cell.index in self._focused:
-            self._focused.remove(panel.cell.index)
-        else:
-            self._focused = [*self._focused, panel.cell.index][-_MAX_FOCUS:]
         self._rebuild_stage()
 
     def action_reset_focus(self) -> None:
@@ -653,9 +639,7 @@ class DashboardApp(App[None]):
         argument = ' '.join(args)
         match name:
             case 'focus':
-                self._command_focus(argument, replace=True)
-            case 'add':
-                self._command_focus(argument, replace=False)
+                self._command_focus(argument)
             case 'reset':
                 self.action_reset_focus()
             case 'dive':
@@ -681,15 +665,12 @@ class DashboardApp(App[None]):
                 return panel
         return None
 
-    def _command_focus(self, argument: str, *, replace: bool) -> None:
+    def _command_focus(self, argument: str) -> None:
         panel = self._find_panel(argument)
         if panel is None:
             self.notify(f'No panel matching {argument!r}', severity='warning')
             return
-        if replace:
-            self._focused = [panel.cell.index]
-        elif panel.cell.index not in self._focused:
-            self._focused = [*self._focused, panel.cell.index][-_MAX_FOCUS:]
+        self._focused = [panel.cell.index]
         self._rebuild_stage()
 
     def _command_stat(self, argument: str) -> None:
