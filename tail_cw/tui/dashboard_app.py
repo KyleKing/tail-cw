@@ -17,16 +17,17 @@ import math
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar
 
 from rich.console import Group
 from rich.text import Text
+from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, VerticalScroll
-from textual.widgets import Footer, Header, Label, Markdown, Static
+from textual.widgets import Footer, Header, Input, Label, Markdown, Static
 
 from tail_cw.aws.dashboards import (
     AlarmWidget,
@@ -43,6 +44,7 @@ from tail_cw.charts.palette import role_color, series_color
 from tail_cw.charts.sparkline import ReduceMode, build_compact, sparkline_text
 from tail_cw.cli import DashboardRequest
 from tail_cw.config import TailCWConfig
+from tail_cw.tui.command_bar import CommandLine
 from tail_cw.tui.log_results import LogResultsScreen
 from tail_cw.tui.plot_widget import PlotChart
 
@@ -55,7 +57,10 @@ _MAX_FOCUS = 2
 _CELL_HEIGHT = 5
 _STAT_CYCLE = ('Average', 'Sum', 'Minimum', 'Maximum', 'p95')
 _PERIOD_CYCLE = (60, 300, 900, 3600, 21600)
+_RANGE_CHOICES = ('15m', '1h', '3h', '6h', '12h', '1d')
 _SOURCE_RE = re.compile(r"SOURCE\s+'([^']+)'")
+_DURATION_RE = re.compile(r'(\d+)([mhd])')
+_DURATION_UNITS = {'m': 'minutes', 'h': 'hours', 'd': 'days'}
 
 
 def resolve_log_group_for_widget(widget: Widget) -> str | None:
@@ -150,6 +155,32 @@ class _Panel:
     period_override: int | None = None
 
 
+@dataclass(frozen=True)
+class _Command:
+    summary: str
+    args: tuple[str, ...] = ()
+
+
+def _build_commands() -> dict[str, _Command]:
+    return {
+        'add': _Command('Add a panel to the stage (matches by title)', ('<panel>',)),
+        'dive': _Command('Open the logs behind the focused widget'),
+        'focus': _Command('Focus one panel on the stage (matches by title)', ('<panel>',)),
+        'help': _Command('List the available commands'),
+        'period': _Command('Set the period, in seconds, of the focused metric', tuple(str(p) for p in _PERIOD_CYCLE)),
+        'range': _Command('Set the time window ending now', _RANGE_CHOICES),
+        'reset': _Command('Clear the stage'),
+        'stat': _Command('Set the statistic of the focused metric', _STAT_CYCLE),
+    }
+
+
+def _duration(text: str) -> timedelta | None:
+    match = _DURATION_RE.fullmatch(text.strip())
+    if match is None:
+        return None
+    return timedelta(**{_DURATION_UNITS[match.group(2)]: int(match.group(1))})
+
+
 class DashboardApp(App[None]):
     """Renders one dashboard as a no-scroll grid with a focus-expand stage."""
 
@@ -196,6 +227,7 @@ class DashboardApp(App[None]):
         Binding('s', 'cycle_stat', 'Stat'),
         Binding('p', 'cycle_period', 'Period'),
         Binding('d', 'dive', 'Dive'),
+        Binding('colon', 'command', 'Command', key_display=':'),
     ]
 
     def __init__(
@@ -222,6 +254,7 @@ class DashboardApp(App[None]):
         self._panel_by_cell_id: dict[int, _Panel] = {}
         self._focused: list[int] = []
         self._columns = 1
+        self._commands = _build_commands()
 
     def compose(self) -> ComposeResult:
         """Build the header, the compact grid, the focus stage, and the status line.
@@ -239,6 +272,7 @@ class DashboardApp(App[None]):
                 yield cell
         yield Horizontal(id='stage')
         yield Label('', id='dash_status')
+        yield CommandLine(completer=self._complete_command)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -490,6 +524,116 @@ class DashboardApp(App[None]):
             return
         title = f'{log_group} · {start:%H:%M}-{end:%H:%M}'
         self.call_from_thread(self.push_screen, LogResultsScreen(parquet_path, self._config, title=title))
+
+    def action_command(self) -> None:
+        """Open the command line."""
+        self.query_one(CommandLine).open()
+
+    @on(Input.Submitted, '#command_line')
+    def _on_command(self, event: Input.Submitted) -> None:
+        event.stop()
+        line = self.query_one(CommandLine)
+        text = event.value.strip()
+        line.close()
+        if text:
+            line.remember(text)
+            self._run_command(text)
+        self._refocus_grid()
+
+    def _refocus_grid(self) -> None:
+        target = self._focused[0] if self._focused else 0
+        if self._panels:
+            self._panels[min(target, len(self._panels) - 1)].cell.focus()
+
+    def _complete_command(self, value: str) -> list[str]:
+        parts = value.split()
+        if not parts or (len(parts) == 1 and not value.endswith(' ')):
+            prefix = parts[0] if parts else ''
+            return [name for name in self._commands if name.startswith(prefix)]
+        name, command = parts[0], self._commands.get(parts[0])
+        if command is None:
+            return []
+        arg_prefix = parts[1] if len(parts) > 1 else ''
+        candidates = self._panel_titles() if command.args == ('<panel>',) else list(command.args)
+        return [f'{name} {candidate}' for candidate in candidates if candidate.lower().startswith(arg_prefix.lower())]
+
+    def _panel_titles(self) -> list[str]:
+        return [title for panel in self._panels if (title := getattr(panel.widget, 'title', ''))]
+
+    def _run_command(self, text: str) -> None:
+        name, *args = text.split()
+        argument = ' '.join(args)
+        match name:
+            case 'focus':
+                self._command_focus(argument, replace=True)
+            case 'add':
+                self._command_focus(argument, replace=False)
+            case 'reset':
+                self.action_reset_focus()
+            case 'dive':
+                self.action_dive()
+            case 'stat':
+                self._command_stat(argument)
+            case 'period':
+                self._command_period(argument)
+            case 'range':
+                self._command_range(argument)
+            case 'help':
+                self._command_help()
+            case _:
+                self.notify(f'Unknown command: {name}', severity='warning')
+
+    def _find_panel(self, substring: str) -> _Panel | None:
+        needle = substring.lower()
+        for panel in self._panels:
+            title = getattr(panel.widget, 'title', '') or ''
+            if needle in title.lower():
+                return panel
+        return None
+
+    def _command_focus(self, argument: str, *, replace: bool) -> None:
+        panel = self._find_panel(argument)
+        if panel is None:
+            self.notify(f'No panel matching {argument!r}', severity='warning')
+            return
+        if replace:
+            self._focused = [panel.cell.index]
+        elif panel.cell.index not in self._focused:
+            self._focused = [*self._focused, panel.cell.index][-_MAX_FOCUS:]
+        self._rebuild_stage()
+
+    def _command_stat(self, argument: str) -> None:
+        panel = self._focused_panel()
+        if panel is None or not isinstance(panel.widget, MetricWidget) or not argument:
+            self.notify('Focus a metric chart, then :stat <statistic>', severity='information')
+            return
+        panel.stat_override = argument
+        self._update_status(f'{panel.widget.title}: stat -> {argument}')
+        self._load_panel(panel)
+
+    def _command_period(self, argument: str) -> None:
+        panel = self._focused_panel()
+        if panel is None or not isinstance(panel.widget, MetricWidget) or not argument.isdigit():
+            self.notify('Focus a metric chart, then :period <seconds>', severity='information')
+            return
+        panel.period_override = int(argument)
+        self._update_status(f'{panel.widget.title}: period -> {argument}s')
+        self._load_panel(panel)
+
+    def _command_range(self, argument: str) -> None:
+        delta = _duration(argument)
+        if delta is None:
+            self.notify('Usage: :range <15m|1h|3h|6h|12h|1d>', severity='warning')
+            return
+        self._end = datetime.now(tz=UTC)
+        self._start = self._end - delta
+        self._update_status(f'window -> last {argument}')
+        self._load_all_metrics()
+        self._load_all_log_volumes()
+
+    def _command_help(self) -> None:
+        lines = [f':{name} — {command.summary}' for name, command in sorted(self._commands.items())]
+        self.notify('\n'.join(lines), title='Commands', timeout=12)
 
     def _update_status(self, message: str | None = None) -> None:
         window = f'{self._start:%Y-%m-%d %H:%M} -> {self._end:%H:%M} UTC'
