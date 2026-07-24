@@ -124,14 +124,19 @@ def build_compact(
 ) -> RenderableType:
     """Build the Rich renderable for a compact overview cell."""
     accent = role_color(title)
-    header = Text(title or '(untitled)', style=f'bold {accent}')
     if not series or not any(item.values for item in series):
-        return Group(header, Text('no data', style='dim'))
+        return Group(Text(title or '(untitled)', style=f'bold {accent}'), Text('no data', style='dim'))
+
+    latest = next((item.values[-1] for item in series if item.values), 0.0)
+    header = Text.assemble(
+        (title or '(untitled)', f'bold {accent}'),
+        ('  ', ''),
+        (f'{latest:,.4g}', 'bold'),
+    )
 
     if view == 'singleValue':
-        latest = next((item.values[-1] for item in series if item.values), 0.0)
         trend = sparkline_text(series[0].values, color=accent, width=width)
-        return Group(header, Text(f'{latest:,.2f}', style=f'bold {accent}'), trend)
+        return Group(header, trend)
 
     bars = view == 'bar'
     rows = reduce_rows(series, accent=accent, mode=reduce_mode, percentile=percentile)

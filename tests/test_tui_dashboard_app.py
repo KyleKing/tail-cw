@@ -76,32 +76,40 @@ async def test_app_creates_cells_and_fetches_metrics() -> None:
 
 
 @pytest.mark.asyncio
-async def test_promote_and_reset_toggle_the_stage() -> None:
+async def test_first_metric_is_focused_by_default() -> None:
+    dashboard = Dashboard(name='demo', widgets=[TextWidget(layout=WidgetLayout(), markdown='# hi'), _metric('one')])
+    app = DashboardApp(dashboard, _request(), load_config(), fetch_metrics=lambda *_: _series(_request().start_time))
+    async with app.run_test(size=(160, 48)) as pilot:
+        await pilot.pause()
+        assert app._focused == [1]  # the metric, not the text widget
+
+
+@pytest.mark.asyncio
+async def test_space_toggles_focus_off() -> None:
     dashboard = Dashboard(name='demo', widgets=[_metric('one'), _metric('two')])
     app = DashboardApp(dashboard, _request(), load_config(), fetch_metrics=lambda *_: _series(_request().start_time))
     async with app.run_test(size=(160, 48)) as pilot:
         await pilot.pause()
-        await pilot.press('enter')
+        assert app._focused == [0]
+        await pilot.press('space')  # toggle the already-focused selected cell off
         await pilot.pause()
-        assert len(app._focused) == 1
+        assert app._focused == []
         await pilot.press('escape')
         await pilot.pause()
         assert app._focused == []
 
 
 @pytest.mark.asyncio
-async def test_pan_shifts_window_and_refetches() -> None:
-    dashboard = Dashboard(name='demo', widgets=[_metric('one')])
-    calls: list[tuple[datetime, datetime]] = []
-
-    def fetch(_queries: object, start: datetime, end: datetime) -> list[MetricSeries]:
-        calls.append((start, end))
-        return _series(start)
-
-    request = _request()
-    app = DashboardApp(dashboard, request, load_config(), fetch_metrics=fetch)
+async def test_hjkl_navigates_the_grid() -> None:
+    dashboard = Dashboard(name='demo', widgets=[_metric(str(i)) for i in range(6)])
+    app = DashboardApp(dashboard, _request(), load_config(), fetch_metrics=lambda *_: _series(_request().start_time))
     async with app.run_test(size=(160, 48)) as pilot:
+        await pilot.pause()
+        app._panels[0].cell.focus()
         await pilot.pause()
         await pilot.press('l')
         await pilot.pause()
-        assert calls[-1][0] > request.start_time
+        assert app._focused_panel() is app._panels[1]
+        await pilot.press('j')  # down one row (3 columns)
+        await pilot.pause()
+        assert app._focused_panel() is app._panels[4]
