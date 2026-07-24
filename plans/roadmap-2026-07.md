@@ -90,8 +90,24 @@ Deliverables, in order:
 - time-bucketed histogram/sparkline of the current view for quick activity graphs
 - later: matcher hooks to auto-link events to Sentry/PostHog issues
 
+### M4: CloudWatch dashboards and metric exploration (prioritized next, added 2026-07-24)
+
+Goal: read the dashboards and metrics you already keep in the console from the terminal, reshape a chart with keyboard-driven inputs, and jump from any chart straight into the logs behind it.
+
+Built next, ahead of finishing M2 and M3, because bringing dashboard insight into the terminal is the current need. It depends only on the cache and query engine (both shipped in M0), not on discovery.
+
+Three features:
+
+- import and render: `tail-cw dashboards` lists dashboards via `ListDashboards`, `tail-cw dashboard <name>` pulls the exact console JSON via `GetDashboard` and lays its widget grid (x/y/w/h) onto a Textual `Grid`. Metric widgets render as charts, log widgets run their Logs Insights query through the existing engine, text widgets render markdown. A tail-cw-native TOML dashboard produces the same typed model, so saved explorations and console imports share one render path
+- metric panels: translate the console `metrics[]` shorthand (positional `.` ditto references, trailing option objects, and metric-math `expression` rows) into `GetMetricData` `MetricDataQueries`, one batched call per panel. Results cache to disk keyed by query hash and window, which cuts latency and API-request count on refresh (the dollar cost is already negligible, see the cost note below)
+- explore and dive: the focused chart takes keyboard inputs to change period, statistic, and time range (vim-style range motions, no mouse), re-rendering only that chart. From a chart or log widget, one key opens the existing log table filtered to the widget's time window and log group (or its Insights query), reusing the M3 pivot mechanism rather than inventing a new one
+
+Charts render as matplotlib PNGs shown inline through the Kitty graphics protocol (`textual-image`), with a braille fallback for terminals without image support. Verified against the account on 2026-07-24: `GetDashboard` on `irm-prod-main` returned 43 widgets (28 metric, 8 text, 6 log, 1 alarm) with metric-math and Logs Insights bodies intact, and a `GetMetricData` call with a metric-math availability expression returned in about 0.7s.
+
+Cost note: `GetMetricData` and `GetDashboard` bill at $0.01 per 1,000 requests, so a full 28-widget dashboard refresh costs well under a tenth of a cent. Caching metric results is for latency and request-quota headroom, not for saving money. Logs Insights (used by log widgets) stays the one paid path to watch at ~$0.005 per GB scanned, so log-widget queries show a scan estimate before running, same as the M3 rule.
+
 ## Sequencing rationale
 
-M1 before M2 because dev-loop tailing is the daily driver. M2 before M3 because pivot and pattern tools need group discovery to be usable. Each milestone ships CLI + tests green (ruff, mypy, pyright, pytest) before the next starts.
+M1 before M2 because dev-loop tailing is the daily driver. M2 before M3 because pivot and pattern tools need group discovery to be usable. M4 (dashboards) jumped ahead of M2 and M3 on 2026-07-24 because terminal dashboard insight became the priority, and it needs only the M0 cache and query engine. Each milestone ships CLI + tests green (ruff, mypy, pyright, pytest) before the next starts.
 
 M0 and M1 shipped 2026-07-05. M2 was then elevated from "a groups listing" to navigation-first UX: requiring exact group names is the single largest friction left (it is also the gap every fzf-wrapper workaround exists to paper over), and pattern resolution plus the browser make `tail` and `fetch` usable from a cold start. `DescribeLogGroups` is free, so none of this adds cost pressure.

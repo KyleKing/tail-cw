@@ -46,3 +46,4 @@ Design principles adopted for all milestones:
 - Each milestone ships with ruff/mypy/pyright/pytest green before the next starts
 - The roadmap lives in `plans/roadmap-2026-07.md`; this ADR records why the order is what it is
 - Live tail shipped before discovery, so until M2 the user must know log group names (acceptable for the dev-loop persona)
+- On 2026-07-24 a dashboards-and-metrics milestone (M4, see ADR 0005) was prioritized ahead of the remaining M2 discovery and M3 investigation work, because reading console dashboards and exploring metrics from the terminal became the current need. It depends only on the M0 cache and query engine, so the reorder costs nothing structurally

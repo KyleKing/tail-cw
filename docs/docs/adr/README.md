@@ -8,3 +8,4 @@ Decisions are numbered in the order they were accepted. Each record states the p
 | [0002](./0002-cli-first-layered-architecture.md)         | CLI-first layered architecture         | argparse subcommands, injected TUI runner, NDJSON agent surface     |
 | [0003](./0003-parquet-cache-and-local-query-engine.md)   | Parquet cache and local query engine   | Cost model, cache keys, dual DuckDB/Polars backend                  |
 | [0004](./0004-live-tail-via-startlivetail.md)            | Live tail via StartLiveTail            | Streaming wrapper, reconnects, ring-buffered rendering              |
+| [0005](./0005-dashboards-metrics-and-terminal-charts.md) | Dashboards, metrics, and terminal charts | GetDashboard import, GetMetricData translation, image-protocol charts, dive-to-logs |
