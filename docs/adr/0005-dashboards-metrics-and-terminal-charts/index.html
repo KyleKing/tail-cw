@@ -12,31 +12,31 @@
         <meta name="author" content="Kyle King">
       
       
-        <link rel="canonical" href="https://tail-cw.kyleking.me/docs/CONFIGURATION/">
+        <link rel="canonical" href="https://tail-cw.kyleking.me/docs/adr/0005-dashboards-metrics-and-terminal-charts/">
       
       
-        <link rel="prev" href="../CODE_TAG_SUMMARY/">
+        <link rel="prev" href="../0004-live-tail-via-startlivetail/">
       
       
-        <link rel="next" href="../DEVELOPER_GUIDE/">
+        <link rel="next" href="../0006-dashboard-rendering-and-interaction/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Configuration Guide - tail_cw</title>
+        <title>ADR 0005: Dashboards, metrics, and terminal charts - tail_cw</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,11 +55,11 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../_styles/mkdocstrings.css">
+      <link rel="stylesheet" href="../../../_styles/mkdocstrings.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -84,7 +84,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#configuration-guide" class="md-skip">
+        <a href="#adr-0005-dashboards-metrics-and-terminal-charts" class="md-skip">
           Skip to content
         </a>
       
@@ -100,7 +100,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="tail_cw" class="md-header__button md-logo" aria-label="tail_cw" data-md-component="logo">
+    <a href="../../.." title="tail_cw" class="md-header__button md-logo" aria-label="tail_cw" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Configuration Guide
+              ADR 0005: Dashboards, metrics, and terminal charts
             
           </span>
         </div>
@@ -222,7 +222,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="tail_cw" class="md-nav__button md-logo" aria-label="tail_cw" data-md-component="logo">
+    <a href="../../.." title="tail_cw" class="md-nav__button md-logo" aria-label="tail_cw" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -252,7 +252,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -328,7 +328,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../CHANGELOG/" class="md-nav__link">
+      <a href="../../CHANGELOG/" class="md-nav__link">
         
   
   
@@ -356,7 +356,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../CODE_TAG_SUMMARY/" class="md-nav__link">
+      <a href="../../CODE_TAG_SUMMARY/" class="md-nav__link">
         
   
   
@@ -364,6 +364,279 @@
     
   
     Collected Code Tags
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CONFIGURATION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEVELOPER_GUIDE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Developer Notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../STYLE_GUIDE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Personal Style Guides
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2_6" id="__nav_2_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adr
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Adr
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Decision Records
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0001-product-scope-and-milestone-sequencing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0001: Product scope and milestone sequencing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0002-cli-first-layered-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0002: CLI-first layered architecture with an injected TUI runner
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0003-parquet-cache-and-local-query-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0003: Local Parquet cache with a dual DuckDB/Polars query engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0004-live-tail-via-startlivetail/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0004: Live tail via StartLiveTail with a ring-buffered TUI
   
 
     
@@ -400,7 +673,7 @@
   <span class="md-ellipsis">
     
   
-    Configuration Guide
+    ADR 0005: Dashboards, metrics, and terminal charts
   
 
     
@@ -418,7 +691,7 @@
   <span class="md-ellipsis">
     
   
-    Configuration Guide
+    ADR 0005: Dashboards, metrics, and terminal charts
   
 
     
@@ -444,10 +717,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
+  <a href="#problem" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Overview
+        Problem
       
     </span>
   </a>
@@ -455,10 +728,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#configuration-file-location" class="md-nav__link">
+  <a href="#options-considered" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configuration File Location
+        Options considered
       
     </span>
   </a>
@@ -466,10 +739,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#configuration-sections" class="md-nav__link">
+  <a href="#decision" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configuration Sections
+        Decision
       
     </span>
   </a>
@@ -477,10 +750,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#example-configuration" class="md-nav__link">
+  <a href="#cost-model" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Example Configuration
+        Cost model
       
     </span>
   </a>
@@ -488,43 +761,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#creating-a-configuration-file" class="md-nav__link">
+  <a href="#tradeoffs-and-consequences" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Creating a Configuration File
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#performance-tuning" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Performance Tuning
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Troubleshooting
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#advanced-topics" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Advanced Topics
+        Tradeoffs and consequences
       
     </span>
   </a>
@@ -547,278 +787,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../DEVELOPER_GUIDE/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Developer Notes
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../STYLE_GUIDE/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Personal Style Guides
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_6" >
-        
-          
-          <label class="md-nav__link" for="__nav_2_6" id="__nav_2_6_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Adr
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_2_6">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Adr
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../adr/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Architecture Decision Records
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../adr/0001-product-scope-and-milestone-sequencing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ADR 0001: Product scope and milestone sequencing
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../adr/0002-cli-first-layered-architecture/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ADR 0002: CLI-first layered architecture with an injected TUI runner
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../adr/0003-parquet-cache-and-local-query-engine/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ADR 0003: Local Parquet cache with a dual DuckDB/Polars query engine
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../adr/0004-live-tail-via-startlivetail/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ADR 0004: Live tail via StartLiveTail with a ring-buffered TUI
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../adr/0005-dashboards-metrics-and-terminal-charts/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ADR 0005: Dashboards, metrics, and terminal charts
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../adr/0006-dashboard-rendering-and-interaction/" class="md-nav__link">
+      <a href="../0006-dashboard-rendering-and-interaction/" class="md-nav__link">
         
   
   
@@ -846,7 +815,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0007-victorialogs-grafana-replacement-evaluation/" class="md-nav__link">
+      <a href="../0007-victorialogs-grafana-replacement-evaluation/" class="md-nav__link">
         
   
   
@@ -983,7 +952,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/cli/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/cli/" class="md-nav__link">
         
   
   
@@ -1011,7 +980,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/demo/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/demo/" class="md-nav__link">
         
   
   
@@ -1086,7 +1055,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/aws/client/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/client/" class="md-nav__link">
         
   
   
@@ -1114,7 +1083,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/aws/dashboards/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/dashboards/" class="md-nav__link">
         
   
   
@@ -1142,7 +1111,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/aws/live_tail/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/live_tail/" class="md-nav__link">
         
   
   
@@ -1170,7 +1139,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/aws/metrics/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/metrics/" class="md-nav__link">
         
   
   
@@ -1253,7 +1222,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/cache/storage/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/cache/storage/" class="md-nav__link">
         
   
   
@@ -1336,7 +1305,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/charts/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/charts/" class="md-nav__link">
         
   
   
@@ -1364,7 +1333,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/charts/palette/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/charts/palette/" class="md-nav__link">
         
   
   
@@ -1392,7 +1361,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/charts/sparkline/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/charts/sparkline/" class="md-nav__link">
         
   
   
@@ -1475,7 +1444,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/config/config/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/config/config/" class="md-nav__link">
         
   
   
@@ -1558,7 +1527,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/query/engine/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/engine/" class="md-nav__link">
         
   
   
@@ -1586,7 +1555,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/query/parser/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/parser/" class="md-nav__link">
         
   
   
@@ -1614,7 +1583,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/query/trace/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/trace/" class="md-nav__link">
         
   
   
@@ -1697,7 +1666,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/tui/app/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/app/" class="md-nav__link">
         
   
   
@@ -1725,7 +1694,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/tui/command_bar/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/command_bar/" class="md-nav__link">
         
   
   
@@ -1753,7 +1722,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/tui/dashboard_app/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/dashboard_app/" class="md-nav__link">
         
   
   
@@ -1781,7 +1750,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/tui/log_results/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/log_results/" class="md-nav__link">
         
   
   
@@ -1809,7 +1778,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/tui/log_viewer/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/log_viewer/" class="md-nav__link">
         
   
   
@@ -1837,7 +1806,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/tui/plot_widget/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/plot_widget/" class="md-nav__link">
         
   
   
@@ -1865,7 +1834,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/tui/record_detail/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/record_detail/" class="md-nav__link">
         
   
   
@@ -1893,7 +1862,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/tail_cw/tui/trace_viewer/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/trace_viewer/" class="md-nav__link">
         
   
   
@@ -1964,10 +1933,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
+  <a href="#problem" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Overview
+        Problem
       
     </span>
   </a>
@@ -1975,10 +1944,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#configuration-file-location" class="md-nav__link">
+  <a href="#options-considered" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configuration File Location
+        Options considered
       
     </span>
   </a>
@@ -1986,10 +1955,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#configuration-sections" class="md-nav__link">
+  <a href="#decision" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configuration Sections
+        Decision
       
     </span>
   </a>
@@ -1997,10 +1966,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#example-configuration" class="md-nav__link">
+  <a href="#cost-model" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Example Configuration
+        Cost model
       
     </span>
   </a>
@@ -2008,43 +1977,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#creating-a-configuration-file" class="md-nav__link">
+  <a href="#tradeoffs-and-consequences" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Creating a Configuration File
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#performance-tuning" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Performance Tuning
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Troubleshooting
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#advanced-topics" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Advanced Topics
+        Tradeoffs and consequences
       
     </span>
   </a>
@@ -2071,91 +2007,68 @@
   
 
 
-<h1 id="configuration-guide">Configuration Guide<a class="headerlink" href="#configuration-guide" title="Permanent link">⚓︎</a></h1>
-<p>This guide explains how to customise tail-cw using its TOML-based configuration system. The application automatically loads configuration from an XDG-compliant location on start-up, allowing you to tune performance and user experience without modifying source code.</p>
-<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">⚓︎</a></h2>
-<ul>
-<li>Configuration files use standard TOML syntax.</li>
-<li>Settings are organised into sections that mirror the internal dataclasses.</li>
-<li>All keys are optional; unspecified values fall back to safe defaults.</li>
-<li>A helper API is available via <code>tail_cw.config</code> for programmatic access.</li>
-</ul>
-<h2 id="configuration-file-location">Configuration File Location<a class="headerlink" href="#configuration-file-location" title="Permanent link">⚓︎</a></h2>
-<table>
-<thead>
-<tr>
-<th>Platform</th>
-<th>Default path</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Linux / macOS</td>
-<td><code>~/.config/tail-cw/config.toml</code></td>
-</tr>
-<tr>
-<td>Windows</td>
-<td><code>%APPDATA%\tail-cw\config.toml</code></td>
-</tr>
-</tbody>
-</table>
-<p>Use <code>tail_cw.config.get_default_config_path()</code> to resolve the exact location on the current platform. The helper will create the containing directory if it does not exist.</p>
-<p>Cache files created by the application are stored separately in the XDG cache directory (<code>~/.cache/tail-cw</code> on Linux/macOS, <code>%LOCALAPPDATA%\tail-cw</code> on Windows). Retrieve this location programmatically via <code>tail_cw.config.get_default_cache_dir()</code>.</p>
-<h2 id="configuration-sections">Configuration Sections<a class="headerlink" href="#configuration-sections" title="Permanent link">⚓︎</a></h2>
-<ul>
-<li><code>[cache]</code> controls cache storage limits and eviction behaviour.</li>
-<li><code>[parquet]</code> tunes the Parquet writer used when materialising NDJSON logs.</li>
-<li><code>[tui]</code> exposes pagination and search limits for the Textual UI.</li>
-<li><code>[trace]</code> lists the field names inspected when extracting distributed trace identifiers.</li>
-</ul>
-<h2 id="example-configuration">Example Configuration<a class="headerlink" href="#example-configuration" title="Permanent link">⚓︎</a></h2>
-<div class="highlight"><pre><span></span><code><span class="linenos" data-linenos=" 1 "></span><span class="k">[cache]</span>
-<span class="linenos" data-linenos=" 2 "></span><span class="c1"># cache_dir = &quot;/custom/cache/path&quot;</span>
-<span class="linenos" data-linenos=" 3 "></span><span class="n">size_limit_mb</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1024</span>
-<span class="linenos" data-linenos=" 4 "></span><span class="n">default_ttl_seconds</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">3600</span><span class="w">                </span><span class="c1"># 1 hour</span>
-<span class="linenos" data-linenos=" 5 "></span><span class="n">eviction_policy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;least-recently-stored&quot;</span>
-<span class="linenos" data-linenos=" 6 "></span>
-<span class="linenos" data-linenos=" 7 "></span><span class="k">[parquet]</span>
-<span class="linenos" data-linenos=" 8 "></span><span class="n">row_group_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">200000</span>
-<span class="linenos" data-linenos=" 9 "></span><span class="n">compression_level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span>
-<span class="linenos" data-linenos="10 "></span><span class="n">infer_schema_length</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">200</span>
-<span class="linenos" data-linenos="11 "></span>
-<span class="linenos" data-linenos="12 "></span><span class="k">[tui]</span>
-<span class="linenos" data-linenos="13 "></span><span class="n">chunk_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">4000</span>
-<span class="linenos" data-linenos="14 "></span><span class="n">chunk_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">500</span>
-<span class="linenos" data-linenos="15 "></span><span class="n">initial_load_limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1500</span>
-<span class="linenos" data-linenos="16 "></span><span class="n">live_buffer_limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10000</span>
-<span class="linenos" data-linenos="17 "></span><span class="n">search_limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20000</span>
-<span class="linenos" data-linenos="18 "></span><span class="n">trace_limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">150</span>
-<span class="linenos" data-linenos="19 "></span>
-<span class="linenos" data-linenos="20 "></span><span class="k">[trace]</span>
-<span class="linenos" data-linenos="21 "></span><span class="n">trace_id_fields</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;trace_id&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;traceId&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;context.trace_id&quot;</span><span class="p">]</span>
-</code></pre></div>
-<h2 id="creating-a-configuration-file">Creating a Configuration File<a class="headerlink" href="#creating-a-configuration-file" title="Permanent link">⚓︎</a></h2>
+<h1 id="adr-0005-dashboards-metrics-and-terminal-charts">ADR 0005: Dashboards, metrics, and terminal charts<a class="headerlink" href="#adr-0005-dashboards-metrics-and-terminal-charts" title="Permanent link">⚓︎</a></h1>
+<p>Date: 2026-07-24 Status: Accepted (rendering superseded by ADR 0006)</p>
+<p>The import, translation, and cost decisions below still hold. The rendering choice (matplotlib PNGs over the Kitty graphics protocol) did not survive contact with a real terminal and was replaced by native plotext rendering; see <a href="../0006-dashboard-rendering-and-interaction/">ADR 0006</a>.</p>
+<h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">⚓︎</a></h2>
+<p>tail-cw could tail and search logs but could not answer &ldquo;how is the service doing right now&rdquo; without leaving the terminal for the CloudWatch console. The need is threefold: read the dashboards already built in the console, reshape a metric chart with quick inputs the way Honeycomb or Sumologic let you, and jump from any chart into the logs behind it. The console does all three but pulls you out of the terminal, and every existing terminal tool does none of them.</p>
+<h2 id="options-considered">Options considered<a class="headerlink" href="#options-considered" title="Permanent link">⚓︎</a></h2>
+<p>Surface for the charts and exploration:</p>
 <ol>
-<li>Run <code>from tail_cw.config import create_default_config_file; create_default_config_file()</code> in a Python REPL to scaffold a documented template in the default location.</li>
-<li>Alternatively, copy the example configuration above into the default path and adjust values as needed.</li>
+<li>Extend the Textual TUI: reuse the M0 cache, the query engine, and the M3 trace-pivot pattern; stay terminal-native. Terminal charts cannot do smooth mouse brushing, so exploration becomes keyboard-driven parameter editing</li>
+<li>A local web app with a JavaScript charting library: real mouse brushing and drag-zoom, but it discards the terminal thesis and most of the existing TUI, and adds a frontend stack</li>
+<li>Adopt Grafana&rsquo;s CloudWatch data source: it already does dashboards, metric explore, and log panels</li>
 </ol>
-<p>The helper performs an atomic write and sets restrictive permissions on POSIX systems to keep credentials and preferences private.</p>
-<h2 id="performance-tuning">Performance Tuning<a class="headerlink" href="#performance-tuning" title="Permanent link">⚓︎</a></h2>
+<p>Chart rendering inside the TUI:</p>
+<ol>
+<li>Braille or cell plotting (plotext, textual-plot, plotille): pure text, works over SSH, light, but no legends, dual axes, or anti-aliasing</li>
+<li>Real image rendering: draw a matplotlib PNG and show it inline through a terminal graphics protocol (Kitty TGP or Sixel), with a text fallback</li>
+</ol>
+<p>Dashboard source of truth:</p>
+<ol>
+<li><code>GetDashboard</code> only: mirror the console exactly, always in sync, but no saved local explorations</li>
+<li>tail-cw-native config only: full control and offline, but you redeclare what the console already holds</li>
+<li>Both, behind one typed model</li>
+</ol>
+<h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">⚓︎</a></h2>
+<p>Extend the TUI (option 1). If the answer were a web app, Grafana is the honest choice, so a web pivot would only build a worse Grafana. The goal is the best terminal tool for a narrow set of daily tasks, so exploration is keyboard-first with vim-style range motions and no mouse dependency.</p>
+<p>Charts render as matplotlib PNGs shown inline through the Kitty graphics protocol via <code>textual-image</code>, with a braille fallback for terminals without image support. matplotlib is heavy (about 30 MB) but battle-tested and actively maintained, unlike plotext, which has had no meaningful release since late 2023. numpy is already a dependency. Rendering is a pure function of the series and style inputs, so PNGs cache by input hash and only the focused chart re-renders on a keypress, which keeps the roughly 100 ms per-chart cost off the critical path.</p>
+<p>Dashboards come from both sources behind one typed widget model (option 3), so a console import and a saved tail-cw exploration share the same render path.</p>
+<div class="highlight"><pre><span></span><code><span class="linenos" data-linenos=" 1 "></span>sequenceDiagram
+<span class="linenos" data-linenos=" 2 "></span>    participant CLI as cli (dashboard cmd)
+<span class="linenos" data-linenos=" 3 "></span>    participant DASH as aws.dashboards
+<span class="linenos" data-linenos=" 4 "></span>    participant MET as aws.metrics
+<span class="linenos" data-linenos=" 5 "></span>    participant CW as CloudWatch
+<span class="linenos" data-linenos=" 6 "></span>    participant TUI as DashboardScreen
+<span class="linenos" data-linenos=" 7 "></span>    CLI-&gt;&gt;DASH: GetDashboard(name)
+<span class="linenos" data-linenos=" 8 "></span>    DASH-&gt;&gt;CW: GetDashboard
+<span class="linenos" data-linenos=" 9 "></span>    CW--&gt;&gt;DASH: widgets[] (metric/log/text/alarm + x/y/w/h)
+<span class="linenos" data-linenos="10 "></span>    DASH--&gt;&gt;CLI: typed Dashboard model
+<span class="linenos" data-linenos="11 "></span>    CLI-&gt;&gt;TUI: render grid
+<span class="linenos" data-linenos="12 "></span>    loop per metric widget
+<span class="linenos" data-linenos="13 "></span>        TUI-&gt;&gt;MET: metrics[] shorthand -&gt; MetricDataQueries
+<span class="linenos" data-linenos="14 "></span>        MET-&gt;&gt;CW: GetMetricData (batched, cached)
+<span class="linenos" data-linenos="15 "></span>        CW--&gt;&gt;MET: time series
+<span class="linenos" data-linenos="16 "></span>        MET--&gt;&gt;TUI: MetricSeries -&gt; matplotlib PNG -&gt; TGP
+<span class="linenos" data-linenos="17 "></span>    end
+<span class="linenos" data-linenos="18 "></span>    Note over TUI: focus a chart -&gt; edit period/stat/range -&gt; re-render that chart
+<span class="linenos" data-linenos="19 "></span>    Note over TUI: dive -&gt; existing log table filtered to widget window + group/query
+</code></pre></div>
+<p>API facts verified against account 760682031284 (us-east-1) on 2026-07-24:</p>
 <ul>
-<li><strong>Row group size</strong>: larger values improve Parquet scan throughput at the cost of additional memory during writes. Reduce the value when writing on memory constrained machines.</li>
-<li><strong>Compression level</strong>: higher ZSTD levels produce smaller files but increase CPU usage. Level 3 is a balanced default; try values between 1 and 6 when iterating.</li>
-<li><strong>Schema inference length</strong>: increase when NDJSON payloads contain highly variable structures so late fields are discovered during conversion.</li>
-<li><strong>TUI chunk threshold / size</strong>: lower thresholds trigger incremental loading sooner, which can help when working with deep scrollback buffers.</li>
-<li><strong>Live buffer limit</strong>: bounds memory during <code>tail-cw tail</code> sessions; older events are evicted from the in-memory ring buffer once the limit is reached. Increase it for longer in-session scrollback, decrease it on memory constrained machines.</li>
-<li><strong>Search limit</strong>: limit the number of rows collected from Parquet queries to keep the interface responsive when exploring large datasets.</li>
+<li><code>GetDashboard</code> on <code>irm-prod-main</code> returned 43 widgets (28 metric, 8 text, 6 log, 1 alarm). Metric widgets carry the console <code>metrics[]</code> shorthand: raw rows shaped <code>[Namespace, MetricName, DimName, DimVal, ..., {options}]</code>, positional <code>.</code> ditto references to the previous row, and metric-math <code>expression</code> rows. Log widgets carry a Logs Insights <code>query</code> string with a <code>SOURCE '...'</code> clause. Text widgets carry markdown</li>
+<li><code>GetMetricData</code> with a metric-math availability expression (<code>IF(m_total &gt; 0, (1 - FILL(m_5xx,0)/m_total)*100, 100)</code>) returned 36 datapoints in about 0.7s. It batches up to 500 metrics per request and supports metric math, so one call serves a whole panel</li>
+<li>the main build risk is the shorthand-to-<code>MetricDataQueries</code> translation, which is fiddly (positional ditto resolution against the previous row) but well defined</li>
 </ul>
-<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">⚓︎</a></h2>
+<h2 id="cost-model">Cost model<a class="headerlink" href="#cost-model" title="Permanent link">⚓︎</a></h2>
+<p><code>GetMetricData</code> and <code>GetDashboard</code> bill at $0.01 per 1,000 requests (verified against <a href="https://aws.amazon.com/cloudwatch/pricing/">CloudWatch pricing</a> on 2026-07-24), so a full 28-widget dashboard refresh costs well under a tenth of a cent. Earlier notes that metric fetches &ldquo;cost money per call and need the same disk-cache treatment as log fetches&rdquo; overstated it. Metric results still cache, for latency and request-quota headroom, not to save money. The one paid path to watch is Logs Insights behind log widgets at about $0.005 per GB scanned, so a log widget shows a scan estimate before it runs, matching the M3 rule.</p>
+<h2 id="tradeoffs-and-consequences">Tradeoffs and consequences<a class="headerlink" href="#tradeoffs-and-consequences" title="Permanent link">⚓︎</a></h2>
 <ul>
-<li><strong>Invalid TOML</strong>: errors indicate a parsing problem. Validate the file with a TOML linter or remove recent edits.</li>
-<li><strong>Permission errors</strong>: ensure the user running tail-cw can read the config directory and write to the cache directory.</li>
-<li><strong>Cache directory missing</strong>: override <code>cache_dir</code> in the <code>[cache]</code> section or verify that <code>get_default_cache_dir()</code> points to a writable location.</li>
-</ul>
-<h2 id="advanced-topics">Advanced Topics<a class="headerlink" href="#advanced-topics" title="Permanent link">⚓︎</a></h2>
-<ul>
-<li><strong>Environment overrides</strong>: future releases may allow environment variables to override individual settings for temporary tuning.</li>
-<li><strong>Profiles</strong>: support for multiple configuration profiles (e.g. per project) is under consideration. Until then, script switching by copying template files into place before launching tail-cw.</li>
+<li>matplotlib and textual-image land in a new <code>charts</code> dependency group, kept out of the <code>--json</code> and headless paths so agents never pay the import cost</li>
+<li>image-protocol rendering depends on terminal support; the braille fallback keeps the tool usable over plain SSH, at lower fidelity</li>
+<li>the shorthand translator will not cover every exotic console option on day one (per-metric <code>region</code>, <code>accountId</code>, anomaly-detection bands); unsupported rows render as a labeled gap rather than failing the whole panel</li>
+<li>dive-to-logs and the log-volume histogram reuse the existing log table and query engine, so the new interaction is a <code>Screen</code> plus a filter hand-off, not a new paradigm</li>
+<li>follows ADR 0002: the fetch and translate steps are pure pipeline functions with <code>--json</code> output, and the TUI is one view over them</li>
 </ul>
 
 
@@ -2206,14 +2119,14 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["toc.autohide"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["toc.autohide"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://cdnjs.cloudflare.com/ajax/libs/tablesort/5.6.0/tablesort.min.js"></script>
       
-        <script src="../../_javascript/tables.js"></script>
+        <script src="../../../_javascript/tables.js"></script>
       
     
   </body>
