@@ -58,6 +58,8 @@ Goal: `tail-cw tail <group...>` streams via `StartLiveTail`; the existing filter
 
 Goal: the user should never need to know an exact log group name. Every entry point either resolves a loose pattern or drops into an interactive browser.
 
+Mostly delivered on 2026-07-24 by the single-TUI work ([ADR 0008](../docs/docs/adr/0008-single-interactive-tui.md)), which took the browser as the app's home view rather than as a fifth subcommand. Shipped: the resolution ladder (`resolve_group_pattern`), `DescribeLogGroups` metadata, the browser with `/` filtering and ten-group multi-select, and a preview pane that goes further than this plan asked by clustering each group's distinct message shapes instead of dumping the last N lines. Still open from this milestone: recents in local state, and named presets (`tail-cw tail @api`).
+
 How comparable tools handle this, and what we take from each:
 
 | Tool                 | Group selection UX                                                         | Takeaway                                                     |

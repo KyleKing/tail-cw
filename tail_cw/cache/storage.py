@@ -15,6 +15,8 @@ from collections.abc import Callable, Iterable, Iterator
 from datetime import datetime
 from operator import itemgetter
 from pathlib import Path
+from threading import Lock
+from typing import Any
 
 import polars as pl
 from diskcache import Cache
@@ -94,6 +96,45 @@ def generate_cache_key(
     if profile_name is not None:
         canonical['profile_name'] = profile_name
 
+    return _hash_canonical(canonical, prefix='cache:v1')
+
+
+def generate_preview_cache_key(
+    log_group: str,
+    *,
+    window_seconds: int,
+    region_name: str | None = None,
+    profile_name: str | None = None,
+) -> str:
+    """Generate a deterministic cache key for a log group preview.
+
+    Args:
+        log_group: CloudWatch log group name.
+        window_seconds: Length of the sampled window in seconds. Only the length
+            matters, so a rolling window keeps hitting the same entry until its
+            TTL expires.
+        region_name: Optional AWS region name.
+        profile_name: Optional AWS profile name. Included so previews fetched
+            with different profiles do not collide.
+
+    Returns:
+        Cache key in format: preview:v1:{base64url_digest}
+    """
+    canonical: dict[str, Any] = {
+        'log_group': log_group,
+        'window_seconds': window_seconds,
+    }
+
+    if region_name is not None:
+        canonical['region_name'] = region_name
+
+    if profile_name is not None:
+        canonical['profile_name'] = profile_name
+
+    return _hash_canonical(canonical, prefix='preview:v1')
+
+
+def _hash_canonical(canonical: dict[str, Any], *, prefix: str) -> str:
     # Create stable JSON representation
     json_bytes = json.dumps(
         canonical,
@@ -111,7 +152,7 @@ def generate_cache_key(
     # Encode as base64url (URL-safe, no padding)
     digest_b64 = base64.urlsafe_b64encode(hasher.digest()).decode('ascii').rstrip('=')
 
-    return f'cache:v1:{digest_b64}'
+    return f'{prefix}:{digest_b64}'
 
 
 def is_jsonl_message(message: str) -> bool:
@@ -450,6 +491,8 @@ class LogCache:
         self._compression_level = compression_level
         self._row_group_size = row_group_size
         self._infer_schema_length = infer_schema_length
+        self._inflight: set[Path] = set()
+        self._inflight_lock = Lock()
 
         # Create directories
         self._cache_dir.mkdir(parents=True, exist_ok=True)
@@ -478,10 +521,15 @@ class LogCache:
                 path_str = str(metadata_value[0]) if isinstance(metadata_value, tuple) else str(metadata_value)
                 referenced_files.add(Path(path_str))
 
-        # Delete orphaned Parquet files
+        # Delete orphaned Parquet files, sparing writes that have not yet
+        # registered their metadata. Without this a concurrent fan-out deletes
+        # another thread's file mid-write.
+        with self._inflight_lock:
+            inflight = set(self._inflight)
+
         cleaned_count = 0
         for parquet_file in self._parquet_dir.glob('*.parquet'):
-            if parquet_file not in referenced_files:
+            if parquet_file not in referenced_files and parquet_file not in inflight:
                 parquet_file.unlink()
                 cleaned_count += 1
 
@@ -517,9 +565,14 @@ class LogCache:
 
         # Delete oldest files until under limit
         evicted_count = 0
+        with self._inflight_lock:
+            inflight = set(self._inflight)
+
         for parquet_file, size, _ctime in parquet_files:
             if total_size <= self._size_limit_bytes:
                 break
+            if parquet_file in inflight:
+                continue
 
             # Find and delete corresponding metadata entries
             for cache_key in list(self._metadata.iterkeys()):  # type: ignore[attr-defined]
@@ -579,24 +632,30 @@ class LogCache:
             infer_schema_length if infer_schema_length is not None else self._infer_schema_length
         )
 
-        # Write events to Parquet
-        stats = write_log_events_to_parquet(
-            log_events,
-            parquet_path,
-            compression_level=effective_compression,
-            row_group_size=effective_row_group_size,
-            infer_schema_length=effective_infer_schema_length,
-            progress_callback=progress_callback,
-        )
+        with self._inflight_lock:
+            self._inflight.add(parquet_path)
+        try:
+            # Write events to Parquet
+            stats = write_log_events_to_parquet(
+                log_events,
+                parquet_path,
+                compression_level=effective_compression,
+                row_group_size=effective_row_group_size,
+                infer_schema_length=effective_infer_schema_length,
+                progress_callback=progress_callback,
+            )
 
-        # Store metadata in DiskCache with file size for efficient size tracking
-        ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
-        metadata_value = (str(parquet_path), stats['file_size_bytes'])
-        self._metadata.set(
-            cache_key,
-            metadata_value,
-            expire=ttl,
-        )
+            # Store metadata in DiskCache with file size for efficient size tracking
+            ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
+            metadata_value = (str(parquet_path), stats['file_size_bytes'])
+            self._metadata.set(
+                cache_key,
+                metadata_value,
+                expire=ttl,
+            )
+        finally:
+            with self._inflight_lock:
+                self._inflight.discard(parquet_path)
 
         # Trigger DiskCache expiration and culling to enforce TTL and size limits
         self._metadata.expire()
@@ -646,6 +705,37 @@ class LogCache:
 
         # Read and return events
         return read_parquet_to_log_events(parquet_path)
+
+    def read_payload(self, cache_key: str) -> dict[str, Any] | None:
+        """Read a JSON-serializable payload previously stored under a cache key.
+
+        Args:
+            cache_key: Cache key to read from.
+
+        Returns:
+            The stored mapping, or None when the key is missing, expired, or
+            holds a value that is not a mapping (an older payload format).
+        """
+        value = self._metadata.get(cache_key)
+
+        return value if isinstance(value, dict) else None
+
+    def write_payload(
+        self,
+        cache_key: str,
+        payload: dict[str, Any],
+        ttl_seconds: int | None = None,
+    ) -> None:
+        """Store a JSON-serializable payload under a cache key.
+
+        Args:
+            cache_key: Cache key to store under.
+            payload: Mapping of JSON-serializable values.
+            ttl_seconds: TTL for this entry in seconds. If None, uses
+                default_ttl_seconds.
+        """
+        ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
+        self._metadata.set(cache_key, payload, expire=ttl)
 
     def exists(self, cache_key: str) -> bool:
         """Check if a cache key exists.

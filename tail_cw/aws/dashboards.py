@@ -9,6 +9,8 @@ path and the tail-cw-native config path. Unknown widget types are preserved as
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -17,6 +19,10 @@ from tail_cw.aws.client import build_client
 
 _DEFAULT_WIDTH = 6
 _DEFAULT_HEIGHT = 6
+_SOURCE_RE = re.compile(r"SOURCE\s+'([^']+)'")
+_DIMENSION_NAMES = frozenset(
+    {'ApiId', 'ClusterName', 'DBInstanceIdentifier', 'FunctionName', 'LoadBalancer', 'ServiceName'}
+)
 
 
 @dataclass(frozen=True)
@@ -97,6 +103,24 @@ class DashboardSummary:
     name: str
     arn: str
     size: int
+
+
+@dataclass(frozen=True)
+class DiveCandidate:
+    """A log group a widget might be backed by, with the evidence for it.
+
+    Attributes:
+        log_group: Candidate group name, conventional rather than confirmed.
+        reason: Short human explanation, such as ``'SOURCE clause'``.
+        exists: Whether the name was found in the account's log groups.
+        event_count: Events in the widget's window, or None when the group does
+            not exist and was never counted.
+    """
+
+    log_group: str
+    reason: str
+    exists: bool
+    event_count: int | None
 
 
 def _layout(widget: dict[str, Any]) -> WidgetLayout:
@@ -188,6 +212,92 @@ def _widget_to_dict(widget: Widget) -> dict[str, Any]:
 def dashboard_to_dict(dashboard: Dashboard) -> dict[str, Any]:
     """Serialize a parsed dashboard to a JSON-friendly dict for ``--json`` output."""
     return {'name': dashboard.name, 'widgets': [_widget_to_dict(widget) for widget in dashboard.widgets]}
+
+
+def _row_dimensions(row: Sequence[Any]) -> dict[str, str]:
+    dimensions: dict[str, str] = {}
+    for index, element in enumerate(row):
+        if not isinstance(element, str) or element not in _DIMENSION_NAMES:
+            continue
+        if index + 1 < len(row) and isinstance(row[index + 1], str):
+            dimensions.setdefault(element, row[index + 1])
+    return dimensions
+
+
+def _metric_row_candidates(row: Sequence[Any]) -> list[tuple[str, str]]:
+    dimensions = _row_dimensions(row)
+    candidates: list[tuple[str, str]] = []
+    if function_name := dimensions.get('FunctionName'):
+        candidates.append((f'/aws/lambda/{function_name}', 'FunctionName dimension'))
+    cluster = dimensions.get('ClusterName')
+    service = dimensions.get('ServiceName')
+    if cluster and service:
+        candidates.append((f'/ecs/{cluster}/{service}', 'ClusterName and ServiceName dimensions'))
+    if cluster:
+        candidates.append((f'/ecs/{cluster}', 'ClusterName dimension'))
+    if api_id := dimensions.get('ApiId'):
+        candidates.append((f'/aws/apigateway/{api_id}', 'ApiId dimension'))
+    if instance := dimensions.get('DBInstanceIdentifier'):
+        candidates.append((f'/aws/rds/instance/{instance}/postgresql', 'DBInstanceIdentifier dimension'))
+    if load_balancer := dimensions.get('LoadBalancer'):
+        candidates.append((f'/aws/elb/{load_balancer}', 'LoadBalancer dimension'))
+    return candidates
+
+
+def candidate_log_groups(widget: Widget) -> list[tuple[str, str]]:
+    """Rank the log groups a widget could dive into as ``(log_group, reason)``.
+
+    Insights ``SOURCE`` clauses are exact and rank first; metric dimensions map to
+    conventional group names, which may not exist. Names repeat across metric rows,
+    so duplicates drop and the first rank wins.
+    """
+    match widget:
+        case LogWidget():
+            found = [(name, 'SOURCE clause') for name in _SOURCE_RE.findall(widget.query)]
+        case MetricWidget():
+            found = [candidate for row in widget.metrics for candidate in _metric_row_candidates(row)]
+        case _:
+            found = []
+    reasons: dict[str, str] = {}
+    for log_group, reason in found:
+        reasons.setdefault(log_group, reason)
+    return list(reasons.items())
+
+
+def _sort_key(rank: int, candidate: DiveCandidate) -> tuple[int, int, int]:
+    match candidate:
+        case DiveCandidate(exists=False):
+            return (2, 0, rank)
+        case DiveCandidate(event_count=int() as count) if count > 0:
+            return (0, -count, rank)
+        case _:
+            return (1, 0, rank)
+
+
+def rank_dive_candidates(
+    widget: Widget,
+    *,
+    known_groups: Collection[str],
+    count_events: Callable[[str], int],
+) -> list[DiveCandidate]:
+    """Resolve and order dive candidates for a widget.
+
+    Groups missing from ``known_groups`` are kept but sorted last, because the
+    guessed name is still the explanation of what tail-cw looked for. Existing
+    groups sort first by descending ``count_events`` result, which is called only
+    for groups that exist.
+    """
+    candidates = [
+        DiveCandidate(
+            log_group=log_group,
+            reason=reason,
+            exists=log_group in known_groups,
+            event_count=count_events(log_group) if log_group in known_groups else None,
+        )
+        for log_group, reason in candidate_log_groups(widget)
+    ]
+    ordered = sorted(enumerate(candidates), key=lambda pair: _sort_key(pair[0], pair[1]))
+    return [candidate for _, candidate in ordered]
 
 
 def load_dashboard_file(path: Path) -> Dashboard:

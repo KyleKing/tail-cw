@@ -47,11 +47,11 @@ wait
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VLOGS_URL` | `http://localhost:9428` | VictoriaLogs endpoint |
-| `AWS_PROFILE` | (default) | AWS CLI profile to use |
-| `AWS_REGION` | (from config) | AWS region for CloudWatch |
+| Variable      | Default                 | Description               |
+| ------------- | ----------------------- | ------------------------- |
+| `VLOGS_URL`   | `http://localhost:9428` | VictoriaLogs endpoint     |
+| `AWS_PROFILE` | (default)               | AWS CLI profile to use    |
+| `AWS_REGION`  | (from config)           | AWS region for CloudWatch |
 
 ## LogsQL Query Examples
 
@@ -126,8 +126,8 @@ VictoriaLogs ◄──────► VMUI (built-in)
 Grafana is pre-configured with the VictoriaLogs datasource. To use it:
 
 1. Open http://localhost:3000 (admin/admin)
-2. Go to Explore → Select "VictoriaLogs"
-3. Enter LogsQL queries
+1. Go to Explore → Select "VictoriaLogs"
+1. Enter LogsQL queries
 
 ### Optional: Trace-to-Logs Correlation
 
@@ -145,14 +145,14 @@ docker compose down -v
 
 ## Comparison with tail-cw
 
-| Aspect | This Demo | tail-cw |
-|--------|-----------|---------|
-| Lines of code | ~100 (shell) | ~2000 (Python) |
-| Dependencies | Docker only | pyarrow, duckdb, polars, textual |
-| Query language | LogsQL | CloudWatch filters + SQL |
-| UI | VMUI / Grafana | Custom Textual TUI |
-| Persistence | VictoriaLogs (7 day retention) | Parquet cache |
-| Setup time | ~2 minutes | Python environment |
+| Aspect         | This Demo                      | tail-cw                          |
+| -------------- | ------------------------------ | -------------------------------- |
+| Lines of code  | ~100 (shell)                   | ~2000 (Python)                   |
+| Dependencies   | Docker only                    | pyarrow, duckdb, polars, textual |
+| Query language | LogsQL                         | CloudWatch filters + SQL         |
+| UI             | VMUI / Grafana                 | Custom Textual TUI               |
+| Persistence    | VictoriaLogs (7 day retention) | Parquet cache                    |
+| Setup time     | ~2 minutes                     | Python environment               |
 
 ## Troubleshooting
 

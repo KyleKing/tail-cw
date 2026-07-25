@@ -14,6 +14,7 @@ from tail_cw.query.engine import (
     benchmark_backends,
     query_parquet_file,
     query_parquet_file_to_log_events,
+    query_parquet_files_to_log_events,
 )
 from tail_cw.query.parser import (
     FilterNode,
@@ -516,6 +517,75 @@ def test_query_parquet_file_to_log_events(fix_test_cache):
         assert isinstance(result, LogEvent)
         assert result.log_group is not None
         assert result.message is not None
+
+
+def _write_group_parquet(output_path: Path, log_group: str, minutes: list[int]) -> list[LogEvent]:
+    base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+    events = [
+        _make_log_event(
+            log_group=log_group,
+            timestamp=base_time + timedelta(minutes=minute),
+            message=f'{log_group} at {minute}',
+            event_id=f'{log_group}-{minute}',
+        )
+        for minute in minutes
+    ]
+    write_log_events_to_parquet(events, output_path)
+    return events
+
+
+def test_query_parquet_files_merges_groups_by_timestamp(fix_test_cache):
+    """Events from several groups interleave in timestamp order."""
+    first = fix_test_cache / 'merge_a.parquet'
+    second = fix_test_cache / 'merge_b.parquet'
+    _write_group_parquet(first, '/aws/lambda/a', [0, 2, 4])
+    _write_group_parquet(second, '/aws/lambda/b', [1, 3, 5])
+
+    results = list(query_parquet_files_to_log_events([first, second]))
+
+    assert [event.timestamp for event in results] == sorted(event.timestamp for event in results)
+    assert [event.log_group for event in results] == [
+        '/aws/lambda/a',
+        '/aws/lambda/b',
+        '/aws/lambda/a',
+        '/aws/lambda/b',
+        '/aws/lambda/a',
+        '/aws/lambda/b',
+    ]
+
+
+def test_query_parquet_files_limit_caps_merged_output(fix_test_cache):
+    """The limit bounds the merged stream, not each file separately."""
+    first = fix_test_cache / 'merge_limit_a.parquet'
+    second = fix_test_cache / 'merge_limit_b.parquet'
+    _write_group_parquet(first, '/aws/lambda/a', [0, 2, 4])
+    _write_group_parquet(second, '/aws/lambda/b', [1, 3, 5])
+
+    results = list(query_parquet_files_to_log_events([first, second], limit=3))
+
+    assert len(results) == 3
+    assert [event.log_group for event in results] == ['/aws/lambda/a', '/aws/lambda/b', '/aws/lambda/a']
+
+
+def test_query_parquet_files_applies_filter_to_every_file(fix_test_cache):
+    """A filter narrows each file before the merge."""
+    first = fix_test_cache / 'merge_filter_a.parquet'
+    second = fix_test_cache / 'merge_filter_b.parquet'
+    _write_group_parquet(first, '/aws/lambda/a', [0, 2])
+    _write_group_parquet(second, '/aws/lambda/b', [1, 3])
+
+    results = list(query_parquet_files_to_log_events([first, second], parse_filter_pattern('/aws/lambda/b')))
+
+    assert {event.log_group for event in results} == {'/aws/lambda/b'}
+
+
+def test_query_parquet_files_single_and_empty_inputs(fix_test_cache):
+    """One path behaves like the single-file reader and no paths yields nothing."""
+    only = fix_test_cache / 'merge_single.parquet'
+    _write_group_parquet(only, '/aws/lambda/a', [0, 1])
+
+    assert len(list(query_parquet_files_to_log_events([only]))) == 2
+    assert list(query_parquet_files_to_log_events([])) == []
 
 
 def test_query_parquet_file_auto_backend(fix_test_cache):

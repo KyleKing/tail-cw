@@ -1,82 +1,56 @@
-"""Textual app that renders a CloudWatch dashboard in the terminal.
+"""The dashboard view: one CloudWatch dashboard as a no-scroll grid.
 
-The dashboard never scrolls. Every widget shows as a compact, color-coded cell
-in a fit-to-screen grid (Rich sparklines). Focusing a metric promotes it to a
-full plotext chart on a stage above the grid; a second focus gives a two-up;
-reset returns to the even grid. Charts are drawn with native terminal cells, no
-graphics protocol, so nothing ghosts. Diving from a chart or log widget opens
-the existing log table for that window and log group.
+Every widget shows as a compact, color-coded cell in a fit-to-screen grid (Rich
+sparklines). Focusing a metric promotes it to a full plotext chart on a stage
+above the grid, ``:add`` gives a two-up, and reset returns to the even grid.
+Charts are drawn with native terminal cells, no graphics protocol, so nothing
+ghosts. Diving from a chart or log widget ranks the log groups behind the widget
+and asks which one to open.
 
-The app depends only on injected callables for AWS access so it can be driven
-headless in tests with no network.
+The screen reaches AWS only through the shell's injected services, so it can be
+driven headless with no network.
 """
 
 from __future__ import annotations
 
 import math
-import re
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 from typing import Any, ClassVar
 
 from rich.console import Group
 from rich.text import Text
-from textual import on
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
-from textual.screen import ModalScreen
-from textual.widgets import Footer, Header, Input, Label, Markdown, Static
+from textual.widgets import Label, Markdown, Static
 
 from tail_cw.aws.dashboards import (
     AlarmWidget,
     Dashboard,
+    DiveCandidate,
     LogWidget,
     MetricWidget,
     TextWidget,
     UnknownWidget,
     Widget,
+    candidate_log_groups,
+    rank_dive_candidates,
 )
 from tail_cw.aws.metrics import MetricSeries, build_metric_data_queries
 from tail_cw.charts import ChartKind
 from tail_cw.charts.palette import MetricRole, role_color, role_for, series_color
 from tail_cw.charts.sparkline import ReduceMode, build_compact, sparkline_text
-from tail_cw.cli import DashboardRequest
-from tail_cw.config import TailCWConfig
-from tail_cw.tui.command_bar import CommandLine
-from tail_cw.tui.log_results import LogResultsScreen
+from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.plot_widget import PlotChart
-
-FetchMetrics = Callable[[Sequence[dict[str, object]], datetime, datetime], list[MetricSeries]]
-ResolveLogs = Callable[[str, datetime, datetime], Path | None]
-LogVolume = Callable[[str, datetime, datetime], list[float]]
+from tail_cw.tui.shell import ShellCommand, ShellScreen
 
 _DEFAULT_PERIOD = 300
 _CELL_HEIGHT = 5
+_MAX_STAGED = 2
 _STAT_CYCLE = ('Average', 'Sum', 'Minimum', 'Maximum', 'p95')
 _PERIOD_CYCLE = (60, 300, 900, 3600, 21600)
-_RANGE_CHOICES = ('15m', '1h', '3h', '6h', '12h', '1d')
-_SOURCE_RE = re.compile(r"SOURCE\s+'([^']+)'")
-_DURATION_RE = re.compile(r'(\d+)([mhd])')
-_DURATION_UNITS = {'m': 'minutes', 'h': 'hours', 'd': 'days'}
-
-
-def resolve_log_group_for_widget(widget: Widget) -> str | None:
-    """Best-effort log group to dive into for a widget, or None when unknown."""
-    match widget:
-        case LogWidget():
-            found = _SOURCE_RE.search(widget.query)
-            return found.group(1) if found else None
-        case MetricWidget():
-            for row in widget.metrics:
-                for index, element in enumerate(row):
-                    if element == 'FunctionName' and index + 1 < len(row):
-                        return f'/aws/lambda/{row[index + 1]}'
-            return None
-        case _:
-            return None
 
 
 def _grid_dimensions(count: int) -> tuple[int, int]:
@@ -84,6 +58,37 @@ def _grid_dimensions(count: int) -> tuple[int, int]:
         return 1, 1
     columns = 3 if count <= 9 else 4  # noqa: PLR2004
     return columns, math.ceil(count / columns)
+
+
+def _panel_matches(widget: Widget, terms: Sequence[str]) -> bool:
+    """True when any term names the widget's role or appears in its title."""
+    title = (getattr(widget, 'title', '') or '').lower()
+    role = role_for(title)
+    role_name = role.value if isinstance(role, MetricRole) else ''
+    return any(term.lower() == role_name or term.lower() in title for term in terms)
+
+
+def _series_colors(series: list[MetricSeries]) -> list[str]:
+    return [series_color(index) for index in range(len(series))]
+
+
+def _widget_source(widget: Widget) -> str | None:
+    candidates = candidate_log_groups(widget)
+    return candidates[0][0] if candidates else None
+
+
+def _full_content(widget: Widget) -> Static | Markdown:
+    match widget:
+        case LogWidget():
+            accent = role_color(widget.title or 'logs')
+            return Static(f'[bold {accent}]{widget.title or "Logs"}[/]\n\n{widget.query}')
+        case TextWidget():
+            return Markdown(widget.markdown)
+        case AlarmWidget():
+            names = '\n'.join(alarm.rsplit(':', 1)[-1] for alarm in widget.alarms) or '(no alarms)'
+            return Static(f'[bold]{widget.title or "Alarms"}[/]\n\n{names}')
+        case _:
+            return Static('[dim]Nothing to expand[/]')
 
 
 class CompactPanel(Static):
@@ -146,44 +151,6 @@ class CompactPanel(Static):
         )
 
 
-class WhichKeyScreen(ModalScreen[None]):
-    """A dismissable reference of key bindings and ``:`` commands."""
-
-    DEFAULT_CSS = """
-    WhichKeyScreen {
-        align: center middle;
-        background: $background 60%;
-    }
-    WhichKeyScreen > Static {
-        width: auto;
-        max-width: 80%;
-        height: auto;
-        padding: 1 2;
-        border: round $accent;
-        background: $panel;
-    }
-    """
-
-    BINDINGS: ClassVar[Sequence[Binding]] = [Binding('escape,comma,q,question_mark', 'dismiss', 'Close')]  # type: ignore[assignment]
-
-    def __init__(self, keys: list[tuple[str, str]], commands: list[tuple[str, str]]) -> None:
-        """Show the given key bindings and command summaries."""
-        super().__init__()
-        self._keys = keys
-        self._commands = commands
-
-    def compose(self) -> ComposeResult:
-        """Render the reference panel.
-
-        Yields:
-            A single Static holding the keys-and-commands reference.
-        """
-        key_lines = '\n'.join(f'  [b]{key:<8}[/] {description}' for key, description in self._keys)
-        command_lines = '\n'.join(f'  [b]:{name:<7}[/] {summary}' for name, summary in self._commands)
-        body = f'[b]Keys[/]\n{key_lines}\n\n[b]Commands[/]\n{command_lines}\n\n[dim]esc to close[/]'
-        yield Static(body)
-
-
 @dataclass
 class _Panel:
     widget: Widget
@@ -193,45 +160,11 @@ class _Panel:
     period_override: int | None = None
 
 
-@dataclass(frozen=True)
-class _Command:
-    summary: str
-    args: tuple[str, ...] = ()
-
-
-def _build_commands() -> dict[str, _Command]:
-    return {
-        'dive': _Command('Open the logs behind the focused widget'),
-        'filter': _Command('Show only panels matching terms (roles or title text); "all" resets', ()),
-        'focus': _Command('Focus a panel on the stage (matches by title)', ('<panel>',)),
-        'help': _Command('List the available commands'),
-        'period': _Command('Set the period, in seconds, of the focused metric', tuple(str(p) for p in _PERIOD_CYCLE)),
-        'range': _Command('Set the time window ending now', _RANGE_CHOICES),
-        'reset': _Command('Clear the stage'),
-        'stat': _Command('Set the statistic of the focused metric', _STAT_CYCLE),
-    }
-
-
-def _panel_matches(widget: Widget, terms: list[str]) -> bool:
-    """True when any term names the widget's role or appears in its title."""
-    title = (getattr(widget, 'title', '') or '').lower()
-    role = role_for(title)
-    role_name = role.value if isinstance(role, MetricRole) else ''
-    return any(term.lower() == role_name or term.lower() in title for term in terms)
-
-
-def _duration(text: str) -> timedelta | None:
-    match = _DURATION_RE.fullmatch(text.strip())
-    if match is None:
-        return None
-    return timedelta(**{_DURATION_UNITS[match.group(2)]: int(match.group(1))})
-
-
-class DashboardApp(App[None]):
+class DashboardScreen(ShellScreen):
     """Renders one dashboard as a no-scroll grid with a focus-expand stage."""
 
-    CSS = """
-    Screen {
+    DEFAULT_CSS = """
+    DashboardScreen {
         scrollbar-size: 0 0;
     }
     #grid {
@@ -270,81 +203,80 @@ class DashboardApp(App[None]):
     }
     """
 
-    BINDINGS: ClassVar[Sequence[Binding]] = [  # type: ignore[assignment]
-        Binding('q', 'quit', 'Quit'),
+    BINDINGS: ClassVar[Sequence[Binding]] = [
         Binding('h', 'nav_left', 'Left'),
         Binding('j', 'nav_down', 'Down'),
         Binding('k', 'nav_up', 'Up'),
         Binding('l', 'nav_right', 'Right'),
         Binding('enter', 'promote', 'Focus'),
-        Binding('escape', 'reset_focus', 'Clear'),
+        Binding('escape', 'reset_focus', 'Clear the stage, else back'),
         Binding('s', 'cycle_stat', 'Stat'),
         Binding('p', 'cycle_period', 'Period'),
         Binding('d', 'dive', 'Dive'),
-        Binding('colon', 'command', 'Command', key_display=':'),
-        Binding('comma', 'which_key', 'Keys', key_display=','),
     ]
 
-    def __init__(
-        self,
-        dashboard: Dashboard,
-        request: DashboardRequest,
-        config: TailCWConfig,
-        *,
-        fetch_metrics: FetchMetrics,
-        resolve_logs: ResolveLogs | None = None,
-        log_volume: LogVolume | None = None,
-    ) -> None:
-        """Store the dashboard, its metric window, and the injected AWS callables."""
+    def __init__(self, dashboard_name: str) -> None:
+        """Name the dashboard to load once the screen mounts."""
         super().__init__()
-        self.title = f'Dashboard: {dashboard.name}'
-        self._dashboard = dashboard
-        self._config = config
-        self._fetch_metrics = fetch_metrics
-        self._resolve_logs = resolve_logs
-        self._log_volume = log_volume
-        self._start = request.start_time
-        self._end = request.end_time
+        self.dashboard_name = dashboard_name
         self._panels: list[_Panel] = []
         self._panel_by_cell_id: dict[int, _Panel] = {}
-        self._focused: list[int] = []
+        self._staged: list[int] = []
         self._hidden: set[int] = set()
         self._columns = 1
-        self._commands = _build_commands()
 
-    def compose(self) -> ComposeResult:
-        """Build the header, the compact grid, the focus stage, and the status line.
+    def compose_content(self) -> ComposeResult:
+        """Build the compact grid, the focus stage, and the status line.
 
         Yields:
-            The header, the grid container, the stage container, a status label, and the footer.
+            The (initially empty) grid container, the stage container, and a status label.
         """
-        yield Header(show_clock=True)
-        with Container(id='grid'):
-            for index, widget in enumerate(self._dashboard.widgets):
-                cell = CompactPanel(index, widget)
-                panel = _Panel(widget=widget, cell=cell)
-                self._panels.append(panel)
-                self._panel_by_cell_id[id(cell)] = panel
-                yield cell
+        yield Container(id='grid')
         yield Horizontal(id='stage')
-        yield Label('', id='dash_status')
-        yield CommandLine(completer=self._complete_command)
-        yield Footer()
+        yield Label(f'Loading {self.dashboard_name}...', id='dash_status')
 
     def on_mount(self) -> None:
-        """Size the grid, render fixed cells, fetch metrics, and focus a chart by default."""
+        """Draw the breadcrumb and load the dashboard off the message loop."""
+        super().on_mount()
+        self.run_worker(self._load_dashboard, name='dashboard_load', group='dashboard_load', thread=True)
+
+    def _load_dashboard(self) -> None:
+        load = self.shell.services.load_dashboard
+        if load is None:
+            self.app.call_from_thread(self._show_status, 'no dashboard pipeline wired')
+            return
+        try:
+            dashboard = load(self.dashboard_name)
+        except Exception as err:
+            self.app.call_from_thread(self._show_status, f'load failed: {err}')
+            return
+        self.app.call_from_thread(self.build_grid, dashboard)
+
+    def _show_status(self, message: str) -> None:
+        self.query_one('#dash_status', Label).update(message)
+
+    def build_grid(self, dashboard: Dashboard) -> None:
+        """Mount one cell per widget, then start every fetch the grid needs."""
+        grid = self.query_one('#grid', Container)
+        cells = []
+        for index, widget in enumerate(dashboard.widgets):
+            cell = CompactPanel(index, widget)
+            panel = _Panel(widget=widget, cell=cell)
+            self._panels.append(panel)
+            self._panel_by_cell_id[id(cell)] = panel
+            cells.append(cell)
+        grid.mount(*cells)
         self._resize_grid()
         for panel in self._panels:
             self._render_fixed_cell(panel)
         default = next((panel.cell.index for panel in self._panels if isinstance(panel.widget, MetricWidget)), None)
         if default is not None:
-            self._focused = [default]
+            self._staged = [default]
         self._rebuild_stage()
         self._update_status()
         self._load_all_metrics()
         self._load_all_log_volumes()
-        if self._panels:
-            self._panels[0].cell.focus()
+        self.restore_focus()
 
     def _resize_grid(self) -> None:
         visible = max(1, len(self._panels) - len(self._hidden))
@@ -357,6 +289,8 @@ class DashboardApp(App[None]):
 
     def on_resize(self) -> None:
         """Keep the grid sized to the terminal and re-render compact cells."""
+        if not self._panels:
+            return
         self._resize_grid()
         for panel in self._panels:
             if isinstance(panel.widget, MetricWidget) and panel.series:
@@ -368,7 +302,7 @@ class DashboardApp(App[None]):
         match widget:
             case LogWidget():
                 accent = role_color(widget.title or 'logs')
-                source = resolve_log_group_for_widget(widget) or 'logs'
+                source = _widget_source(widget) or 'logs'
                 panel.cell.render_static(f'[bold {accent}]{widget.title or "Logs"}[/]\n[dim]{source}[/]')
             case TextWidget():
                 heading = next((line for line in widget.markdown.splitlines() if line.strip()), '')
@@ -388,7 +322,7 @@ class DashboardApp(App[None]):
                 self._load_panel(panel)
 
     def _load_all_log_volumes(self) -> None:
-        if self._log_volume is None:
+        if self.shell.services.log_volume is None:
             return
         for panel in self._panels:
             if isinstance(panel.widget, LogWidget):
@@ -401,14 +335,16 @@ class DashboardApp(App[None]):
                 )
 
     def _fetch_log_volume(self, panel: _Panel) -> None:
-        if self._log_volume is None or not isinstance(panel.widget, LogWidget):
+        log_volume = self.shell.services.log_volume
+        if log_volume is None or not isinstance(panel.widget, LogWidget):
             return
-        source = resolve_log_group_for_widget(panel.widget) or panel.widget.title
+        source = _widget_source(panel.widget) or panel.widget.title
+        session = self.shell.session
         try:
-            volume = self._log_volume(source, self._start, self._end)
+            volume = log_volume(source, session.start, session.end)
         except Exception:
             return
-        self.call_from_thread(self._render_log_volume, panel, volume)
+        self.app.call_from_thread(self._render_log_volume, panel, volume)
 
     @staticmethod
     def _render_log_volume(panel: _Panel, volume: list[float]) -> None:
@@ -430,7 +366,8 @@ class DashboardApp(App[None]):
 
     def _fetch_panel(self, panel: _Panel) -> None:
         widget = panel.widget
-        if not isinstance(widget, MetricWidget):
+        fetch_metrics = self.shell.services.fetch_metrics
+        if fetch_metrics is None or not isinstance(widget, MetricWidget):
             return
         queries = build_metric_data_queries(
             widget.metrics,
@@ -440,21 +377,24 @@ class DashboardApp(App[None]):
         )
         if not queries:
             return
+        session = self.shell.session
         try:
-            series = self._fetch_metrics(queries, self._start, self._end)
+            series = fetch_metrics(queries, session.start, session.end)
         except Exception as err:
-            self.call_from_thread(panel.cell.render_static, f'[red]error:[/] {err}')
+            self.app.call_from_thread(panel.cell.render_static, f'[red]error:[/] {err}')
             return
         visible = [item for item in series if item.values]
         panel.series = visible
-        self.call_from_thread(panel.cell.set_series, visible)
-        if panel.cell.index in self._focused:
-            self.call_from_thread(self._rebuild_stage)
+        self.app.call_from_thread(panel.cell.set_series, visible)
+        if panel.cell.index in self._staged:
+            self.app.call_from_thread(self._rebuild_stage)
 
     def _focused_panel(self) -> _Panel | None:
         return self._panel_by_cell_id.get(id(self.focused)) if self.focused is not None else None
 
     def _move(self, delta: int) -> None:
+        if not self._panels:
+            return
         panel = self._focused_panel()
         current = panel.cell.index if panel is not None else 0
         target = max(0, min(len(self._panels) - 1, current + delta))
@@ -481,12 +421,15 @@ class DashboardApp(App[None]):
         panel = self._focused_panel()
         if panel is None:
             return
-        self._focused = [panel.cell.index]
+        self._staged = [panel.cell.index]
         self._rebuild_stage()
 
     def action_reset_focus(self) -> None:
-        """Clear the stage, leaving its space reserved and empty."""
-        self._focused = []
+        """Clear the stage, or go up one level when the stage is already clear."""
+        if not self._staged:
+            self.shell.nav_pop()
+            return
+        self._staged = []
         self._rebuild_stage()
 
     def _rebuild_stage(self) -> None:
@@ -494,16 +437,16 @@ class DashboardApp(App[None]):
         for child in list(stage.children):
             child.remove()
         for panel in self._panels:
-            panel.cell.set_class(panel.cell.index in self._focused, 'staged')
-        if not self._focused:
+            panel.cell.set_class(panel.cell.index in self._staged, 'staged')
+        if not self._staged:
             stage.mount(Label('Select a panel and press enter to focus it here', classes='stage_hint'))
             self._update_status()
             return
-        for index in self._focused:
+        for index in self._staged:
             stage.mount(self._stage_widget(self._panels[index]))
         self._update_status()
 
-    def _stage_widget(self, panel: _Panel) -> Any:
+    def _stage_widget(self, panel: _Panel) -> Vertical | VerticalScroll:
         widget = panel.widget
         if isinstance(widget, MetricWidget):
             kind = ChartKind.BAR if widget.view == 'bar' else ChartKind.LINE
@@ -518,7 +461,8 @@ class DashboardApp(App[None]):
         widget = panel.widget
         if not isinstance(widget, MetricWidget):
             return ''
-        window = f'{self._start:%H:%M}-{self._end:%H:%M}'
+        session = self.shell.session
+        window = f'{session.start:%H:%M}-{session.end:%H:%M}'
         queries = build_metric_data_queries(
             widget.metrics,
             widget_stat=panel.stat_override or widget.stat,
@@ -559,103 +503,106 @@ class DashboardApp(App[None]):
         self._load_panel(panel)
 
     def action_dive(self) -> None:
-        """Open the log table for the focused widget's log group and window."""
+        """Rank the log groups behind the focused widget and ask which to open."""
         panel = self._focused_panel()
         if panel is None:
             return
-        log_group = resolve_log_group_for_widget(panel.widget)
-        if log_group is None:
+        if not candidate_log_groups(panel.widget):
             self.notify('No log source resolved for this widget', severity='warning')
             return
-        if self._resolve_logs is None:
-            self.notify(f'Would open logs for {log_group} (no log pipeline wired)', severity='information')
-            return
-        self.notify(f'Fetching logs for {log_group}...', severity='information')
+        widget = panel.widget
+        self.notify('Ranking log groups...', severity='information')
         self.run_worker(
-            lambda: self._dive_worker(log_group, self._start, self._end),
-            name='dive_fetch',
-            group='dive_fetch',
+            lambda: self._dive_worker(widget),
+            name='dive_rank',
+            group='dive_rank',
             exclusive=True,
             thread=True,
         )
 
-    def _dive_worker(self, log_group: str, start: datetime, end: datetime) -> None:
-        if self._resolve_logs is None:
-            return
+    def _dive_worker(self, widget: Widget) -> None:
         try:
-            parquet_path = self._resolve_logs(log_group, start, end)
+            candidates = self._rank_candidates(widget)
         except Exception as err:
-            self.call_from_thread(self.notify, f'Log fetch failed: {err}', severity='error')
+            self.app.call_from_thread(self.notify, f'Dive ranking failed: {err}', severity='error')
             return
-        if parquet_path is None:
-            self.call_from_thread(self.notify, f'No log events for {log_group} in this window', severity='warning')
-            return
-        title = f'{log_group} · {start:%H:%M}-{end:%H:%M}'
-        self.call_from_thread(self.push_screen, LogResultsScreen(parquet_path, self._config, title=title))
+        self.app.call_from_thread(self.shell.dive, widget, candidates)
 
-    def action_command(self) -> None:
-        """Open the command line."""
-        self.query_one(CommandLine).open()
+    def _rank_candidates(self, widget: Widget) -> list[DiveCandidate]:
+        services = self.shell.services
+        session = self.shell.session
+        known = {info.name for info in services.list_groups()} if services.list_groups is not None else set()
+        count_events = services.count_events
 
-    def action_which_key(self) -> None:
-        """Show the keys and commands reference (nvim-style which-key)."""
-        keys = [(binding.key_display or binding.key, binding.description) for binding in self.BINDINGS]
-        commands = [(name, command.summary) for name, command in sorted(self._commands.items())]
-        self.push_screen(WhichKeyScreen(keys, commands))
+        def count(log_group: str) -> int:
+            if count_events is None:
+                return 0
+            return count_events(log_group, session.start, session.end)
 
-    @on(Input.Submitted, '#command_line')
-    def _on_command(self, event: Input.Submitted) -> None:
-        event.stop()
-        line = self.query_one(CommandLine)
-        text = event.value.strip()
-        line.close()
-        if text:
-            line.remember(text)
-            self._run_command(text)
-        self._refocus_grid()
+        return rank_dive_candidates(widget, known_groups=known, count_events=count)
 
-    def _refocus_grid(self) -> None:
-        target = self._focused[0] if self._focused else 0
-        if self._panels:
-            self._panels[min(target, len(self._panels) - 1)].cell.focus()
+    def commands(self) -> dict[str, ShellCommand]:
+        """The dashboard's own ``:`` commands."""
+        titles = tuple(self._panel_titles())
+        return {
+            'add': ShellCommand('Add a panel beside the staged one (two-up)', titles),
+            'dive': ShellCommand('Rank and open the logs behind the focused widget'),
+            'focus': ShellCommand('Focus a panel on the stage (matches by title)', titles),
+            'panels': ShellCommand('Show only panels matching terms (roles or title text); "all" resets'),
+            'period': ShellCommand(
+                'Set the period, in seconds, of the focused metric',
+                tuple(str(period) for period in _PERIOD_CYCLE),
+            ),
+            'reset': ShellCommand('Clear the stage'),
+            'stat': ShellCommand('Set the statistic of the focused metric', _STAT_CYCLE),
+        }
 
-    def _complete_command(self, value: str) -> list[str]:
-        parts = value.split()
-        if not parts or (len(parts) == 1 and not value.endswith(' ')):
-            prefix = parts[0] if parts else ''
-            return [name for name in self._commands if name.startswith(prefix)]
-        name, command = parts[0], self._commands.get(parts[0])
-        if command is None:
-            return []
-        arg_prefix = parts[1] if len(parts) > 1 else ''
-        candidates = self._panel_titles() if command.args == ('<panel>',) else list(command.args)
-        return [f'{name} {candidate}' for candidate in candidates if candidate.lower().startswith(arg_prefix.lower())]
-
-    def _panel_titles(self) -> list[str]:
-        return [title for panel in self._panels if (title := getattr(panel.widget, 'title', ''))]
-
-    def _run_command(self, text: str) -> None:
-        name, *args = text.split()
-        argument = ' '.join(args)
+    def run_view_command(self, name: str, argument: str) -> bool:
+        """Run one of the dashboard's commands, returning False for anything else."""
         match name:
             case 'focus':
                 self._command_focus(argument)
+            case 'add':
+                self._command_add(argument)
             case 'reset':
-                self.action_reset_focus()
+                self._staged = []
+                self._rebuild_stage()
             case 'dive':
                 self.action_dive()
             case 'stat':
                 self._command_stat(argument)
             case 'period':
                 self._command_period(argument)
-            case 'range':
-                self._command_range(argument)
-            case 'filter':
-                self._command_filter(args)
-            case 'help':
-                self._command_help()
+            case 'panels':
+                self._command_panels(argument.split())
             case _:
-                self.notify(f'Unknown command: {name}', severity='warning')
+                return False
+        return True
+
+    def nav_siblings(self) -> list[NavTarget]:
+        """Every dashboard in the account, so ``[`` and ``]`` cycle them."""
+        names = list(self.shell.session.dashboard_names)
+        if self.dashboard_name not in names:
+            names.insert(0, self.dashboard_name)
+        return [NavTarget(kind=ViewKind.DASHBOARD, label=name, payload=(name,)) for name in names]
+
+    def refresh_view(self) -> None:
+        """Re-fetch every panel after the shared window or filter changed."""
+        if not self._panels:
+            return
+        self._load_all_metrics()
+        self._load_all_log_volumes()
+        self._rebuild_stage()
+
+    def restore_focus(self) -> None:
+        """Return focus to the grid, on the staged cell when there is one."""
+        if not self._panels:
+            return
+        target = self._staged[0] if self._staged else 0
+        self._panels[min(target, len(self._panels) - 1)].cell.focus()
+
+    def _panel_titles(self) -> list[str]:
+        return [title for panel in self._panels if (title := getattr(panel.widget, 'title', ''))]
 
     def _find_panel(self, substring: str) -> _Panel | None:
         needle = substring.lower()
@@ -670,7 +617,17 @@ class DashboardApp(App[None]):
         if panel is None:
             self.notify(f'No panel matching {argument!r}', severity='warning')
             return
-        self._focused = [panel.cell.index]
+        self._staged = [panel.cell.index]
+        self._rebuild_stage()
+
+    def _command_add(self, argument: str) -> None:
+        panel = self._find_panel(argument)
+        if panel is None:
+            self.notify(f'No panel matching {argument!r}', severity='warning')
+            return
+        if panel.cell.index in self._staged:
+            return
+        self._staged = [*self._staged, panel.cell.index][-_MAX_STAGED:]
         self._rebuild_stage()
 
     def _command_stat(self, argument: str) -> None:
@@ -691,57 +648,28 @@ class DashboardApp(App[None]):
         self._update_status(f'{panel.widget.title}: period -> {argument}s')
         self._load_panel(panel)
 
-    def _command_range(self, argument: str) -> None:
-        delta = _duration(argument)
-        if delta is None:
-            self.notify('Usage: :range <15m|1h|3h|6h|12h|1d>', severity='warning')
-            return
-        self._end = datetime.now(tz=UTC)
-        self._start = self._end - delta
-        self._update_status(f'window -> last {argument}')
-        self._load_all_metrics()
-        self._load_all_log_volumes()
-
-    def _command_filter(self, terms: list[str]) -> None:
+    def _command_panels(self, terms: list[str]) -> None:
         if not terms or terms[0].lower() in {'all', 'clear'}:
             self._hidden = set()
         else:
             self._hidden = {p.cell.index for p in self._panels if not _panel_matches(p.widget, terms)}
-        visible_count = len(self._panels) - len(self._hidden)
-        if visible_count == 0:
+        if len(self._panels) - len(self._hidden) == 0:
             self.notify(f'No panels match {" ".join(terms)!r}', severity='warning')
             self._hidden = set()
         for panel in self._panels:
             panel.cell.display = panel.cell.index not in self._hidden
-        self._focused = [index for index in self._focused if index not in self._hidden]
+        self._staged = [index for index in self._staged if index not in self._hidden]
         self._resize_grid()
         self._rebuild_stage()
         self._update_status('filtered' if self._hidden else None)
 
-    def _command_help(self) -> None:
-        lines = [f':{name} — {command.summary}' for name, command in sorted(self._commands.items())]
-        self.notify('\n'.join(lines), title='Commands', timeout=12)
-
     def _update_status(self, message: str | None = None) -> None:
-        window = f'{self._start:%Y-%m-%d %H:%M} -> {self._end:%H:%M} UTC'
-        focus = f' · {len(self._focused)} focused' if self._focused else ''
+        session = self.shell.session
+        window = _window_label(session.start, session.end)
+        focus = f' · {len(self._staged)} focused' if self._staged else ''
         base = f'{len(self._panels)} panels · window {window}{focus}'
         self.query_one('#dash_status', Label).update(f'{base} · {message}' if message else base)
 
 
-def _series_colors(series: list[MetricSeries]) -> list[str]:
-    return [series_color(index) for index in range(len(series))]
-
-
-def _full_content(widget: Widget) -> Static | Markdown:
-    match widget:
-        case LogWidget():
-            accent = role_color(widget.title or 'logs')
-            return Static(f'[bold {accent}]{widget.title or "Logs"}[/]\n\n{widget.query}')
-        case TextWidget():
-            return Markdown(widget.markdown)
-        case AlarmWidget():
-            names = '\n'.join(alarm.rsplit(':', 1)[-1] for alarm in widget.alarms) or '(no alarms)'
-            return Static(f'[bold]{widget.title or "Alarms"}[/]\n\n{names}')
-        case _:
-            return Static('[dim]Nothing to expand[/]')
+def _window_label(start: datetime, end: datetime) -> str:
+    return f'{start:%Y-%m-%d %H:%M} -> {end:%H:%M} UTC'

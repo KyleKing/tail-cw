@@ -24,6 +24,7 @@ Cache files created by the application are stored separately in the XDG cache di
 
 - `[cache]` controls cache storage limits and eviction behaviour.
 - `[parquet]` tunes the Parquet writer used when materialising NDJSON logs.
+- `[preview]` bounds the log group previews shown in the browser.
 - `[tui]` exposes pagination and search limits for the Textual UI.
 - `[trace]` lists the field names inspected when extracting distributed trace identifiers.
 
@@ -40,6 +41,11 @@ eviction_policy = "least-recently-stored"
 row_group_size = 200000
 compression_level = 5
 infer_schema_length = 200
+
+[preview]
+sample_limit = 500   # events read per group preview
+window_seconds = 900 # how far back a preview looks
+ttl_seconds = 300    # how long a cached preview stays fresh
 
 [tui]
 chunk_threshold = 4000
@@ -74,6 +80,7 @@ The helper performs an atomic write and sets restrictive permissions on POSIX sy
 - **Invalid TOML**: errors indicate a parsing problem. Validate the file with a TOML linter or remove recent edits.
 - **Permission errors**: ensure the user running tail-cw can read the config directory and write to the cache directory.
 - **Cache directory missing**: override `cache_dir` in the `[cache]` section or verify that `get_default_cache_dir()` points to a writable location.
+- **Group previews cost too many API calls**: each preview is one `FilterLogEvents` call per group, cached for `ttl_seconds`. Raise the TTL to walk a long list more cheaply, or lower `sample_limit` to read less per group.
 
 ## Advanced Topics
 

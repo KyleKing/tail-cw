@@ -11,6 +11,7 @@ import pytest
 from tail_cw.config import (
     CacheConfig,
     ParquetConfig,
+    PreviewConfig,
     TailCWConfig,
     TraceConfig,
     TUIConfig,
@@ -47,6 +48,10 @@ def test_default_config_values():
     assert config.parquet.row_group_size == 100_000
     assert config.parquet.compression_level == 3
     assert config.parquet.infer_schema_length == 1000
+
+    assert config.preview.sample_limit == 500
+    assert config.preview.window_seconds == 900
+    assert config.preview.ttl_seconds == 300
 
     assert config.tui.chunk_threshold == 5000
     assert config.tui.chunk_size == 1000
@@ -100,6 +105,11 @@ def test_load_config_valid_toml(xdg_paths: tuple[Path, Path], tmp_path: Path):
                 'compression_level = 5',
                 'infer_schema_length = 250',
                 '',
+                '[preview]',
+                'sample_limit = 120',
+                'window_seconds = 600',
+                'ttl_seconds = 60',
+                '',
                 '[tui]',
                 'chunk_threshold = 2000',
                 'chunk_size = 250',
@@ -124,6 +134,10 @@ def test_load_config_valid_toml(xdg_paths: tuple[Path, Path], tmp_path: Path):
     assert config.parquet.row_group_size == 200_000
     assert config.parquet.compression_level == 5
     assert config.parquet.infer_schema_length == 250
+
+    assert config.preview.sample_limit == 120
+    assert config.preview.window_seconds == 600
+    assert config.preview.ttl_seconds == 60
 
     assert config.tui.chunk_threshold == 2000
     assert config.tui.chunk_size == 250
@@ -166,6 +180,7 @@ def test_create_default_config_file(tmp_path: Path):
     data = tomllib.loads(config_path.read_text(encoding='utf-8'))
     assert 'cache' in data
     assert 'parquet' in data
+    assert 'preview' in data
     assert 'tui' in data
     assert 'trace' in data
 
@@ -193,6 +208,14 @@ def test_parquet_config_dataclass():
     assert config.row_group_size == 64_000
     assert config.compression_level == 7
     assert config.infer_schema_length == 128
+
+
+def test_preview_config_dataclass():
+    config = PreviewConfig(sample_limit=50, window_seconds=300, ttl_seconds=30)
+
+    assert config.sample_limit == 50
+    assert config.window_seconds == 300
+    assert config.ttl_seconds == 30
 
 
 def test_tui_config_dataclass():

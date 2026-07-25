@@ -12,6 +12,7 @@ from tail_cw.query.engine import (
     benchmark_backends,
     query_parquet_file,
     query_parquet_file_to_log_events,
+    query_parquet_files_to_log_events,
 )
 from tail_cw.query.parser import (
     FilterNode,
@@ -44,5 +45,6 @@ __all__ = [
     'parse_filter_pattern',
     'query_parquet_file',
     'query_parquet_file_to_log_events',
+    'query_parquet_files_to_log_events',
     'query_traces_from_parquet',
 ]

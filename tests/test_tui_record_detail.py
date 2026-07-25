@@ -1,15 +1,51 @@
 """Unit tests for the record detail modal screen."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from textual.app import App
+from textual.pilot import Pilot
 from textual.widgets import DataTable, Static
 
 from tail_cw.aws.client import LogEvent
-from tail_cw.tui.app import LogTailApp
+from tail_cw.cli import Session
+from tail_cw.config import TailCWConfig
+from tail_cw.tui.logs_screen import LogsScreen
+from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.record_detail import RecordDetailScreen
+from tail_cw.tui.shell import TailCWApp
+from tail_cw.tui.views import build_screen
 
 _SENTINEL = object()
+
+
+class _HostApp(App[None]):
+    """A bare host for driving the modal screens under test."""
+
+
+def _logs_app() -> TailCWApp:
+    """Build a shell whose opening view is the log view over one group."""
+    now = datetime(2026, 7, 24, 12, 0, tzinfo=UTC)
+    return TailCWApp(
+        TailCWConfig(),
+        Session(start=now - timedelta(hours=1), end=now),
+        build_screen=build_screen,
+        target=NavTarget(kind=ViewKind.LOGS, label='logs /aws/lambda/test', payload=('/aws/lambda/test',)),
+    )
+
+
+async def _open_logs(app: TailCWApp, pilot: Pilot[None], events: list[LogEvent]) -> LogsScreen:
+    """Settle the app, load the events, and put the cursor on a row."""
+    await pilot.pause()
+    screen = app.screen
+    assert isinstance(screen, LogsScreen)
+    screen.load_events(events)
+    await pilot.pause()
+    screen.query_one('#log_table', DataTable).focus()
+    await pilot.pause()
+    await pilot.press('down')
+    await pilot.pause()
+    return screen
 
 
 def _make_test_event(
@@ -64,7 +100,7 @@ def test_modal_initialization():
 async def test_modal_compose_structure():
     """Test modal UI structure."""
     event = _make_test_event()
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         # Push the modal
@@ -90,7 +126,7 @@ async def test_modal_displays_event_details():
         log_stream='2025/01/15/stream',
         message='Test log message',
     )
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
@@ -117,7 +153,7 @@ async def test_modal_displays_jsonl_message():
     """Test JSON message parsing."""
     json_message = '{"level":"INFO","msg":"test event","index":42}'
     event = _make_test_event(message=json_message)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
@@ -138,7 +174,7 @@ async def test_modal_displays_jsonl_message():
 async def test_modal_displays_plain_text_message():
     """Test plain text message."""
     event = _make_test_event(message='Plain text log message')
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
@@ -158,7 +194,7 @@ async def test_modal_displays_plain_text_message():
 async def test_modal_close_button():
     """Test close button functionality."""
     event = _make_test_event()
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         # Initial screen stack depth
@@ -183,7 +219,7 @@ async def test_modal_close_button():
 async def test_modal_escape_key():
     """Test Escape key dismisses modal."""
     event = _make_test_event()
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         initial_depth = len(app.screen_stack)
@@ -205,7 +241,7 @@ async def test_modal_escape_key():
 async def test_modal_q_key():
     """Test 'q' key dismisses modal."""
     event = _make_test_event()
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         initial_depth = len(app.screen_stack)
@@ -225,7 +261,7 @@ async def test_modal_q_key():
 async def test_modal_copy_to_clipboard():
     """Test copy binding places the formatted event details on the clipboard."""
     event = _make_test_event()
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
@@ -243,7 +279,7 @@ async def test_modal_copy_to_clipboard():
 async def test_modal_with_none_ingestion_time():
     """Test event with None ingestion_time."""
     event = _make_test_event(ingestion_time=None)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
@@ -261,7 +297,7 @@ async def test_modal_with_long_message():
     """Test with very long message."""
     long_message = 'A' * 2000
     event = _make_test_event(message=long_message)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
@@ -279,7 +315,7 @@ async def test_modal_with_special_characters():
     """Test message with special characters."""
     special_message = 'Special: <>&"\\n\\t\u2603'
     event = _make_test_event(message=special_message)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
@@ -294,80 +330,46 @@ async def test_modal_with_special_characters():
 
 @pytest.mark.asyncio
 async def test_modal_from_app_integration():
-    """Test opening modal from main app."""
+    """Enter on a selected row opens the detail modal over the log view."""
     events = [
         _make_test_event(event_id='event-0001', message='First event'),
         _make_test_event(event_id='event-0002', message='Second event'),
     ]
-    app = LogTailApp(log_events=events)
+    app = _logs_app()
 
     async with app.run_test() as pilot:
-        # Focus table and select first row
-        table = app.query_one('#log_table', DataTable)
-        table.focus()
-        await pilot.pause()
-
-        # Ensure cursor is on a row by pressing down (cursor starts at -1)
-        await pilot.press('down')
-        await pilot.pause()
-
-        # Verify cursor is on row 0
+        screen = await _open_logs(app, pilot, events)
+        table = screen.query_one('#log_table', DataTable)
         assert table.cursor_row >= 0
-
-        # Initial state
         initial_depth = len(app.screen_stack)
 
-        # Press Enter to open modal - use app's action directly
-        app.action_show_detail()
+        screen.action_show_detail()
         await pilot.pause()
 
-        # Modal should be pushed
         assert len(app.screen_stack) == initial_depth + 1
         assert isinstance(app.screen, RecordDetailScreen)
+        content_text = str(app.screen.query_one('#content', Static).render())
+        assert 'event-000' in content_text
 
-        # Check modal displays correct event (based on cursor row)
-        content = app.screen.query_one('#content', Static)
-        content_text = str(content.render())
-        # The cursor may be on row 0 or 1 depending on test order, just verify it shows an event
-        assert 'event-000' in content_text  # Matches both event-0001 and event-0002
-        assert 'event' in content_text.lower()
-
-        # Press Escape to close
         await pilot.press('escape')
         await pilot.pause()
-
-        # Should be back to main screen
         assert len(app.screen_stack) == initial_depth
 
 
 @pytest.mark.asyncio
 async def test_modal_multiple_open_close():
-    """Test opening and closing modal multiple times."""
-    events = [_make_test_event(event_id=f'event-{i:04d}') for i in range(3)]
-    app = LogTailApp(log_events=events)
+    """The modal can be opened and dismissed repeatedly without leaking screens."""
+    events = [_make_test_event(event_id=f'event-{index:04d}') for index in range(3)]
+    app = _logs_app()
 
     async with app.run_test() as pilot:
-        table = app.query_one('#log_table', DataTable)
-        table.focus()
-        await pilot.pause()
-
-        # Ensure cursor is on a row
-        await pilot.press('down')
-        await pilot.pause()
-
-        # Verify cursor position
-        assert table.cursor_row >= 0
-
+        screen = await _open_logs(app, pilot, events)
         initial_depth = len(app.screen_stack)
 
-        # Open and close multiple times
         for _ in range(3):
-            # Open modal - use action directly
-            app.action_show_detail()
+            screen.action_show_detail()
             await pilot.pause()
             assert len(app.screen_stack) == initial_depth + 1
-
-            # Close modal
             await pilot.press('escape')
             await pilot.pause()
             assert len(app.screen_stack) == initial_depth
@@ -377,7 +379,7 @@ async def test_modal_multiple_open_close():
 async def test_modal_with_empty_message():
     """Test event with empty message."""
     event = _make_test_event(message='')
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
@@ -397,7 +399,7 @@ async def test_modal_with_multiline_message():
 Line 2
 Line 3"""
     event = _make_test_event(message=multiline_message)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))
@@ -417,7 +419,7 @@ async def test_modal_with_malformed_json():
     """Test message with malformed JSON."""
     malformed_json = '{"level":"INFO", invalid}'
     event = _make_test_event(message=malformed_json)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(RecordDetailScreen(event))

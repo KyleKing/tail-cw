@@ -9,11 +9,13 @@ Supports CloudWatch-style filter patterns translated to backend-specific queries
 
 from __future__ import annotations
 
+import heapq
 import re
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import datetime
 from enum import Enum
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -641,6 +643,30 @@ def query_parquet_file_to_log_events(
         limit=limit,
     ):
         yield _dict_to_log_event(row)
+
+
+def query_parquet_files_to_log_events(
+    parquet_paths: Sequence[Path],
+    filter_node: FilterNode | None = None,
+    *,
+    backend: QueryBackend = QueryBackend.AUTO,
+    limit: int | None = None,
+) -> Iterator[LogEvent]:
+    """Query several Parquet files and yield their events merged by timestamp.
+
+    Each file holds one log group, so a multi-group search reads them
+    independently and interleaves the results. ``limit`` caps the merged
+    output rather than each file, and is also applied per file so a single
+    busy group cannot exhaust memory before the merge.
+
+    Yields:
+        LogEvent instances in ascending timestamp order across all files
+    """
+    streams = [
+        query_parquet_file_to_log_events(path, filter_node, backend=backend, limit=limit) for path in parquet_paths
+    ]
+    merged = heapq.merge(*streams, key=lambda event: event.timestamp)
+    yield from islice(merged, limit) if limit is not None else merged
 
 
 def benchmark_backends(

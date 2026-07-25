@@ -70,6 +70,21 @@ class ParquetConfig:
 
 
 @dataclass(slots=True)
+class PreviewConfig:
+    """Log group preview sampling parameters.
+
+    Attributes:
+        sample_limit: Maximum number of events read when sampling a group.
+        window_seconds: Length of the recent window sampled for a preview.
+        ttl_seconds: How long a cached preview stays fresh.
+    """
+
+    sample_limit: int = 500
+    window_seconds: int = 900
+    ttl_seconds: int = 300
+
+
+@dataclass(slots=True)
 class TUIConfig:
     """TUI behaviour and incremental loading parameters.
 
@@ -121,6 +136,10 @@ class TailCWConfig:
         row_group_size = 100000
         compression_level = 3
 
+        [preview]
+        sample_limit = 500
+        window_seconds = 900
+
         [tui]
         chunk_threshold = 5000
         chunk_size = 1000
@@ -131,12 +150,14 @@ class TailCWConfig:
     Attributes:
         cache: Cache persistence configuration.
         parquet: Parquet conversion configuration.
+        preview: Log group preview sampling configuration.
         tui: TUI incremental loading configuration.
         trace: Trace extraction configuration.
     """
 
     cache: CacheConfig = field(default_factory=CacheConfig)
     parquet: ParquetConfig = field(default_factory=ParquetConfig)
+    preview: PreviewConfig = field(default_factory=PreviewConfig)
     tui: TUIConfig = field(default_factory=TUIConfig)
     trace: TraceConfig = field(default_factory=TraceConfig)
 
@@ -214,6 +235,7 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
 
     cache_kwargs = _load_section(data.get('cache'), CacheConfig)
     parquet_kwargs = _load_section(data.get('parquet'), ParquetConfig)
+    preview_kwargs = _load_section(data.get('preview'), PreviewConfig)
     tui_kwargs = _load_section(data.get('tui'), TUIConfig)
     trace_kwargs = _load_section(data.get('trace'), TraceConfig)
 
@@ -228,6 +250,7 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
     config = TailCWConfig(
         cache=CacheConfig(**cache_kwargs),
         parquet=ParquetConfig(**parquet_kwargs),
+        preview=PreviewConfig(**preview_kwargs),
         tui=TUIConfig(**tui_kwargs),
         trace=TraceConfig(**trace_kwargs),
     )
@@ -277,6 +300,10 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'row_group_size = 100000\n'
             'compression_level = 3\n'
             'infer_schema_length = 1000\n\n'
+            '[preview]\n'
+            'sample_limit = 500\n'
+            'window_seconds = 900  # 15 minutes\n'
+            'ttl_seconds = 300  # 5 minutes\n\n'
             '[tui]\n'
             'chunk_threshold = 5000\n'
             'chunk_size = 1000\n'

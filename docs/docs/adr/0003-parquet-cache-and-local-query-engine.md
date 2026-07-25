@@ -10,14 +10,14 @@ CloudWatch charges make exploratory querying expensive exactly when it is most n
 
 Approximate us-east-1 pricing as of mid-2026. Verify against [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/) before relying on exact figures.
 
-| Operation                         | Price                         | Implication                                                                         |
-| --------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------- |
-| Logs Insights query               | ~$0.005 per GB scanned        | A single broad query over 50 GB costs ~$0.25, and incident spelunking multiplies it |
-| FilterLogEvents                   | No per-GB charge              | Free to scan, but slow and throttled (per-account TPS quotas)                       |
-| Live Tail                         | ~$0.01 per minute per session | An hour of dev-loop tailing costs ~$0.60                                            |
-| DescribeLogGroups                 | Free                          | Discovery metadata costs nothing                                                    |
+| Operation                         | Price                         | Implication                                                                          |
+| --------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------ |
+| Logs Insights query               | ~$0.005 per GB scanned        | A single broad query over 50 GB costs ~$0.25, and incident spelunking multiplies it  |
+| FilterLogEvents                   | No per-GB charge              | Free to scan, but slow and throttled (per-account TPS quotas)                        |
+| Live Tail                         | ~$0.01 per minute per session | An hour of dev-loop tailing costs ~$0.60                                             |
+| DescribeLogGroups                 | Free                          | Discovery metadata costs nothing                                                     |
 | GetDashboard / GetMetricData      | ~$0.01 per 1,000 requests     | A full 28-widget dashboard refresh costs well under a tenth of a cent (see ADR 0005) |
-| Local re-filter of cached Parquet | $0                            | The whole point                                                                     |
+| Local re-filter of cached Parquet | $0                            | The whole point                                                                      |
 
 The strategy that falls out: prefer FilterLogEvents for bounded historical windows, cache the results, and answer follow-up questions locally instead of re-querying AWS. Reserve Insights (M3) for server-side aggregation that local data cannot answer, and show scan estimates before running it.
 

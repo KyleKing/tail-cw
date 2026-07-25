@@ -4,13 +4,17 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from textual.app import App
 from textual.widgets import Input, Label, Tree
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.query.trace import TraceGroup, log_event_to_trace_span
-from tail_cw.tui.app import LogTailApp
 from tail_cw.tui.record_detail import RecordDetailScreen
 from tail_cw.tui.trace_viewer import TraceViewerScreen
+
+
+class _HostApp(App[None]):
+    """A bare host for driving the modal screens under test."""
 
 
 def _make_test_event(
@@ -99,7 +103,7 @@ def test_trace_viewer_screen_initialization():
 async def test_trace_viewer_screen_compose_structure():
     trace_groups = [_make_test_trace_group()]
     screen = TraceViewerScreen(trace_groups)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -122,7 +126,7 @@ async def test_trace_viewer_tree_population():
         _make_test_trace_group('trace-2', span_count=2),
     ]
     screen = TraceViewerScreen(trace_groups)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -164,7 +168,7 @@ async def test_trace_viewer_tree_structure():
     )
 
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -184,7 +188,7 @@ async def test_trace_viewer_tree_structure():
 async def test_trace_viewer_error_highlighting():
     trace_group = _make_test_trace_group('trace-1', span_count=3, error_count=1)
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -201,7 +205,7 @@ async def test_trace_viewer_error_highlighting():
 async def test_trace_viewer_expand_collapse():
     trace_group = _make_test_trace_group('trace-1', span_count=5)
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -224,7 +228,7 @@ async def test_trace_viewer_expand_collapse():
 async def test_trace_viewer_keyboard_navigation():
     trace_group = _make_test_trace_group('trace-1', span_count=3)
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -247,7 +251,7 @@ async def test_trace_viewer_search():
         _make_test_trace_group('trace-bbb', span_count=2),
     ]
     screen = TraceViewerScreen(trace_groups)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -272,7 +276,7 @@ async def test_trace_viewer_search_by_trace_id():
         _make_test_trace_group('trace-456', span_count=2),
     ]
     screen = TraceViewerScreen(trace_groups)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -327,7 +331,7 @@ async def test_trace_viewer_search_by_service():
     ]
 
     screen = TraceViewerScreen(trace_groups)
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -345,7 +349,7 @@ async def test_trace_viewer_search_by_service():
 async def test_trace_viewer_next_error():
     trace_group = _make_test_trace_group('trace-1', span_count=5, error_count=2)
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -364,7 +368,7 @@ async def test_trace_viewer_next_error():
 async def test_trace_viewer_close():
     trace_group = _make_test_trace_group()
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -381,7 +385,7 @@ async def test_trace_viewer_close():
 @pytest.mark.asyncio
 async def test_trace_viewer_empty_traces():
     screen = TraceViewerScreen([])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -396,7 +400,7 @@ async def test_trace_viewer_empty_traces():
 async def test_trace_viewer_single_trace():
     trace_group = _make_test_trace_group()
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -411,7 +415,7 @@ async def test_trace_viewer_large_trace():
     # Create trace with many spans
     trace_group = _make_test_trace_group('trace-large', span_count=50)
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -445,7 +449,7 @@ async def test_trace_viewer_chronological_ordering():
     )
 
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -460,7 +464,7 @@ async def test_trace_viewer_chronological_ordering():
 async def test_trace_viewer_status_updates():
     trace_group = _make_test_trace_group()
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -481,7 +485,7 @@ async def test_trace_viewer_status_updates():
 async def test_trace_viewer_help():
     trace_group = _make_test_trace_group()
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
@@ -501,7 +505,7 @@ async def test_trace_viewer_enter_shows_span_detail():
     """Test that action_show_span_detail pushes RecordDetailScreen for span nodes."""
     trace_group = _make_test_trace_group('trace-1', span_count=3)
     screen = TraceViewerScreen([trace_group])
-    app = LogTailApp()
+    app = _HostApp()
 
     async with app.run_test() as pilot:
         app.push_screen(screen)
