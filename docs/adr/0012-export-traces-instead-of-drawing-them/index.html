@@ -12,31 +12,31 @@
         <meta name="author" content="Kyle King">
       
       
-        <link rel="canonical" href="https://tail-cw.kyleking.me/reference/tail_cw/tui/views/">
+        <link rel="canonical" href="https://tail-cw.kyleking.me/docs/adr/0012-export-traces-instead-of-drawing-them/">
       
       
-        <link rel="prev" href="../trace_viewer/">
+        <link rel="prev" href="../0011-async-aws-io-and-blocking-work/">
       
       
-        <link rel="next" href="../which_key/">
+        <link rel="next" href="../../../reference/tail_cw/cli/">
       
       
         
       
       
-      <link rel="icon" href="../../../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Views - tail_cw</title>
+        <title>ADR 0012: Export traces instead of drawing them - tail_cw</title>
       
     
     
-      <link rel="stylesheet" href="../../../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,11 +55,11 @@
       
     
     
-      <link rel="stylesheet" href="../../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../../../_styles/mkdocstrings.css">
+      <link rel="stylesheet" href="../../../_styles/mkdocstrings.css">
     
-    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -84,7 +84,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#tail_cw.tui.views" class="md-skip">
+        <a href="#adr-0012-export-traces-instead-of-drawing-them" class="md-skip">
           Skip to content
         </a>
       
@@ -100,7 +100,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../../.." title="tail_cw" class="md-header__button md-logo" aria-label="tail_cw" data-md-component="logo">
+    <a href="../../.." title="tail_cw" class="md-header__button md-logo" aria-label="tail_cw" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Views
+              ADR 0012: Export traces instead of drawing them
             
           </span>
         </div>
@@ -222,7 +222,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../../.." title="tail_cw" class="md-nav__button md-logo" aria-label="tail_cw" data-md-component="logo">
+    <a href="../../.." title="tail_cw" class="md-nav__button md-logo" aria-label="tail_cw" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -252,7 +252,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -276,18 +276,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
@@ -308,7 +310,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -326,7 +328,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/CHANGELOG/" class="md-nav__link">
+      <a href="../../CHANGELOG/" class="md-nav__link">
         
   
   
@@ -354,7 +356,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/CODE_TAG_SUMMARY/" class="md-nav__link">
+      <a href="../../CODE_TAG_SUMMARY/" class="md-nav__link">
         
   
   
@@ -382,7 +384,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/CONFIGURATION/" class="md-nav__link">
+      <a href="../../CONFIGURATION/" class="md-nav__link">
         
   
   
@@ -410,7 +412,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/DEVELOPER_GUIDE/" class="md-nav__link">
+      <a href="../../DEVELOPER_GUIDE/" class="md-nav__link">
         
   
   
@@ -438,7 +440,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/STYLE_GUIDE/" class="md-nav__link">
+      <a href="../../STYLE_GUIDE/" class="md-nav__link">
         
   
   
@@ -463,18 +465,20 @@
                 
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_6" checked>
         
           
           <label class="md-nav__link" for="__nav_2_6" id="__nav_2_6_label" tabindex="0">
@@ -495,7 +499,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -513,7 +517,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -541,7 +545,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0001-product-scope-and-milestone-sequencing/" class="md-nav__link">
+      <a href="../0001-product-scope-and-milestone-sequencing/" class="md-nav__link">
         
   
   
@@ -569,7 +573,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0002-cli-first-layered-architecture/" class="md-nav__link">
+      <a href="../0002-cli-first-layered-architecture/" class="md-nav__link">
         
   
   
@@ -597,7 +601,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0003-parquet-cache-and-local-query-engine/" class="md-nav__link">
+      <a href="../0003-parquet-cache-and-local-query-engine/" class="md-nav__link">
         
   
   
@@ -625,7 +629,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0004-live-tail-via-startlivetail/" class="md-nav__link">
+      <a href="../0004-live-tail-via-startlivetail/" class="md-nav__link">
         
   
   
@@ -653,7 +657,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0005-dashboards-metrics-and-terminal-charts/" class="md-nav__link">
+      <a href="../0005-dashboards-metrics-and-terminal-charts/" class="md-nav__link">
         
   
   
@@ -681,7 +685,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0006-dashboard-rendering-and-interaction/" class="md-nav__link">
+      <a href="../0006-dashboard-rendering-and-interaction/" class="md-nav__link">
         
   
   
@@ -709,7 +713,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0007-victorialogs-grafana-replacement-evaluation/" class="md-nav__link">
+      <a href="../0007-victorialogs-grafana-replacement-evaluation/" class="md-nav__link">
         
   
   
@@ -737,7 +741,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0008-single-interactive-tui/" class="md-nav__link">
+      <a href="../0008-single-interactive-tui/" class="md-nav__link">
         
   
   
@@ -765,7 +769,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0009-no-in-app-profile-switching/" class="md-nav__link">
+      <a href="../0009-no-in-app-profile-switching/" class="md-nav__link">
         
   
   
@@ -793,7 +797,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0010-keep-tail-cw-with-a-narrower-scope/" class="md-nav__link">
+      <a href="../0010-keep-tail-cw-with-a-narrower-scope/" class="md-nav__link">
         
   
   
@@ -821,7 +825,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0011-async-aws-io-and-blocking-work/" class="md-nav__link">
+      <a href="../0011-async-aws-io-and-blocking-work/" class="md-nav__link">
         
   
   
@@ -846,10 +850,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../../../docs/adr/0012-export-traces-instead-of-drawing-them/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0012: Export traces instead of drawing them
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -865,6 +896,131 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-evidence-says" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the evidence says
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What the evidence says">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-log-line-is-a-point-and-a-span-is-an-interval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A log line is a point, and a span is an interval
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#our-logs-carry-no-parent-links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Our logs carry no parent links
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-service-map-reimplements-what-x-ray-computes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A service map reimplements what X-Ray computes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#export-is-portable-where-a-widget-is-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Export is portable where a widget is not
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sources
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -889,20 +1045,18 @@
       
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -923,7 +1077,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -938,20 +1092,18 @@
                 
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
         
           
           <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
@@ -972,7 +1124,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3_1">
             <span class="md-nav__icon md-icon"></span>
             
@@ -990,7 +1142,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/cli/" class="md-nav__link">
         
   
   
@@ -1018,7 +1170,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/concurrency/" class="md-nav__link">
         
   
   
@@ -1046,7 +1198,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../demo/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/demo/" class="md-nav__link">
         
   
   
@@ -1074,7 +1226,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../preview/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/preview/" class="md-nav__link">
         
   
   
@@ -1102,7 +1254,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../recents/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/recents/" class="md-nav__link">
         
   
   
@@ -1177,7 +1329,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../aws/client/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/client/" class="md-nav__link">
         
   
   
@@ -1205,7 +1357,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../aws/dashboards/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/dashboards/" class="md-nav__link">
         
   
   
@@ -1233,7 +1385,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../aws/live_tail/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/live_tail/" class="md-nav__link">
         
   
   
@@ -1261,7 +1413,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../aws/log_groups/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/log_groups/" class="md-nav__link">
         
   
   
@@ -1289,7 +1441,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../aws/metrics/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/metrics/" class="md-nav__link">
         
   
   
@@ -1372,7 +1524,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cache/storage/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/cache/storage/" class="md-nav__link">
         
   
   
@@ -1455,7 +1607,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../charts/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/charts/" class="md-nav__link">
         
   
   
@@ -1483,7 +1635,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../charts/palette/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/charts/palette/" class="md-nav__link">
         
   
   
@@ -1511,7 +1663,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../charts/sparkline/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/charts/sparkline/" class="md-nav__link">
         
   
   
@@ -1594,7 +1746,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../config/config/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/config/config/" class="md-nav__link">
         
   
   
@@ -1677,7 +1829,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../query/engine/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/engine/" class="md-nav__link">
         
   
   
@@ -1705,7 +1857,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../query/parser/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/parser/" class="md-nav__link">
         
   
   
@@ -1733,7 +1885,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../query/patterns/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/patterns/" class="md-nav__link">
         
   
   
@@ -1761,7 +1913,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../query/trace/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/trace/" class="md-nav__link">
         
   
   
@@ -1794,20 +1946,18 @@
                 
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_11" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_11" >
         
           
           <label class="md-nav__link" for="__nav_3_1_11" id="__nav_3_1_11_label" tabindex="0">
@@ -1828,7 +1978,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_11_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_11_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3_1_11">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1846,7 +1996,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../command_bar/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/command_bar/" class="md-nav__link">
         
   
   
@@ -1874,7 +2024,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dashboard_screen/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/dashboard_screen/" class="md-nav__link">
         
   
   
@@ -1902,7 +2052,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dashboards_screen/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/dashboards_screen/" class="md-nav__link">
         
   
   
@@ -1930,7 +2080,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dive_screen/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/dive_screen/" class="md-nav__link">
         
   
   
@@ -1958,7 +2108,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../groups_screen/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/groups_screen/" class="md-nav__link">
         
   
   
@@ -1986,7 +2136,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../log_viewer/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/log_viewer/" class="md-nav__link">
         
   
   
@@ -2014,7 +2164,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../logs_screen/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/logs_screen/" class="md-nav__link">
         
   
   
@@ -2042,7 +2192,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../navigation/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/navigation/" class="md-nav__link">
         
   
   
@@ -2070,7 +2220,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../picker/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/picker/" class="md-nav__link">
         
   
   
@@ -2098,7 +2248,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plot_widget/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/plot_widget/" class="md-nav__link">
         
   
   
@@ -2126,7 +2276,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../record_detail/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/record_detail/" class="md-nav__link">
         
   
   
@@ -2154,7 +2304,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../shell/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/shell/" class="md-nav__link">
         
   
   
@@ -2182,7 +2332,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../trace_viewer/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/trace_viewer/" class="md-nav__link">
         
   
   
@@ -2207,35 +2357,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Views
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../reference/tail_cw/tui/views/" class="md-nav__link">
         
   
   
@@ -2251,74 +2376,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.tui.views" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        views
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.tui.views-classes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Classes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.tui.views-functions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Functions:
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Functions:">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#tail_cw.tui.views.build_screen" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        build_screen
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -2331,7 +2388,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../which_key/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/which_key/" class="md-nav__link">
         
   
   
@@ -2392,6 +2449,8 @@
   
   
   
+    
+  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -2400,10 +2459,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#tail_cw.tui.views" class="md-nav__link">
+  <a href="#problem" class="md-nav__link">
     <span class="md-ellipsis">
       
-        views
+        Problem
       
     </span>
   </a>
@@ -2411,33 +2470,55 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tail_cw.tui.views-classes" class="md-nav__link">
+  <a href="#what-the-evidence-says" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Classes
+        What the evidence says
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.tui.views-functions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Functions:
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Functions:">
+    <nav class="md-nav" aria-label="What the evidence says">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#tail_cw.tui.views.build_screen" class="md-nav__link">
+  <a href="#a-log-line-is-a-point-and-a-span-is-an-interval" class="md-nav__link">
     <span class="md-ellipsis">
       
-        build_screen
+        A log line is a point, and a span is an interval
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#our-logs-carry-no-parent-links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Our logs carry no parent links
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-service-map-reimplements-what-x-ray-computes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A service map reimplements what X-Ray computes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#export-is-portable-where-a-widget-is-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Export is portable where a widget is not
       
     </span>
   </a>
@@ -2446,6 +2527,39 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sources
+      
+    </span>
+  </a>
   
 </li>
       
@@ -2469,82 +2583,53 @@
   
 
 
-  <h1>Views</h1>
-
-<div class="doc doc-object doc-module">
-
-
-
-<a id="tail_cw.tui.views"></a>
-    <div class="doc doc-contents first">
-
-        <p>Maps navigation targets to view screens.</p>
-<p>The views subclass <code>ShellScreen</code>, so <code>shell</code> cannot import them without a
-cycle. This module sits above both and supplies the factory the app takes as a
-constructor argument.</p>
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-<h2 id="tail_cw.tui.views-classes">Classes<a href="#tail_cw.tui.views-classes" class="headerlink" title="Permanent link">⚓︎</a></h2>
-<h2 id="tail_cw.tui.views-functions">Functions:<a href="#tail_cw.tui.views-functions" class="headerlink" title="Permanent link">⚓︎</a></h2>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="tail_cw.tui.views.build_screen" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">build_screen</span>
-
-
-<a href="#tail_cw.tui.views.build_screen" class="headerlink" title="Permanent link">⚓︎</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">build_screen</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Construct the view a navigation target names.</p>
-
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>tail_cw/tui/views.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="18 "></span><span class="k">def</span><span class="w"> </span><span class="nf">build_screen</span><span class="p">(</span><span class="n">target</span><span class="p">:</span> <span class="n">NavTarget</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ShellScreen</span><span class="p">:</span>
-<span class="linenos" data-linenos="19 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct the view a navigation target names.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="20 "></span>    <span class="k">match</span> <span class="n">target</span><span class="o">.</span><span class="n">kind</span><span class="p">:</span>
-<span class="linenos" data-linenos="21 "></span>        <span class="k">case</span> <span class="n">ViewKind</span><span class="o">.</span><span class="n">GROUPS</span><span class="p">:</span>
-<span class="linenos" data-linenos="22 "></span>            <span class="k">return</span> <span class="n">GroupsScreen</span><span class="p">()</span>
-<span class="linenos" data-linenos="23 "></span>        <span class="k">case</span> <span class="n">ViewKind</span><span class="o">.</span><span class="n">LOGS</span><span class="p">:</span>
-<span class="linenos" data-linenos="24 "></span>            <span class="k">return</span> <span class="n">LogsScreen</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">payload</span><span class="p">),</span> <span class="n">live</span><span class="o">=</span><span class="n">target</span><span class="o">.</span><span class="n">label</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;tail&#39;</span><span class="p">))</span>
-<span class="linenos" data-linenos="25 "></span>        <span class="k">case</span> <span class="n">ViewKind</span><span class="o">.</span><span class="n">DASHBOARDS</span><span class="p">:</span>
-<span class="linenos" data-linenos="26 "></span>            <span class="k">return</span> <span class="n">DashboardsScreen</span><span class="p">()</span>
-<span class="linenos" data-linenos="27 "></span>        <span class="k">case</span> <span class="n">ViewKind</span><span class="o">.</span><span class="n">DASHBOARD</span><span class="p">:</span>
-<span class="linenos" data-linenos="28 "></span>            <span class="k">return</span> <span class="n">DashboardScreen</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">payload</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">target</span><span class="o">.</span><span class="n">payload</span> <span class="k">else</span> <span class="n">target</span><span class="o">.</span><span class="n">label</span><span class="p">)</span>
-</code></pre></div>
-            </details>
-    </div>
-
-</div>
-
-
-
-  </div>
-
-    </div>
-
-</div>
+<h1 id="adr-0012-export-traces-instead-of-drawing-them">ADR 0012: Export traces instead of drawing them<a class="headerlink" href="#adr-0012-export-traces-instead-of-drawing-them" title="Permanent link">⚓︎</a></h1>
+<p>Date: 2026-07-25 Status: Accepted (narrows the M3 tracing scope set by <a href="../0010-keep-tail-cw-with-a-narrower-scope/">ADR 0010</a>)</p>
+<h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">⚓︎</a></h2>
+<p>Four <code>claude/*</code> branches opened in November 2025 proposed three trace features that were never wired into any view: a time-proportional waterfall widget, a service map of call counts and error rates, and a Jaeger JSON export. They predate <a href="../0010-keep-tail-cw-with-a-narrower-scope/">ADR 0010</a>, which narrowed tail-cw to what only a CloudWatch-native terminal tool can build. This record decides which of the three tail-cw builds, and closes the branches.</p>
+<p>The question matters beyond those branches because M3 is the remaining milestone and it is the tracing one. Honeycomb-style trace exploration is the founding requirement in the original brief, so &ldquo;draw a waterfall&rdquo; reads as obviously in scope until you check what data would feed it.</p>
+<h2 id="what-the-evidence-says">What the evidence says<a class="headerlink" href="#what-the-evidence-says" title="Permanent link">⚓︎</a></h2>
+<h3 id="a-log-line-is-a-point-and-a-span-is-an-interval">A log line is a point, and a span is an interval<a class="headerlink" href="#a-log-line-is-a-point-and-a-span-is-an-interval" title="Permanent link">⚓︎</a></h3>
+<p>This is the finding that decides the record. A waterfall places each span by start time and draws it as wide as its duration, so it needs two numbers per span. A log line gives one timestamp, and services emit their &ldquo;handled request in 123ms&rdquo; line when the work finishes rather than when it starts.</p>
+<p>The branch waterfall computed each bar&rsquo;s horizontal offset from the log event&rsquo;s timestamp and then extended the bar rightward by a duration read out of the message body. Every bar is therefore displaced right by its own duration. It also mixed two scales, taking the axis total from the difference between log emit timestamps while taking bar widths from the payload&rsquo;s duration field, so one slow span can be wider than the whole chart. Lines carrying no duration at all, which is most of them, each got a one-cell bar. The result is a scatter plot of log lines wearing a waterfall&rsquo;s clothes, and it is wrong in a way a reader cannot see.</p>
+<p>X-Ray segment documents carry <code>start_time</code>, <code>end_time</code>, <code>parent_id</code>, and nested <code>subsegments</code>, which is exactly the interval and hierarchy data a waterfall needs. So the picture is not the hard part. The span source is.</p>
+<h3 id="our-logs-carry-no-parent-links">Our logs carry no parent links<a class="headerlink" href="#our-logs-carry-no-parent-links" title="Permanent link">⚓︎</a></h3>
+<p>The roadmap records that <code>trace_id</code> does not cross the Hatchet boundary, measured against <code>read-prod</code>. Reviewing these branches surfaced a second missing key, and it constrains more features than the first one does.</p>
+<p>Every hierarchy feature on the branches keyed off <code>parent_span_id</code>. Our services log <code>trace_id</code>, <code>span_id</code>, and <code>request_id</code>, and no parent link. So the service map emits rows only for spans whose parent it can find, and against real data it emits none; its seven tests pass only because the fixtures set the field by hand. The error-propagation walk breaks on its first iteration and always returns a one-element path dressed as a graph traversal.</p>
+<p>Worse, <code>SPAN_ID_FIELDS</code> read a bare <code>id</code> as a span identity, so any row carrying an unrelated entity key looked like a span that another row could claim as a parent. That would have made a future hierarchy feature silently wrong rather than empty, which is the harder failure to notice. It is now removed.</p>
+<p>Cross-service joins and span hierarchy are blocked on the same OpenTelemetry instrumentation work in the application repo. &ldquo;Unblocked&rdquo; therefore means more than the roadmap&rsquo;s prerequisite currently implies.</p>
+<h3 id="a-service-map-reimplements-what-x-ray-computes">A service map reimplements what X-Ray computes<a class="headerlink" href="#a-service-map-reimplements-what-x-ray-computes" title="Permanent link">⚓︎</a></h3>
+<p>X-Ray&rsquo;s <code>GetServiceGraph</code> returns the topology with per-edge response-time histograms, fault counts, throttle counts, and error counts, computed server-side. Rebuilding a worse version from log parent links we do not have is the measurement ADR 0010 said to watch: whether new code goes into things only tail-cw can do, or into reimplementing what AWS ships.</p>
+<h3 id="export-is-portable-where-a-widget-is-not">Export is portable where a widget is not<a class="headerlink" href="#export-is-portable-where-a-widget-is-not" title="Permanent link">⚓︎</a></h3>
+<p>Jaeger accepts OTLP over HTTP as JSON, and so does every OTel-compatible backend, including Grafana Tempo and the CloudWatch OTLP endpoint. Jaeger UI has no file-upload path, so the branch&rsquo;s Jaeger v1 JSON file targeted a viewer that cannot open it; OTLP JSON posted to a collector endpoint reaches the same UI and several others. Browser-based OTLP viewers also accept pasted OTLP JSON with no service to run.</p>
+<p>One constraint on reading spans back: traces sent to <code>/aws/spans</code> under Transaction Search are not retrievable through <code>BatchGetTraces</code>, and only the legacy segment store is. The two span sources are mutually exclusive, and which read path is correct depends on whether Transaction Search is on. It is off in our account, so <code>GetTraceSummaries</code> into <code>BatchGetTraces</code> is the path here, matching the correction already recorded in ADR 0010.</p>
+<h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">⚓︎</a></h2>
+<p>tail-cw renders what a terminal is uniquely good at, and exports the rest.</p>
+<p>The terminal is good at tailing, browsing, and chronological correlation across log groups. That is the correlation pivot, and it stays the heart of M3. For any view a mature tool already owns, tail-cw emits a standard document and hands off rather than reimplementing the renderer.</p>
+<p>Concretely:</p>
+<ul>
+<li>the trace export is <strong>OTLP JSON</strong>, reachable from <code>tail-cw export trace</code>, writing to stdout like the other export subcommands. Jaeger v1 JSON is not the target, because it is narrower and its file form opens in nothing</li>
+<li>the <strong>service map is rejected</strong>, permanently rather than deferred. <code>GetServiceGraph</code> computes it better, and we lack the parent links to approximate it</li>
+<li>the <strong>waterfall is deferred behind an X-Ray span reader</strong>, not behind a widget. Once <code>GetTraceSummaries</code> and <code>BatchGetTraces</code> supply real intervals, the drawing is a small pure function; before then it cannot be drawn honestly at all</li>
+<li>the useful residue of the error-propagation feature is a <strong>one-line summary</strong> over the trace tree that already exists (first service to error, how many errors, how many services), which needs no new screen and no parent links</li>
+</ul>
+<p>This generalizes ADR 0010 from query features to visualizations. That ADR sends query work to Logs Insights rather than reimplementing it; this one sends rendering work to OTel viewers on the same reasoning.</p>
+<h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">⚓︎</a></h2>
+<ul>
+<li>the four <code>claude/*</code> branches are closed. <code>service_map.py</code>, <code>trace_waterfall.py</code>, <code>export/jaeger.py</code>, <code>aws/async_client.py</code>, and the four root-level planning documents are not merged. Their still-live ideas moved into the roadmap and this record</li>
+<li><code>tail_cw/export/</code> is not created. <code>export</code> stays a CLI subcommand group with serialization in <code>cli.py</code>, per <a href="../0008-single-interactive-tui/">ADR 0008</a></li>
+<li>a trace that crosses services is only whole when every log group it touched is read together. The trace view now reads all selected groups rather than the first, and grouping runs on the blocking pool per <a href="../0011-async-aws-io-and-blocking-work/">ADR 0011</a> rather than on the message loop</li>
+<li>the M3 prerequisite gains a second missing join key. Stamping <code>workflow_run_id</code> into worker log lines unblocks the cross-service join but not span hierarchy, so it does not unblock a waterfall</li>
+<li>reading X-Ray means a new client kind alongside <code>logs</code> and <code>cloudwatch</code>. Its read path is a two-call sequence rather than a paginator, so <code>GetTraceSummaries</code> must complete before <code>BatchGetTraces</code> can be batched</li>
+<li>if Transaction Search is ever enabled on the account, the span read path changes wholesale and this record&rsquo;s API choice must be revisited</li>
+</ul>
+<h2 id="sources">Sources<a class="headerlink" href="#sources" title="Permanent link">⚓︎</a></h2>
+<ul>
+<li><a href="https://docs.aws.amazon.com/xray/latest/devguide/xray-api-gettingdata.html">X-Ray GetTraceSummaries and BatchGetTraces</a>, <a href="https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html">segment document schema</a></li>
+<li><a href="https://docs.aws.amazon.com/xray/latest/devguide/xray-opentelemetry.html">X-Ray OTLP endpoint</a>, <a href="https://docs.aws.amazon.com/xray/latest/devguide/xray-sdk-migration.html">X-Ray SDK migration to OpenTelemetry</a></li>
+<li><a href="https://www.jaegertracing.io/docs/1.57/apis/">Jaeger APIs, including OTLP over HTTP as JSON</a></li>
+<li><a href="https://docs.aws.amazon.com/xray/latest/api/API_GetServiceGraph.html">X-Ray GetServiceGraph</a></li>
+</ul>
 
 
 
@@ -2594,14 +2679,14 @@ constructor argument.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["toc.autohide"], "search": "../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["toc.autohide"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
         <script src="https://cdnjs.cloudflare.com/ajax/libs/tablesort/5.6.0/tablesort.min.js"></script>
       
-        <script src="../../../../_javascript/tables.js"></script>
+        <script src="../../../_javascript/tables.js"></script>
       
     
   </body>

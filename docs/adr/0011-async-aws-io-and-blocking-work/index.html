@@ -12,31 +12,31 @@
         <meta name="author" content="Kyle King">
       
       
-        <link rel="canonical" href="https://tail-cw.kyleking.me/reference/tail_cw/tui/views/">
+        <link rel="canonical" href="https://tail-cw.kyleking.me/docs/adr/0011-async-aws-io-and-blocking-work/">
       
       
-        <link rel="prev" href="../trace_viewer/">
+        <link rel="prev" href="../0010-keep-tail-cw-with-a-narrower-scope/">
       
       
-        <link rel="next" href="../which_key/">
+        <link rel="next" href="../0012-export-traces-instead-of-drawing-them/">
       
       
         
       
       
-      <link rel="icon" href="../../../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Views - tail_cw</title>
+        <title>ADR 0011: Async AWS I/O, and where blocking work goes - tail_cw</title>
       
     
     
-      <link rel="stylesheet" href="../../../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,11 +55,11 @@
       
     
     
-      <link rel="stylesheet" href="../../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../../../_styles/mkdocstrings.css">
+      <link rel="stylesheet" href="../../../_styles/mkdocstrings.css">
     
-    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -84,7 +84,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#tail_cw.tui.views" class="md-skip">
+        <a href="#adr-0011-async-aws-io-and-where-blocking-work-goes" class="md-skip">
           Skip to content
         </a>
       
@@ -100,7 +100,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../../.." title="tail_cw" class="md-header__button md-logo" aria-label="tail_cw" data-md-component="logo">
+    <a href="../../.." title="tail_cw" class="md-header__button md-logo" aria-label="tail_cw" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Views
+              ADR 0011: Async AWS I/O, and where blocking work goes
             
           </span>
         </div>
@@ -222,7 +222,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../../.." title="tail_cw" class="md-nav__button md-logo" aria-label="tail_cw" data-md-component="logo">
+    <a href="../../.." title="tail_cw" class="md-nav__button md-logo" aria-label="tail_cw" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -252,7 +252,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -276,18 +276,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
@@ -308,7 +310,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -326,7 +328,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/CHANGELOG/" class="md-nav__link">
+      <a href="../../CHANGELOG/" class="md-nav__link">
         
   
   
@@ -354,7 +356,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/CODE_TAG_SUMMARY/" class="md-nav__link">
+      <a href="../../CODE_TAG_SUMMARY/" class="md-nav__link">
         
   
   
@@ -382,7 +384,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/CONFIGURATION/" class="md-nav__link">
+      <a href="../../CONFIGURATION/" class="md-nav__link">
         
   
   
@@ -410,7 +412,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/DEVELOPER_GUIDE/" class="md-nav__link">
+      <a href="../../DEVELOPER_GUIDE/" class="md-nav__link">
         
   
   
@@ -438,7 +440,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/STYLE_GUIDE/" class="md-nav__link">
+      <a href="../../STYLE_GUIDE/" class="md-nav__link">
         
   
   
@@ -463,18 +465,20 @@
                 
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_6" checked>
         
           
           <label class="md-nav__link" for="__nav_2_6" id="__nav_2_6_label" tabindex="0">
@@ -495,7 +499,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -513,7 +517,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -541,7 +545,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0001-product-scope-and-milestone-sequencing/" class="md-nav__link">
+      <a href="../0001-product-scope-and-milestone-sequencing/" class="md-nav__link">
         
   
   
@@ -569,7 +573,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0002-cli-first-layered-architecture/" class="md-nav__link">
+      <a href="../0002-cli-first-layered-architecture/" class="md-nav__link">
         
   
   
@@ -597,7 +601,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0003-parquet-cache-and-local-query-engine/" class="md-nav__link">
+      <a href="../0003-parquet-cache-and-local-query-engine/" class="md-nav__link">
         
   
   
@@ -625,7 +629,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0004-live-tail-via-startlivetail/" class="md-nav__link">
+      <a href="../0004-live-tail-via-startlivetail/" class="md-nav__link">
         
   
   
@@ -653,7 +657,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0005-dashboards-metrics-and-terminal-charts/" class="md-nav__link">
+      <a href="../0005-dashboards-metrics-and-terminal-charts/" class="md-nav__link">
         
   
   
@@ -681,7 +685,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0006-dashboard-rendering-and-interaction/" class="md-nav__link">
+      <a href="../0006-dashboard-rendering-and-interaction/" class="md-nav__link">
         
   
   
@@ -709,7 +713,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0007-victorialogs-grafana-replacement-evaluation/" class="md-nav__link">
+      <a href="../0007-victorialogs-grafana-replacement-evaluation/" class="md-nav__link">
         
   
   
@@ -737,7 +741,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0008-single-interactive-tui/" class="md-nav__link">
+      <a href="../0008-single-interactive-tui/" class="md-nav__link">
         
   
   
@@ -765,7 +769,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0009-no-in-app-profile-switching/" class="md-nav__link">
+      <a href="../0009-no-in-app-profile-switching/" class="md-nav__link">
         
   
   
@@ -793,7 +797,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0010-keep-tail-cw-with-a-narrower-scope/" class="md-nav__link">
+      <a href="../0010-keep-tail-cw-with-a-narrower-scope/" class="md-nav__link">
         
   
   
@@ -818,10 +822,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../../../docs/adr/0011-async-aws-io-and-blocking-work/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0011: Async AWS I/O, and where blocking work goes
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -837,6 +868,109 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#options-considered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options considered
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#where-blocking-work-goes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where blocking work goes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-cancellation-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The cancellation contract
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tradeoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tradeoffs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -849,7 +983,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../docs/adr/0012-export-traces-instead-of-drawing-them/" class="md-nav__link">
+      <a href="../0012-export-traces-instead-of-drawing-them/" class="md-nav__link">
         
   
   
@@ -889,20 +1023,18 @@
       
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -923,7 +1055,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -938,20 +1070,18 @@
                 
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
         
           
           <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
@@ -972,7 +1102,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3_1">
             <span class="md-nav__icon md-icon"></span>
             
@@ -990,7 +1120,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/cli/" class="md-nav__link">
         
   
   
@@ -1018,7 +1148,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/concurrency/" class="md-nav__link">
         
   
   
@@ -1046,7 +1176,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../demo/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/demo/" class="md-nav__link">
         
   
   
@@ -1074,7 +1204,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../preview/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/preview/" class="md-nav__link">
         
   
   
@@ -1102,7 +1232,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../recents/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/recents/" class="md-nav__link">
         
   
   
@@ -1177,7 +1307,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../aws/client/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/client/" class="md-nav__link">
         
   
   
@@ -1205,7 +1335,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../aws/dashboards/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/dashboards/" class="md-nav__link">
         
   
   
@@ -1233,7 +1363,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../aws/live_tail/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/live_tail/" class="md-nav__link">
         
   
   
@@ -1261,7 +1391,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../aws/log_groups/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/log_groups/" class="md-nav__link">
         
   
   
@@ -1289,7 +1419,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../aws/metrics/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/aws/metrics/" class="md-nav__link">
         
   
   
@@ -1372,7 +1502,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cache/storage/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/cache/storage/" class="md-nav__link">
         
   
   
@@ -1455,7 +1585,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../charts/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/charts/" class="md-nav__link">
         
   
   
@@ -1483,7 +1613,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../charts/palette/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/charts/palette/" class="md-nav__link">
         
   
   
@@ -1511,7 +1641,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../charts/sparkline/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/charts/sparkline/" class="md-nav__link">
         
   
   
@@ -1594,7 +1724,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../config/config/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/config/config/" class="md-nav__link">
         
   
   
@@ -1677,7 +1807,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../query/engine/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/engine/" class="md-nav__link">
         
   
   
@@ -1705,7 +1835,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../query/parser/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/parser/" class="md-nav__link">
         
   
   
@@ -1733,7 +1863,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../query/patterns/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/patterns/" class="md-nav__link">
         
   
   
@@ -1761,7 +1891,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../query/trace/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/query/trace/" class="md-nav__link">
         
   
   
@@ -1794,20 +1924,18 @@
                 
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_11" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_11" >
         
           
           <label class="md-nav__link" for="__nav_3_1_11" id="__nav_3_1_11_label" tabindex="0">
@@ -1828,7 +1956,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_11_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_11_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3_1_11">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1846,7 +1974,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../command_bar/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/command_bar/" class="md-nav__link">
         
   
   
@@ -1874,7 +2002,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dashboard_screen/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/dashboard_screen/" class="md-nav__link">
         
   
   
@@ -1902,7 +2030,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dashboards_screen/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/dashboards_screen/" class="md-nav__link">
         
   
   
@@ -1930,7 +2058,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dive_screen/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/dive_screen/" class="md-nav__link">
         
   
   
@@ -1958,7 +2086,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../groups_screen/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/groups_screen/" class="md-nav__link">
         
   
   
@@ -1986,7 +2114,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../log_viewer/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/log_viewer/" class="md-nav__link">
         
   
   
@@ -2014,7 +2142,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../logs_screen/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/logs_screen/" class="md-nav__link">
         
   
   
@@ -2042,7 +2170,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../navigation/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/navigation/" class="md-nav__link">
         
   
   
@@ -2070,7 +2198,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../picker/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/picker/" class="md-nav__link">
         
   
   
@@ -2098,7 +2226,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plot_widget/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/plot_widget/" class="md-nav__link">
         
   
   
@@ -2126,7 +2254,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../record_detail/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/record_detail/" class="md-nav__link">
         
   
   
@@ -2154,7 +2282,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../shell/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/shell/" class="md-nav__link">
         
   
   
@@ -2182,7 +2310,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../trace_viewer/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/trace_viewer/" class="md-nav__link">
         
   
   
@@ -2207,35 +2335,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Views
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../reference/tail_cw/tui/views/" class="md-nav__link">
         
   
   
@@ -2251,74 +2354,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.tui.views" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        views
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.tui.views-classes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Classes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.tui.views-functions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Functions:
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Functions:">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#tail_cw.tui.views.build_screen" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        build_screen
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -2331,7 +2366,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../which_key/" class="md-nav__link">
+      <a href="../../../reference/tail_cw/tui/which_key/" class="md-nav__link">
         
   
   
@@ -2392,6 +2427,8 @@
   
   
   
+    
+  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -2400,10 +2437,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#tail_cw.tui.views" class="md-nav__link">
+  <a href="#problem" class="md-nav__link">
     <span class="md-ellipsis">
       
-        views
+        Problem
       
     </span>
   </a>
@@ -2411,10 +2448,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tail_cw.tui.views-classes" class="md-nav__link">
+  <a href="#options-considered" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Classes
+        Options considered
       
     </span>
   </a>
@@ -2422,22 +2459,33 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tail_cw.tui.views-functions" class="md-nav__link">
+  <a href="#decision" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Functions:
+        Decision
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Functions:">
+    <nav class="md-nav" aria-label="Decision">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#tail_cw.tui.views.build_screen" class="md-nav__link">
+  <a href="#where-blocking-work-goes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        build_screen
+        Where blocking work goes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-cancellation-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The cancellation contract
       
     </span>
   </a>
@@ -2446,6 +2494,28 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tradeoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tradeoffs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
   
 </li>
       
@@ -2469,82 +2539,54 @@
   
 
 
-  <h1>Views</h1>
-
-<div class="doc doc-object doc-module">
-
-
-
-<a id="tail_cw.tui.views"></a>
-    <div class="doc doc-contents first">
-
-        <p>Maps navigation targets to view screens.</p>
-<p>The views subclass <code>ShellScreen</code>, so <code>shell</code> cannot import them without a
-cycle. This module sits above both and supplies the factory the app takes as a
-constructor argument.</p>
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-<h2 id="tail_cw.tui.views-classes">Classes<a href="#tail_cw.tui.views-classes" class="headerlink" title="Permanent link">⚓︎</a></h2>
-<h2 id="tail_cw.tui.views-functions">Functions:<a href="#tail_cw.tui.views-functions" class="headerlink" title="Permanent link">⚓︎</a></h2>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="tail_cw.tui.views.build_screen" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">build_screen</span>
-
-
-<a href="#tail_cw.tui.views.build_screen" class="headerlink" title="Permanent link">⚓︎</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">build_screen</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Construct the view a navigation target names.</p>
-
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>tail_cw/tui/views.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="18 "></span><span class="k">def</span><span class="w"> </span><span class="nf">build_screen</span><span class="p">(</span><span class="n">target</span><span class="p">:</span> <span class="n">NavTarget</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ShellScreen</span><span class="p">:</span>
-<span class="linenos" data-linenos="19 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct the view a navigation target names.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="20 "></span>    <span class="k">match</span> <span class="n">target</span><span class="o">.</span><span class="n">kind</span><span class="p">:</span>
-<span class="linenos" data-linenos="21 "></span>        <span class="k">case</span> <span class="n">ViewKind</span><span class="o">.</span><span class="n">GROUPS</span><span class="p">:</span>
-<span class="linenos" data-linenos="22 "></span>            <span class="k">return</span> <span class="n">GroupsScreen</span><span class="p">()</span>
-<span class="linenos" data-linenos="23 "></span>        <span class="k">case</span> <span class="n">ViewKind</span><span class="o">.</span><span class="n">LOGS</span><span class="p">:</span>
-<span class="linenos" data-linenos="24 "></span>            <span class="k">return</span> <span class="n">LogsScreen</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">payload</span><span class="p">),</span> <span class="n">live</span><span class="o">=</span><span class="n">target</span><span class="o">.</span><span class="n">label</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;tail&#39;</span><span class="p">))</span>
-<span class="linenos" data-linenos="25 "></span>        <span class="k">case</span> <span class="n">ViewKind</span><span class="o">.</span><span class="n">DASHBOARDS</span><span class="p">:</span>
-<span class="linenos" data-linenos="26 "></span>            <span class="k">return</span> <span class="n">DashboardsScreen</span><span class="p">()</span>
-<span class="linenos" data-linenos="27 "></span>        <span class="k">case</span> <span class="n">ViewKind</span><span class="o">.</span><span class="n">DASHBOARD</span><span class="p">:</span>
-<span class="linenos" data-linenos="28 "></span>            <span class="k">return</span> <span class="n">DashboardScreen</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">payload</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">target</span><span class="o">.</span><span class="n">payload</span> <span class="k">else</span> <span class="n">target</span><span class="o">.</span><span class="n">label</span><span class="p">)</span>
-</code></pre></div>
-            </details>
-    </div>
-
-</div>
-
-
-
-  </div>
-
-    </div>
-
-</div>
+<h1 id="adr-0011-async-aws-io-and-where-blocking-work-goes">ADR 0011: Async AWS I/O, and where blocking work goes<a class="headerlink" href="#adr-0011-async-aws-io-and-where-blocking-work-goes" title="Permanent link">⚓︎</a></h1>
+<p>Date: 2026-07-25 Status: Accepted (supersedes the boto3 and worker decisions in ADR 0002)</p>
+<h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">⚓︎</a></h2>
+<p>Every AWS call was synchronous boto3 run on a Textual thread worker. That worked while the app made one call at a time. The dashboard work in ADR 0005 and 0006 broke the assumption, because a dashboard fans out one call per widget.</p>
+<p>Three specific costs, all reproducible on the verified <code>irm-prod-main</code> dashboard (43 widgets, 28 of them metric):</p>
+<ul>
+<li>Textual thread workers run on asyncio&rsquo;s default executor (<code>run_in_executor(None, ...)</code>), capped at <code>min(32, cpu_count + 4)</code>. On a 12-core machine that is 16 slots, shared by every metric panel, every log-volume sparkline, every Parquet load, and the live tail worker, which holds one slot for the whole three-hour session. Twenty-eight metric widgets therefore fetch in two waves</li>
+<li><code>exclusive=True</code> cancels the worker, not the HTTP request. A debounced reload or a time-range change abandons a thread mid-<code>GetMetricData</code>, so the old request still completes, still bills, and still occupies a slot</li>
+<li>Every function built its own client, so each call re-resolved SSO credentials and opened a fresh connection pool</li>
+</ul>
+<h2 id="options-considered">Options considered<a class="headerlink" href="#options-considered" title="Permanent link">⚓︎</a></h2>
+<ol>
+<li>Keep boto3 and fix only the fan-out: drive panels from one worker over an explicit <code>ThreadPoolExecutor</code>. Cheapest change, removes the wave behaviour, and leaves cancellation broken and credentials re-resolved per call</li>
+<li><code>aioboto3</code>: the familiar surface, but it wraps the boto3 resource and file-transfer layer this project never uses, and pulls <code>aiofiles</code> for the same reason</li>
+<li><code>aiobotocore</code> directly, with async Textual workers: clients only, which is all the project ever creates</li>
+</ol>
+<h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">⚓︎</a></h2>
+<p>Option 3. <code>tail_cw/aws</code> is coroutines and async generators over <code>aiobotocore</code>, and the ten Textual thread workers became async workers, which deleted twenty-two <code>call_from_thread</code> hops. <code>boto3</code> is gone from the dependency tree.</p>
+<p>Two things had to be true before this was viable, and both were checked before any code moved:</p>
+<ul>
+<li><code>StartLiveTail</code> needs an async event stream. <code>aiobotocore</code> provides <code>AioEventStream</code> with <code>__aiter__</code>/<code>__anext__</code>, and its <code>__iter__</code> raises <code>NotImplementedError('Use async-for instead')</code></li>
+<li>SSO with two profiles needs the async credential chain. <code>aiobotocore</code> ships <code>AioSSOProvider</code> over <code>AioSSOTokenProvider</code> and honours <code>profile_name</code>, so <code>sso-session</code> config resolves as before</li>
+</ul>
+<p>Clients now come from a <code>ClientPool</code> held open for the session, and every function in <code>aws/</code> takes an already-open client. That keeps credential resolution at the edges, per the layering in ADR 0002, and removes the per-call client construction. Services depend on a <code>ClientProvider</code> Protocol rather than the concrete pool, so tests wire a fake with no credentials at all.</p>
+<h3 id="where-blocking-work-goes">Where blocking work goes<a class="headerlink" href="#where-blocking-work-goes" title="Permanent link">⚓︎</a></h3>
+<p>The cache and query layers are DuckDB and Polars, neither of which has an asyncio interface. They cannot become coroutines, so the question is how to run them without stalling the message loop.</p>
+<p>Threads are the right offload here, and that is a measured claim rather than an assumption. Both libraries are native extensions that release the GIL during execution: four threads of DuckDB queries scaled 3.09x, where four threads of pure-Python CPU work scaled 1.07x. A process pool would only be needed if the hot work were pure Python.</p>
+<p>The pool is deliberately small (four workers) and deliberately not asyncio&rsquo;s default executor. Both libraries already parallelize across cores internally, so stacking many concurrent queries on top oversubscribes the machine and the event loop pays for it: eight concurrent DuckDB queries through <code>asyncio.to_thread</code> stalled the loop for roughly 90ms, against 1-2ms for the same queries through a small dedicated pool. Owning the pool also means query work cannot be starved by unrelated <code>to_thread</code> callers, and its width is chosen rather than inherited from the CPU count.</p>
+<p><code>polars.LazyFrame.collect_async()</code> is documented for exactly this use and does not work: <a href="https://github.com/pola-rs/polars/issues/18718">pola-rs/polars#18718</a> reports that it blocks the event loop, and has been open since September 2024.</p>
+<h3 id="the-cancellation-contract">The cancellation contract<a class="headerlink" href="#the-cancellation-contract" title="Permanent link">⚓︎</a></h3>
+<p>Cancelling an async task does not interrupt a thread that task started. A worker pulling events from a bridged async source would therefore hold its pool slot forever once the loop stopped feeding it. <code>consume_in_thread</code> closes that from both sides: it cancels the in-flight pull so a thread blocked on the network wakes, and it raises <code>BridgeCancelledError</code> inside the thread so the consumer unwinds.</p>
+<p>Raising matters more than it looks. <code>LogCache.write</code> sets cache metadata only after the Parquet write returns, so an exception from the iterator aborts cleanly and leaves an orphan file the next write sweeps. A bridge that merely <em>ended</em> its iterator early would let <code>write</code> finish normally and register a truncated Parquet file as a complete cache entry, which is indistinguishable from a complete one on the next read.</p>
+<p><code>BridgeCancelledError</code> is a distinct type because <code>concurrent.futures.CancelledError</code> derives from <code>Exception</code> rather than <code>BaseException</code>, so any <code>except Exception</code> between the bridge and the caller would quietly absorb a cancellation.</p>
+<p>Concurrent work uses <code>asyncio.TaskGroup</code>, not <code>asyncio.gather</code>, because <code>gather</code> leaves siblings running when one fails.</p>
+<h2 id="tradeoffs">Tradeoffs<a class="headerlink" href="#tradeoffs" title="Permanent link">⚓︎</a></h2>
+<ul>
+<li>The version pin is the standing cost. <code>aiobotocore</code> 3.8.0 requires <code>botocore&gt;=1.43.3,&lt;1.43.47</code>, so the lock sits at the 1.43.46 ceiling and every new AWS API or region update waits on an <code>aiobotocore</code> release. Renovate cannot bump <code>botocore</code> alone</li>
+<li>Dependency count moves the wrong way against the AGENTS.md rule: <code>boto3</code> and <code>s3transfer</code> leave, <code>aiobotocore</code> and <code>aiohttp</code> arrive with <code>aioitertools</code>, <code>multidict</code>, <code>yarl</code>, <code>frozenlist</code>, <code>aiosignal</code>, <code>propcache</code>, and <code>aiohappyeyeballs</code></li>
+<li>Two async idioms now have to be held in mind at once: AWS calls are natively async, cache and query calls are blocking work behind an executor hop. Wrapping the query layer in <code>async def</code> would hide that rather than fix it, so it stays sync and the hop stays visible at the call site</li>
+<li><code>aiobotocore</code> types are untyped, so <code>aws/</code> carries <code>type: ignore[import-untyped]</code> on its imports and clients are <code>Any</code> at the boundary</li>
+</ul>
+<h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">⚓︎</a></h2>
+<ul>
+<li>Every function in <code>tail_cw.aws</code> takes an open client as its first argument and returns a coroutine or an async iterator; <code>ShellServices</code> callables are awaitable. This is a breaking change to the internal API</li>
+<li>A new blocking dependency (anything that does not release the GIL) cannot simply go on the shared pool. Check the GIL behaviour by measurement first, and reach for a process pool only when a thread is not a real offload</li>
+<li>Anything reading from a bridged stream must let <code>BridgeCancelledError</code> propagate. Swallowing it converts a cancelled write into a silently truncated one</li>
+<li>The Parquet write path is bounded by the four-worker pool rather than by AWS. Fetches all start together and the writes queue, which is where the real limit now sits</li>
+</ul>
 
 
 
@@ -2594,14 +2636,14 @@ constructor argument.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["toc.autohide"], "search": "../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["toc.autohide"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
         <script src="https://cdnjs.cloudflare.com/ajax/libs/tablesort/5.6.0/tablesort.min.js"></script>
       
-        <script src="../../../../_javascript/tables.js"></script>
+        <script src="../../../_javascript/tables.js"></script>
       
     
   </body>

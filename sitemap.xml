@@ -69,7 +69,19 @@
          <lastmod>2026-07-25</lastmod>
     </url>
     <url>
+         <loc>https://tail-cw.kyleking.me/docs/adr/0011-async-aws-io-and-blocking-work/</loc>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/docs/adr/0012-export-traces-instead-of-drawing-them/</loc>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/cli/</loc>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/concurrency/</loc>
          <lastmod>2026-07-25</lastmod>
     </url>
     <url>

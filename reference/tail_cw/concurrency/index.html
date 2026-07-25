@@ -12,13 +12,13 @@
         <meta name="author" content="Kyle King">
       
       
-        <link rel="canonical" href="https://tail-cw.kyleking.me/reference/tail_cw/preview/">
+        <link rel="canonical" href="https://tail-cw.kyleking.me/reference/tail_cw/concurrency/">
       
       
-        <link rel="prev" href="../demo/">
+        <link rel="prev" href="../cli/">
       
       
-        <link rel="next" href="../recents/">
+        <link rel="next" href="../demo/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Preview - tail_cw</title>
+        <title>Concurrency - tail_cw</title>
       
     
     
@@ -84,7 +84,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#tail_cw.preview" class="md-skip">
+        <a href="#tail_cw.concurrency" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Preview
+              Concurrency
             
           </span>
         </div>
@@ -1015,10 +1015,35 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../concurrency/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concurrency
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1034,6 +1059,174 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.concurrency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        concurrency
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.concurrency-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.DEFAULT_BLOCKING_WORKERS" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DEFAULT_BLOCKING_WORKERS
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.DEFAULT_BRIDGE_BATCH" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DEFAULT_BRIDGE_BATCH
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.concurrency-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Classes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Classes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.BridgeCancelledError" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BridgeCancelledError
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.concurrency-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions:
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions:">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.blocking_pool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        blocking_pool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.closing_stream" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        closing_stream
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.consume_in_thread" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        consume_in_thread
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.run_blocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_blocking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.take" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        take
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1071,35 +1264,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Preview
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../preview/" class="md-nav__link">
         
   
   
@@ -1115,130 +1283,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.preview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        preview
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.preview-attributes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Attributes
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Attributes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#tail_cw.preview.DEFAULT_VOLUME_BUCKETS" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        DEFAULT_VOLUME_BUCKETS
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.preview-classes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Classes
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Classes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#tail_cw.preview.GroupPreview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        GroupPreview
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tail_cw.preview-functions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Functions:
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Functions:">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#tail_cw.preview.bucket_event_counts" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        bucket_event_counts
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tail_cw.preview.build_group_preview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        build_group_preview
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -2454,10 +2498,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#tail_cw.preview" class="md-nav__link">
+  <a href="#tail_cw.concurrency" class="md-nav__link">
     <span class="md-ellipsis">
       
-        preview
+        concurrency
       
     </span>
   </a>
@@ -2465,7 +2509,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tail_cw.preview-attributes" class="md-nav__link">
+  <a href="#tail_cw.concurrency-attributes" class="md-nav__link">
     <span class="md-ellipsis">
       
         Attributes
@@ -2477,10 +2521,21 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#tail_cw.preview.DEFAULT_VOLUME_BUCKETS" class="md-nav__link">
+  <a href="#tail_cw.concurrency.DEFAULT_BLOCKING_WORKERS" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DEFAULT_VOLUME_BUCKETS
+        DEFAULT_BLOCKING_WORKERS
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.DEFAULT_BRIDGE_BATCH" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DEFAULT_BRIDGE_BATCH
       
     </span>
   </a>
@@ -2493,7 +2548,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tail_cw.preview-classes" class="md-nav__link">
+  <a href="#tail_cw.concurrency-classes" class="md-nav__link">
     <span class="md-ellipsis">
       
         Classes
@@ -2505,10 +2560,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#tail_cw.preview.GroupPreview" class="md-nav__link">
+  <a href="#tail_cw.concurrency.BridgeCancelledError" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GroupPreview
+        BridgeCancelledError
       
     </span>
   </a>
@@ -2521,7 +2576,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tail_cw.preview-functions" class="md-nav__link">
+  <a href="#tail_cw.concurrency-functions" class="md-nav__link">
     <span class="md-ellipsis">
       
         Functions:
@@ -2533,10 +2588,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#tail_cw.preview.bucket_event_counts" class="md-nav__link">
+  <a href="#tail_cw.concurrency.blocking_pool" class="md-nav__link">
     <span class="md-ellipsis">
       
-        bucket_event_counts
+        blocking_pool
       
     </span>
   </a>
@@ -2544,10 +2599,43 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#tail_cw.preview.build_group_preview" class="md-nav__link">
+  <a href="#tail_cw.concurrency.closing_stream" class="md-nav__link">
     <span class="md-ellipsis">
       
-        build_group_preview
+        closing_stream
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.consume_in_thread" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        consume_in_thread
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.run_blocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_blocking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.concurrency.take" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        take
       
     </span>
   </a>
@@ -2579,21 +2667,34 @@
   
 
 
-  <h1>Preview</h1>
+  <h1>Concurrency</h1>
 
 <div class="doc doc-object doc-module">
 
 
 
-<a id="tail_cw.preview"></a>
+<a id="tail_cw.concurrency"></a>
     <div class="doc doc-contents first">
 
-        <p>Cheap summaries of a log group: its message shapes, and its activity over time.</p>
-<p>Answers &ldquo;what is in this group?&rdquo; cheaply enough to walk a long list of groups: one
-capped fetch per group, clustered into recurring shapes, cached with a short TTL so
-revisiting a group costs nothing. <code>bucket_event_counts</code> answers the companion
-question, &ldquo;when was it busy?&rdquo;, for the log-volume sparklines on a dashboard. Core
-layer, so no Textual import belongs here.</p>
+        <p>Offloading blocking work from the event loop, and feeding it async data.</p>
+<p>The AWS calls in :mod:<code>tail_cw.aws</code> are natively async, but the cache and query
+layers are DuckDB and Polars, which have no asyncio interface. Both are native
+extensions that release the GIL during execution, so a worker thread is a real
+offload rather than a GIL-bound relay; a process pool is not needed.</p>
+<p>Three rules shape this module.</p>
+<p>Blocking work goes to a dedicated pool rather than asyncio&rsquo;s default executor,
+which is shared with every other <code>to_thread</code> caller and sized
+<code>min(32, cpu_count + 4)</code>.</p>
+<p>The pool stays small, because DuckDB and Polars each parallelize across cores
+internally: stacking many concurrent queries on top of that oversubscribes the
+machine and the event loop pays for it in latency, measured at roughly 90ms of
+stall for eight concurrent DuckDB queries against 1-2ms through a small pool.</p>
+<p>Cancelling an async task does not interrupt a thread that task started, so a
+thread pulling from a bridged async source would hold its slot forever once the
+loop stopped feeding it. :func:<code>consume_in_thread</code> closes that hole from both
+sides: it cancels the in-flight pull so a thread blocked on the network wakes,
+and it raises :class:<code>BridgeCancelledError</code> inside the thread so the consumer unwinds
+instead of finishing early on a truncated stream.</p>
 
 
 
@@ -2610,54 +2711,83 @@ layer, so no Textual import belongs here.</p>
 
 
 
-<h2 id="tail_cw.preview-attributes">Attributes<a href="#tail_cw.preview-attributes" class="headerlink" title="Permanent link">⚓︎</a></h2>
+<h2 id="tail_cw.concurrency-attributes">Attributes<a href="#tail_cw.concurrency-attributes" class="headerlink" title="Permanent link">⚓︎</a></h2>
 
 <div class="doc doc-object doc-attribute">
 
 
 
-<h3 id="tail_cw.preview.DEFAULT_VOLUME_BUCKETS" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">DEFAULT_VOLUME_BUCKETS</span>
+<h3 id="tail_cw.concurrency.DEFAULT_BLOCKING_WORKERS" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">DEFAULT_BLOCKING_WORKERS</span>
 
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
   </span>
 
-<a href="#tail_cw.preview.DEFAULT_VOLUME_BUCKETS" class="headerlink" title="Permanent link">⚓︎</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="n">DEFAULT_VOLUME_BUCKETS</span> <span class="o">=</span> <span class="mi">48</span>
+<a href="#tail_cw.concurrency.DEFAULT_BLOCKING_WORKERS" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">DEFAULT_BLOCKING_WORKERS</span> <span class="o">=</span> <span class="mi">4</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Buckets per log-volume series; the sparkline resamples this to the cell width.</p>
+        <p>Concurrent DuckDB/Polars calls to allow. Above this, oversubscription stalls the loop.</p>
 
     </div>
 
 </div>
 
-<h2 id="tail_cw.preview-classes">Classes<a href="#tail_cw.preview-classes" class="headerlink" title="Permanent link">⚓︎</a></h2>
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="tail_cw.concurrency.DEFAULT_BRIDGE_BATCH" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">DEFAULT_BRIDGE_BATCH</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#tail_cw.concurrency.DEFAULT_BRIDGE_BATCH" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">DEFAULT_BRIDGE_BATCH</span> <span class="o">=</span> <span class="mi">1000</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Items pulled per loop round-trip, and so the granularity of cancellation.</p>
+
+    </div>
+
+</div>
+
+<h2 id="tail_cw.concurrency-classes">Classes<a href="#tail_cw.concurrency-classes" class="headerlink" title="Permanent link">⚓︎</a></h2>
 
 <div class="doc doc-object doc-class">
 
 
 
-<h3 id="tail_cw.preview.GroupPreview" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">GroupPreview</span>
+<h3 id="tail_cw.concurrency.BridgeCancelledError" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">BridgeCancelledError</span>
 
 
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
-  </span>
-
-<a href="#tail_cw.preview.GroupPreview" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<a href="#tail_cw.concurrency.BridgeCancelledError" class="headerlink" title="Permanent link">⚓︎</a></h3>
 
 
     <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="Exception">Exception</span></code></p>
 
 
 
-        <p>Recent-event summary for one log group.</p>
+        <p>Raised inside a worker thread when the awaiting task was cancelled.</p>
+<p>Callers that write to durable storage must let this propagate. Swallowing it
+turns a cancelled stream into a short one, which is indistinguishable from a
+complete stream to whatever the consumer writes.</p>
+<p>Raised in place of <code>concurrent.futures.CancelledError</code>, which a worker thread
+would otherwise see. That one derives from <code>Exception</code> rather than
+<code>BaseException</code>, so any <code>except Exception</code> between here and the caller would
+quietly absorb a cancellation.</p>
 
 
 
@@ -2667,87 +2797,90 @@ layer, so no Textual import belongs here.</p>
 
 
               <details class="mkdocstrings-source">
-                <summary>Source code in <code>tail_cw/preview.py</code></summary>
-                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="29 "></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="linenos" data-linenos="30 "></span><span class="k">class</span><span class="w"> </span><span class="nc">GroupPreview</span><span class="p">:</span>
-<span class="linenos" data-linenos="31 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Recent-event summary for one log group.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="32 "></span>
-<span class="linenos" data-linenos="33 "></span>    <span class="n">log_group</span><span class="p">:</span> <span class="nb">str</span>
-<span class="linenos" data-linenos="34 "></span>    <span class="n">event_count</span><span class="p">:</span> <span class="nb">int</span>
-<span class="linenos" data-linenos="35 "></span>    <span class="n">window_seconds</span><span class="p">:</span> <span class="nb">int</span>
-<span class="linenos" data-linenos="36 "></span>    <span class="n">patterns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">MessagePattern</span><span class="p">]</span>
+                <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
+                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="46 "></span><span class="k">class</span><span class="w"> </span><span class="nc">BridgeCancelledError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+<span class="linenos" data-linenos="47 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised inside a worker thread when the awaiting task was cancelled.</span>
+<span class="linenos" data-linenos="48 "></span>
+<span class="linenos" data-linenos="49 "></span><span class="sd">    Callers that write to durable storage must let this propagate. Swallowing it</span>
+<span class="linenos" data-linenos="50 "></span><span class="sd">    turns a cancelled stream into a short one, which is indistinguishable from a</span>
+<span class="linenos" data-linenos="51 "></span><span class="sd">    complete stream to whatever the consumer writes.</span>
+<span class="linenos" data-linenos="52 "></span>
+<span class="linenos" data-linenos="53 "></span><span class="sd">    Raised in place of ``concurrent.futures.CancelledError``, which a worker thread</span>
+<span class="linenos" data-linenos="54 "></span><span class="sd">    would otherwise see. That one derives from ``Exception`` rather than</span>
+<span class="linenos" data-linenos="55 "></span><span class="sd">    ``BaseException``, so any ``except Exception`` between here and the caller would</span>
+<span class="linenos" data-linenos="56 "></span><span class="sd">    quietly absorb a cancellation.</span>
+<span class="linenos" data-linenos="57 "></span><span class="sd">    &quot;&quot;&quot;</span>
 </code></pre></div>
               </details>
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-
-
-  </div>
 
     </div>
 
 </div>
-<h2 id="tail_cw.preview-functions">Functions:<a href="#tail_cw.preview-functions" class="headerlink" title="Permanent link">⚓︎</a></h2>
+<h2 id="tail_cw.concurrency-functions">Functions:<a href="#tail_cw.concurrency-functions" class="headerlink" title="Permanent link">⚓︎</a></h2>
 
 <div class="doc doc-object doc-function">
 
 
-<h3 id="tail_cw.preview.bucket_event_counts" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">bucket_event_counts</span>
+<h3 id="tail_cw.concurrency.blocking_pool" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">blocking_pool</span>
 
 
-<a href="#tail_cw.preview.bucket_event_counts" class="headerlink" title="Permanent link">⚓︎</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">bucket_event_counts</span><span class="p">(</span><span class="n">timestamps</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">buckets</span><span class="o">=</span><span class="n">DEFAULT_VOLUME_BUCKETS</span><span class="p">)</span>
+<a href="#tail_cw.concurrency.blocking_pool" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">blocking_pool</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">DEFAULT_BLOCKING_WORKERS</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Count timestamps into equal-width buckets spanning the window.</p>
-<p>Timestamps outside the window are ignored, and <code>end</code> itself lands in the
-final bucket rather than falling off the end. Returns an empty list when the
-window is empty or <code>buckets</code> is not positive, so a caller can render
-nothing without a special case.</p>
+        <p>Open a dedicated pool for blocking cache and query work.</p>
+<p>Kept separate from asyncio&rsquo;s default executor so query work cannot be starved
+by unrelated <code>to_thread</code> callers, and so its width is chosen rather than
+inherited from the CPU count. Exiting waits for running work, which is bounded
+because every bridged consumer stops within one batch of being cancelled.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">YIELDS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-yields-annotation">
+                    <code><span title="concurrent.futures.ThreadPoolExecutor">ThreadPoolExecutor</span></code>
+                </span>
+            </td>
+            <td class="doc-yields-details">
+              <div class="doc-md-description">
+                <p>The pool, shut down when the block exits.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
             <details class="mkdocstrings-source">
-              <summary>Source code in <code>tail_cw/preview.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="155 "></span><span class="k">def</span><span class="w"> </span><span class="nf">bucket_event_counts</span><span class="p">(</span>
-<span class="linenos" data-linenos="156 "></span>    <span class="n">timestamps</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">datetime</span><span class="p">],</span>
-<span class="linenos" data-linenos="157 "></span>    <span class="o">*</span><span class="p">,</span>
-<span class="linenos" data-linenos="158 "></span>    <span class="n">start</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
-<span class="linenos" data-linenos="159 "></span>    <span class="n">end</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
-<span class="linenos" data-linenos="160 "></span>    <span class="n">buckets</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DEFAULT_VOLUME_BUCKETS</span><span class="p">,</span>
-<span class="linenos" data-linenos="161 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
-<span class="linenos" data-linenos="162 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Count timestamps into equal-width buckets spanning the window.</span>
-<span class="linenos" data-linenos="163 "></span>
-<span class="linenos" data-linenos="164 "></span><span class="sd">    Timestamps outside the window are ignored, and ``end`` itself lands in the</span>
-<span class="linenos" data-linenos="165 "></span><span class="sd">    final bucket rather than falling off the end. Returns an empty list when the</span>
-<span class="linenos" data-linenos="166 "></span><span class="sd">    window is empty or ``buckets`` is not positive, so a caller can render</span>
-<span class="linenos" data-linenos="167 "></span><span class="sd">    nothing without a special case.</span>
-<span class="linenos" data-linenos="168 "></span><span class="sd">    &quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="169 "></span>    <span class="n">span</span> <span class="o">=</span> <span class="p">(</span><span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span>
-<span class="linenos" data-linenos="170 "></span>    <span class="k">if</span> <span class="n">buckets</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">span</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
-<span class="linenos" data-linenos="171 "></span>        <span class="k">return</span> <span class="p">[]</span>
-<span class="linenos" data-linenos="172 "></span>    <span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">]</span> <span class="o">*</span> <span class="n">buckets</span>
-<span class="linenos" data-linenos="173 "></span>    <span class="k">for</span> <span class="n">timestamp</span> <span class="ow">in</span> <span class="n">timestamps</span><span class="p">:</span>
-<span class="linenos" data-linenos="174 "></span>        <span class="n">offset</span> <span class="o">=</span> <span class="p">(</span><span class="n">timestamp</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span>
-<span class="linenos" data-linenos="175 "></span>        <span class="k">if</span> <span class="n">offset</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">offset</span> <span class="o">&gt;</span> <span class="n">span</span><span class="p">:</span>
-<span class="linenos" data-linenos="176 "></span>            <span class="k">continue</span>
-<span class="linenos" data-linenos="177 "></span>        <span class="n">index</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">offset</span> <span class="o">/</span> <span class="n">span</span> <span class="o">*</span> <span class="n">buckets</span><span class="p">),</span> <span class="n">buckets</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-<span class="linenos" data-linenos="178 "></span>        <span class="n">counts</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
-<span class="linenos" data-linenos="179 "></span>    <span class="k">return</span> <span class="n">counts</span>
+              <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="60 "></span><span class="nd">@contextmanager</span>
+<span class="linenos" data-linenos="61 "></span><span class="k">def</span><span class="w"> </span><span class="nf">blocking_pool</span><span class="p">(</span><span class="n">max_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DEFAULT_BLOCKING_WORKERS</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ThreadPoolExecutor</span><span class="p">]:</span>
+<span class="linenos" data-linenos="62 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Open a dedicated pool for blocking cache and query work.</span>
+<span class="linenos" data-linenos="63 "></span>
+<span class="linenos" data-linenos="64 "></span><span class="sd">    Kept separate from asyncio&#39;s default executor so query work cannot be starved</span>
+<span class="linenos" data-linenos="65 "></span><span class="sd">    by unrelated ``to_thread`` callers, and so its width is chosen rather than</span>
+<span class="linenos" data-linenos="66 "></span><span class="sd">    inherited from the CPU count. Exiting waits for running work, which is bounded</span>
+<span class="linenos" data-linenos="67 "></span><span class="sd">    because every bridged consumer stops within one batch of being cancelled.</span>
+<span class="linenos" data-linenos="68 "></span>
+<span class="linenos" data-linenos="69 "></span><span class="sd">    Yields:</span>
+<span class="linenos" data-linenos="70 "></span><span class="sd">        The pool, shut down when the block exits.</span>
+<span class="linenos" data-linenos="71 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="72 "></span>    <span class="n">pool</span> <span class="o">=</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span><span class="p">,</span> <span class="n">thread_name_prefix</span><span class="o">=</span><span class="s1">&#39;tail-cw-blocking&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="73 "></span>    <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="74 "></span>        <span class="k">yield</span> <span class="n">pool</span>
+<span class="linenos" data-linenos="75 "></span>    <span class="k">finally</span><span class="p">:</span>
+<span class="linenos" data-linenos="76 "></span>        <span class="n">pool</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
             </details>
     </div>
@@ -2757,233 +2890,45 @@ nothing without a special case.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="tail_cw.preview.build_group_preview" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">build_group_preview</span>
+<h3 id="tail_cw.concurrency.closing_stream" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">closing_stream</span>
 
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-async"><code>async</code></small>
   </span>
 
-<a href="#tail_cw.preview.build_group_preview" class="headerlink" title="Permanent link">⚓︎</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">build_group_preview</span><span class="p">(</span>
-    <span class="n">client</span><span class="p">,</span> <span class="n">log_group</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">window</span><span class="p">,</span> <span class="n">now</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">profile_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">region_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fetch_events</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sample_limit</span><span class="o">=</span><span class="mi">500</span>
-<span class="p">)</span>
+<a href="#tail_cw.concurrency.closing_stream" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">closing_stream</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Summarize the recent message shapes in a log group.</p>
-<p>Reads at most <code>sample_limit</code> events from the window ending at <code>now</code>, so a busy
-group costs one small call rather than the whole window. Results cache under
-<code>preview:v1:&lt;digest&gt;</code> for <code>config.preview.ttl_seconds</code>; a cache hit performs no
-AWS call at all.</p>
+        <p>Close an async source on the way out, when it supports closing.</p>
+<p>Closing matters for anything backed by a paginator: abandoning the generator
+mid-page leaves the HTTP response open until the interpreter finalizes it.
+Unlike :func:<code>contextlib.aclosing</code> this accepts any async iterator, so a test
+fake need not implement <code>aclose</code>.</p>
 
 
 <table>
       <thead>
         <tr>
-          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span class="doc-section-title">YIELDS</span></th>
           <th><span>DESCRIPTION</span></th>
         </tr>
       </thead>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                <code>client</code>
+                <span class="doc-yields-annotation">
+                    <code><span title="collections.abc.AsyncIterator">AsyncIterator</span>[<span title="collections.abc.AsyncIterator">AsyncIterator</span>[<span title="tail_cw.concurrency.T">T</span>]]</code>
+                </span>
             </td>
-            <td class="doc-param-details">
+            <td class="doc-yields-details">
               <div class="doc-md-description">
-                <p>An open CloudWatch Logs client, from :meth:<code>ClientPool.client</code>.</p>
+                <p>The source, unchanged.</p>
               </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="typing.Any">Any</span></code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>log_group</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>CloudWatch log group name.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="str">str</span></code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>window</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>How far back from <code>now</code> to sample.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="datetime.timedelta">timedelta</span></code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>now</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>Timezone-aware end of the sampled window.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="datetime.datetime">datetime</span></code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>config</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>Application configuration supplying cache and preview settings.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="TailCWConfig
-
-
-  
-      dataclass
-   (tail_cw.config.config.TailCWConfig)" href="../config/config/#tail_cw.config.config.TailCWConfig">TailCWConfig</a></code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>profile_name</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>Optional AWS profile name, part of the cache key only.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="str">str</span> | None</code>
-                  </span>
-                  <span class="doc-param-default">
-                    <b>DEFAULT:</b>
-                      <code>None</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>region_name</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>Optional AWS region name, part of the cache key only.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="str">str</span> | None</code>
-                  </span>
-                  <span class="doc-param-default">
-                    <b>DEFAULT:</b>
-                      <code>None</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>fetch_events</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>Optional replacement for :func:<code>fetch_log_events</code>.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="tail_cw.preview.FetchEvents">FetchEvents</span> | None</code>
-                  </span>
-                  <span class="doc-param-default">
-                    <b>DEFAULT:</b>
-                      <code>None</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>sample_limit</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>Maximum number of events read from the window.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="int">int</span></code>
-                  </span>
-                  <span class="doc-param-default">
-                    <b>DEFAULT:</b>
-                      <code>500</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<table>
-      <thead>
-        <tr>
-          <th><span class="doc-section-title">RETURNS</span></th>
-          <th><span>DESCRIPTION</span></th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>A</code>
-            </td>
-            <td class="doc-returns-details">
-              <div class="doc-md-description">
-                <p>class:<code>GroupPreview</code>; an empty group yields <code>event_count=0</code> and no patterns.</p>
-              </div>
-                <p>
-                  <span class="doc-returns-annotation">
-                    <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="GroupPreview
-
-
-  
-      dataclass
-   (tail_cw.preview.GroupPreview)" href="#tail_cw.preview.GroupPreview">GroupPreview</a></code>
-                  </span>
-                </p>
             </td>
           </tr>
       </tbody>
@@ -2991,71 +2936,154 @@ AWS call at all.</p>
 
 
             <details class="mkdocstrings-source">
-              <summary>Source code in <code>tail_cw/preview.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos=" 39 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">build_group_preview</span><span class="p">(</span>
-<span class="linenos" data-linenos=" 40 "></span>    <span class="n">client</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 41 "></span>    <span class="n">log_group</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 42 "></span>    <span class="o">*</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 43 "></span>    <span class="n">window</span><span class="p">:</span> <span class="n">timedelta</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 44 "></span>    <span class="n">now</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 45 "></span>    <span class="n">config</span><span class="p">:</span> <span class="n">TailCWConfig</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 46 "></span>    <span class="n">profile_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 47 "></span>    <span class="n">region_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 48 "></span>    <span class="n">fetch_events</span><span class="p">:</span> <span class="n">FetchEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 49 "></span>    <span class="n">sample_limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">500</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 50 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GroupPreview</span><span class="p">:</span>
-<span class="linenos" data-linenos=" 51 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Summarize the recent message shapes in a log group.</span>
-<span class="linenos" data-linenos=" 52 "></span>
-<span class="linenos" data-linenos=" 53 "></span><span class="sd">    Reads at most `sample_limit` events from the window ending at `now`, so a busy</span>
-<span class="linenos" data-linenos=" 54 "></span><span class="sd">    group costs one small call rather than the whole window. Results cache under</span>
-<span class="linenos" data-linenos=" 55 "></span><span class="sd">    `preview:v1:&lt;digest&gt;` for `config.preview.ttl_seconds`; a cache hit performs no</span>
-<span class="linenos" data-linenos=" 56 "></span><span class="sd">    AWS call at all.</span>
-<span class="linenos" data-linenos=" 57 "></span>
-<span class="linenos" data-linenos=" 58 "></span><span class="sd">    Args:</span>
-<span class="linenos" data-linenos=" 59 "></span><span class="sd">        client: An open CloudWatch Logs client, from :meth:`ClientPool.client`.</span>
-<span class="linenos" data-linenos=" 60 "></span><span class="sd">        log_group: CloudWatch log group name.</span>
-<span class="linenos" data-linenos=" 61 "></span><span class="sd">        window: How far back from `now` to sample.</span>
-<span class="linenos" data-linenos=" 62 "></span><span class="sd">        now: Timezone-aware end of the sampled window.</span>
-<span class="linenos" data-linenos=" 63 "></span><span class="sd">        config: Application configuration supplying cache and preview settings.</span>
-<span class="linenos" data-linenos=" 64 "></span><span class="sd">        profile_name: Optional AWS profile name, part of the cache key only.</span>
-<span class="linenos" data-linenos=" 65 "></span><span class="sd">        region_name: Optional AWS region name, part of the cache key only.</span>
-<span class="linenos" data-linenos=" 66 "></span><span class="sd">        fetch_events: Optional replacement for :func:`fetch_log_events`.</span>
-<span class="linenos" data-linenos=" 67 "></span><span class="sd">        sample_limit: Maximum number of events read from the window.</span>
-<span class="linenos" data-linenos=" 68 "></span>
-<span class="linenos" data-linenos=" 69 "></span><span class="sd">    Returns:</span>
-<span class="linenos" data-linenos=" 70 "></span><span class="sd">        A :class:`GroupPreview`; an empty group yields ``event_count=0`` and no patterns.</span>
-<span class="linenos" data-linenos=" 71 "></span><span class="sd">    &quot;&quot;&quot;</span>
-<span class="linenos" data-linenos=" 72 "></span>    <span class="n">window_seconds</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">window</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">())</span>
-<span class="linenos" data-linenos=" 73 "></span>    <span class="n">cache_key</span> <span class="o">=</span> <span class="n">generate_preview_cache_key</span><span class="p">(</span>
-<span class="linenos" data-linenos=" 74 "></span>        <span class="n">log_group</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 75 "></span>        <span class="n">window_seconds</span><span class="o">=</span><span class="n">window_seconds</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 76 "></span>        <span class="n">region_name</span><span class="o">=</span><span class="n">region_name</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 77 "></span>        <span class="n">profile_name</span><span class="o">=</span><span class="n">profile_name</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 78 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos=" 79 "></span>    <span class="n">cache_dir</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">cache_dir</span> <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">cache_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">get_default_cache_dir</span><span class="p">()</span>
-<span class="linenos" data-linenos=" 80 "></span>
-<span class="linenos" data-linenos=" 81 "></span>    <span class="k">with</span> <span class="n">LogCache</span><span class="p">(</span>
-<span class="linenos" data-linenos=" 82 "></span>        <span class="n">cache_dir</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 83 "></span>        <span class="n">size_limit_mb</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">size_limit_mb</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 84 "></span>        <span class="n">default_ttl_seconds</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">default_ttl_seconds</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 85 "></span>        <span class="n">eviction_policy</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">eviction_policy</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 86 "></span>    <span class="p">)</span> <span class="k">as</span> <span class="n">cache</span><span class="p">:</span>
-<span class="linenos" data-linenos=" 87 "></span>        <span class="n">payload</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">read_payload</span><span class="p">(</span><span class="n">cache_key</span><span class="p">)</span>
-<span class="linenos" data-linenos=" 88 "></span>        <span class="k">if</span> <span class="n">payload</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">cached</span> <span class="o">:=</span> <span class="n">_decode_payload</span><span class="p">(</span><span class="n">log_group</span><span class="p">,</span> <span class="n">payload</span><span class="p">))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos=" 89 "></span>            <span class="k">return</span> <span class="n">cached</span>
-<span class="linenos" data-linenos=" 90 "></span>
-<span class="linenos" data-linenos=" 91 "></span>        <span class="n">preview</span> <span class="o">=</span> <span class="k">await</span> <span class="n">_sample_group</span><span class="p">(</span>
-<span class="linenos" data-linenos=" 92 "></span>            <span class="n">client</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 93 "></span>            <span class="n">log_group</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 94 "></span>            <span class="n">window</span><span class="o">=</span><span class="n">window</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 95 "></span>            <span class="n">window_seconds</span><span class="o">=</span><span class="n">window_seconds</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 96 "></span>            <span class="n">now</span><span class="o">=</span><span class="n">now</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 97 "></span>            <span class="n">fetch_events</span><span class="o">=</span><span class="n">fetch_events</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 98 "></span>            <span class="n">sample_limit</span><span class="o">=</span><span class="n">sample_limit</span><span class="p">,</span>
-<span class="linenos" data-linenos=" 99 "></span>        <span class="p">)</span>
-<span class="linenos" data-linenos="100 "></span>        <span class="n">cache</span><span class="o">.</span><span class="n">write_payload</span><span class="p">(</span><span class="n">cache_key</span><span class="p">,</span> <span class="n">_encode_payload</span><span class="p">(</span><span class="n">preview</span><span class="p">),</span> <span class="n">ttl_seconds</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">preview</span><span class="o">.</span><span class="n">ttl_seconds</span><span class="p">)</span>
-<span class="linenos" data-linenos="101 "></span>
-<span class="linenos" data-linenos="102 "></span>    <span class="k">return</span> <span class="n">preview</span>
+              <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos=" 88 "></span><span class="nd">@asynccontextmanager</span>
+<span class="linenos" data-linenos=" 89 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">closing_stream</span><span class="p">(</span><span class="n">source</span><span class="p">:</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">]]:</span>
+<span class="linenos" data-linenos=" 90 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Close an async source on the way out, when it supports closing.</span>
+<span class="linenos" data-linenos=" 91 "></span>
+<span class="linenos" data-linenos=" 92 "></span><span class="sd">    Closing matters for anything backed by a paginator: abandoning the generator</span>
+<span class="linenos" data-linenos=" 93 "></span><span class="sd">    mid-page leaves the HTTP response open until the interpreter finalizes it.</span>
+<span class="linenos" data-linenos=" 94 "></span><span class="sd">    Unlike :func:`contextlib.aclosing` this accepts any async iterator, so a test</span>
+<span class="linenos" data-linenos=" 95 "></span><span class="sd">    fake need not implement ``aclose``.</span>
+<span class="linenos" data-linenos=" 96 "></span>
+<span class="linenos" data-linenos=" 97 "></span><span class="sd">    Yields:</span>
+<span class="linenos" data-linenos=" 98 "></span><span class="sd">        The source, unchanged.</span>
+<span class="linenos" data-linenos=" 99 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="100 "></span>    <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="101 "></span>        <span class="k">yield</span> <span class="n">source</span>
+<span class="linenos" data-linenos="102 "></span>    <span class="k">finally</span><span class="p">:</span>
+<span class="linenos" data-linenos="103 "></span>        <span class="k">if</span> <span class="p">(</span><span class="n">aclose</span> <span class="o">:=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="s1">&#39;aclose&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="104 "></span>            <span class="k">await</span> <span class="n">aclose</span><span class="p">()</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.concurrency.consume_in_thread" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">consume_in_thread</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#tail_cw.concurrency.consume_in_thread" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">consume_in_thread</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">consume</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Run <code>consume</code> in a worker thread, feeding it from an async iterator.</p>
+<p>Lets blocking code that wants an iterator (<code>LogCache.write</code>, which streams
+events into Parquet) read from an async source without first materializing it.
+Batching costs one loop round-trip per :data:<code>DEFAULT_BRIDGE_BATCH</code> items.</p>
+<p>On cancellation the worker raises :class:<code>BridgeCancelledError</code> rather than ending
+its iterator, so <code>consume</code> fails instead of committing a partial result, and
+the pool slot frees within one batch.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="170 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">consume_in_thread</span><span class="p">(</span>
+<span class="linenos" data-linenos="171 "></span>    <span class="n">executor</span><span class="p">:</span> <span class="n">ThreadPoolExecutor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="172 "></span>    <span class="n">source</span><span class="p">:</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">],</span>
+<span class="linenos" data-linenos="173 "></span>    <span class="n">consume</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Iterator</span><span class="p">[</span><span class="n">T</span><span class="p">]],</span> <span class="n">R</span><span class="p">],</span>
+<span class="linenos" data-linenos="174 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">R</span><span class="p">:</span>
+<span class="linenos" data-linenos="175 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Run ``consume`` in a worker thread, feeding it from an async iterator.</span>
+<span class="linenos" data-linenos="176 "></span>
+<span class="linenos" data-linenos="177 "></span><span class="sd">    Lets blocking code that wants an iterator (``LogCache.write``, which streams</span>
+<span class="linenos" data-linenos="178 "></span><span class="sd">    events into Parquet) read from an async source without first materializing it.</span>
+<span class="linenos" data-linenos="179 "></span><span class="sd">    Batching costs one loop round-trip per :data:`DEFAULT_BRIDGE_BATCH` items.</span>
+<span class="linenos" data-linenos="180 "></span>
+<span class="linenos" data-linenos="181 "></span><span class="sd">    On cancellation the worker raises :class:`BridgeCancelledError` rather than ending</span>
+<span class="linenos" data-linenos="182 "></span><span class="sd">    its iterator, so ``consume`` fails instead of committing a partial result, and</span>
+<span class="linenos" data-linenos="183 "></span><span class="sd">    the pool slot frees within one batch.</span>
+<span class="linenos" data-linenos="184 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="185 "></span>    <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
+<span class="linenos" data-linenos="186 "></span>    <span class="n">bridge</span><span class="p">:</span> <span class="n">_Bridge</span><span class="p">[</span><span class="n">T</span><span class="p">]</span> <span class="o">=</span> <span class="n">_Bridge</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">loop</span><span class="p">)</span>
+<span class="linenos" data-linenos="187 "></span>    <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="188 "></span>        <span class="k">return</span> <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">consume</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">bridge</span><span class="p">)))</span>
+<span class="linenos" data-linenos="189 "></span>    <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
+<span class="linenos" data-linenos="190 "></span>        <span class="n">bridge</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+<span class="linenos" data-linenos="191 "></span>        <span class="k">raise</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.concurrency.run_blocking" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_blocking</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#tail_cw.concurrency.run_blocking" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_blocking</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">work</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Run a blocking callable on <code>executor</code>, or the default pool when None.</p>
+<p>The thread runs to completion even if the awaiting task is cancelled. Use
+:func:<code>consume_in_thread</code> for work long enough that the leaked slot matters.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="79 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">run_blocking</span><span class="p">(</span><span class="n">executor</span><span class="p">:</span> <span class="n">ThreadPoolExecutor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">work</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+<span class="linenos" data-linenos="80 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Run a blocking callable on ``executor``, or the default pool when None.</span>
+<span class="linenos" data-linenos="81 "></span>
+<span class="linenos" data-linenos="82 "></span><span class="sd">    The thread runs to completion even if the awaiting task is cancelled. Use</span>
+<span class="linenos" data-linenos="83 "></span><span class="sd">    :func:`consume_in_thread` for work long enough that the leaked slot matters.</span>
+<span class="linenos" data-linenos="84 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="85 "></span>    <span class="k">return</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">work</span><span class="p">)</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.concurrency.take" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">take</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#tail_cw.concurrency.take" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">take</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">limit</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read at most <code>limit</code> items, then close the source.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="107 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">take</span><span class="p">(</span><span class="n">source</span><span class="p">:</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">T</span><span class="p">]:</span>
+<span class="linenos" data-linenos="108 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Read at most ``limit`` items, then close the source.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="109 "></span>    <span class="k">async</span> <span class="k">with</span> <span class="n">closing_stream</span><span class="p">(</span><span class="n">source</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
+<span class="linenos" data-linenos="110 "></span>        <span class="n">items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">T</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="111 "></span>        <span class="k">async</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">stream</span><span class="p">:</span>
+<span class="linenos" data-linenos="112 "></span>            <span class="n">items</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+<span class="linenos" data-linenos="113 "></span>            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">items</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">limit</span><span class="p">:</span>
+<span class="linenos" data-linenos="114 "></span>                <span class="k">break</span>
+<span class="linenos" data-linenos="115 "></span>        <span class="k">return</span> <span class="n">items</span>
 </code></pre></div>
             </details>
     </div>
