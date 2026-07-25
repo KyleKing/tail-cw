@@ -8,8 +8,9 @@ a callable on ``ShellServices``; the screen itself reads Parquet and renders.
 
 from __future__ import annotations
 
+import asyncio
 from collections import deque
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
@@ -26,16 +27,17 @@ from textual.widgets import DataTable, Input, Label
 from textual.worker import get_current_worker
 
 from tail_cw.aws.client import LogEvent
+from tail_cw.concurrency import closing_stream
 from tail_cw.config import TailCWConfig
 from tail_cw.query import parse_extended_filter, parse_filter_pattern, query_parquet_files_to_log_events
 from tail_cw.query.trace import extract_trace_id_from_event, query_traces_from_parquet
 from tail_cw.tui.log_viewer import batch_format_log_events, get_column_definitions
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.record_detail import RecordDetailScreen
-from tail_cw.tui.shell import ShellCommand, ShellScreen
+from tail_cw.tui.shell import ResolveLogs, ShellCommand, ShellScreen
 from tail_cw.tui.trace_viewer import TraceViewerScreen
 
-LiveStreamFactory = Callable[[], Iterator[LogEvent]]
+LiveStreamFactory = Callable[[], AsyncIterator[LogEvent]]
 
 _LIVE_FLUSH_INTERVAL_SECONDS = 0.25
 _MESSAGE_TRUNCATE = 100
@@ -256,33 +258,26 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._update_status('Loading events...')
         session = self.shell.session
         self.run_worker(
-            partial(
-                self._resolve_in_thread,
-                resolve,
-                session.start,
-                session.end,
-                session.filter_pattern,
-            ),
+            self._resolve_window(resolve, session.start, session.end, session.filter_pattern),
             name='resolve_logs',
             group='resolve_logs',
             exclusive=True,
-            thread=True,
         )
 
-    def _resolve_in_thread(
+    async def _resolve_window(
         self,
-        resolve: Callable[[Sequence[str], datetime, datetime, str | None], list[Path]],
+        resolve: ResolveLogs,
         start: datetime,
         end: datetime,
         filter_pattern: str | None,
     ) -> None:
         try:
-            paths = resolve(tuple(self._log_groups), start, end, filter_pattern)
+            paths = await resolve(tuple(self._log_groups), start, end, filter_pattern)
         except Exception as err:
-            self.app.call_from_thread(self.notify, f'Failed to load logs: {err}', severity='error')
-            self.app.call_from_thread(self._update_status, f'Load error: {err}')
+            self.notify(f'Failed to load logs: {err}', severity='error')
+            self._update_status(f'Load error: {err}')
             return
-        self.app.call_from_thread(self.set_parquet_sources, paths)
+        self.set_parquet_sources(paths)
 
     def set_parquet_sources(self, paths: Sequence[Path]) -> None:
         """Read the resolved Parquet files as the view's data source.
@@ -458,8 +453,8 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
     def start_live_tail(self, stream_factory: LiveStreamFactory) -> None:
         """Stream events from the given factory into a bounded ring buffer.
 
-        The factory is invoked once, in a background thread. Events are
-        coalesced and rendered in batches; call this after the screen mounts.
+        The factory is invoked once, on the message loop. Events are coalesced
+        and rendered in batches; call this after the screen mounts.
         """
         self._live_stream_factory = stream_factory
         self._live_buffer = deque(maxlen=self._config.tui.live_buffer_limit)
@@ -473,26 +468,25 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._update_live_status()
         self._live_flush_timer = self.set_interval(_LIVE_FLUSH_INTERVAL_SECONDS, self._flush_live_events)
         self.run_worker(
-            self._consume_live_stream,
+            self._consume_live_stream(),
             name='live_tail',
             group='live_tail',
             exclusive=True,
-            thread=True,
         )
 
-    def _consume_live_stream(self) -> None:
+    async def _consume_live_stream(self) -> None:
         if self._live_stream_factory is None:
             return
-        worker = get_current_worker()
         try:
-            for event in self._live_stream_factory():
-                if worker.is_cancelled:
-                    return
-                self._pending_live_events.append(event)
+            async with closing_stream(self._live_stream_factory()) as stream:
+                async for event in stream:
+                    self._pending_live_events.append(event)
+        except asyncio.CancelledError:
+            raise
         except Exception as err:
-            self.app.call_from_thread(self._finish_live_tail, f'Live tail stopped: {err}')
+            self._finish_live_tail(f'Live tail stopped: {err}')
             return
-        self.app.call_from_thread(self._finish_live_tail, 'Live tail stream ended')
+        self._finish_live_tail('Live tail stream ended')
 
     def _finish_live_tail(self, message: str) -> None:
         self._flush_live_events()
@@ -501,7 +495,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._update_live_status()
 
     def note_live_sampled(self, sampled: bool) -> None:  # ruff: ignore[boolean-type-hint-positional-argument]
-        """Record whether the server is sampling the live stream (thread-safe)."""
+        """Record whether the server is sampling the live stream."""
         self._live_sampled = sampled
 
     def _flush_live_events(self) -> None:

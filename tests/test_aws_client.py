@@ -1,19 +1,37 @@
 """Tests for AWS CloudWatch Logs client."""
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from unittest.mock import patch
 
 import pytest
+from aiobotocore.stub import AioStubber  # type: ignore[import-untyped]
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
-from botocore.stub import ANY, Stubber  # type: ignore[import-untyped]
+from botocore.stub import ANY  # type: ignore[import-untyped]
 
 from tail_cw.aws.client import (
+    RETRIES,
     LogEvent,
-    _create_logs_client,
     _epoch_ms_to_datetime,
+    client_pool,
     fetch_log_events,
+    retry_config,
 )
+
+
+async def _collect(events: AsyncIterator[LogEvent]) -> list[LogEvent]:
+    return [event async for event in events]
+
+
+@pytest.fixture
+async def logs_client() -> AsyncIterator[Any]:
+    """Open a CloudWatch Logs client for stubbing.
+
+    Yields:
+        The client, closed when the test ends.
+    """
+    async with client_pool(region_name='us-east-1') as pool:
+        yield await pool.client('logs')
 
 
 @pytest.fixture(autouse=True)
@@ -82,43 +100,42 @@ def test_epoch_ms_to_datetime():
     assert result_large.year == 2033
 
 
-def test_create_logs_client():
-    """Test logs client creation with retry configuration."""
-    with patch('tail_cw.aws.client.boto3.client') as mock_client:
-        client = _create_logs_client()
-
-        # Verify boto3.client was called correctly
-        mock_client.assert_called_once()
-        call_args = mock_client.call_args
-
-        # Check service name
-        assert call_args[0][0] == 'logs'
-
-        # Check retry config
-        config = call_args[1]['config']
-        assert config.retries['max_attempts'] == 10
-        assert config.retries['mode'] == 'standard'
-
-        # Check region_name defaults to None
-        assert call_args[1]['region_name'] is None
-
-        assert client == mock_client.return_value
+def test_retry_config_uses_standard_mode():
+    """Throttling backoff comes from standard-mode retries."""
+    assert RETRIES == {'max_attempts': 10, 'mode': 'standard'}
 
 
-def test_create_logs_client_with_region():
-    """Test logs client creation with explicit region."""
-    with patch('tail_cw.aws.client.boto3.client') as mock_client:
-        _create_logs_client(region_name='us-west-2')
-
-        call_args = mock_client.call_args
-        assert call_args[1]['region_name'] == 'us-west-2'
+def test_each_client_gets_its_own_retry_config():
+    assert retry_config() is not retry_config()
 
 
-def test_fetch_log_events_single_page():
+async def test_creating_a_client_does_not_rewrite_the_shared_retry_values():
+    """Botocore rewrites the retries dict of the Config it is handed, so it must never get the shared one."""
+    async with client_pool(region_name='us-east-1') as pool:
+        await pool.client('logs')
+
+    assert RETRIES == {'max_attempts': 10, 'mode': 'standard'}
+
+
+async def test_client_pool_reuses_one_client_per_service():
+    """A second request for a service returns the already-open client."""
+    async with client_pool(region_name='us-west-2') as pool:
+        first = await pool.client('logs')
+        assert await pool.client('logs') is first
+        assert await pool.client('cloudwatch') is not first
+
+
+async def test_client_pool_passes_region_to_new_clients():
+    """The pool's region reaches each client it creates."""
+    async with client_pool(region_name='us-west-2') as pool:
+        assert (await pool.client('logs')).meta.region_name == 'us-west-2'
+
+
+async def test_fetch_log_events_single_page(logs_client: Any):
     """Test fetching logs with a single page of results."""
     # Create mock client and stub
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     # Prepare mock events
     events = [
@@ -155,34 +172,33 @@ def test_fetch_log_events_single_page():
     stub.activate()
 
     # Patch the client creation to return our stubbed client
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        start = datetime.now(tz=UTC) - timedelta(hours=1)
-        end = datetime.now(tz=UTC)
+    start = datetime.now(tz=UTC) - timedelta(hours=1)
+    end = datetime.now(tz=UTC)
 
-        results = list(fetch_log_events('/test/log-group', start, end))
+    results = await _collect(fetch_log_events(client, '/test/log-group', start, end))
 
-        assert len(results) == 2
+    assert len(results) == 2
 
-        # Check first event
-        assert results[0].log_group == '/test/log-group'
-        assert results[0].log_stream == 'stream-1'
-        assert results[0].message == 'First message'
-        assert results[0].event_id == 'event-1'
-        assert isinstance(results[0].timestamp, datetime)
-        assert results[0].timestamp.tzinfo == UTC
-        assert isinstance(results[0].ingestion_time, datetime)
+    # Check first event
+    assert results[0].log_group == '/test/log-group'
+    assert results[0].log_stream == 'stream-1'
+    assert results[0].message == 'First message'
+    assert results[0].event_id == 'event-1'
+    assert isinstance(results[0].timestamp, datetime)
+    assert results[0].timestamp.tzinfo == UTC
+    assert isinstance(results[0].ingestion_time, datetime)
 
-        # Check second event
-        assert results[1].log_stream == 'stream-2'
-        assert results[1].message == 'Second message'
+    # Check second event
+    assert results[1].log_stream == 'stream-2'
+    assert results[1].message == 'Second message'
 
     stub.deactivate()
 
 
-def test_fetch_log_events_multiple_pages():
+async def test_fetch_log_events_multiple_pages(logs_client: Any):
     """Test pagination with multiple pages."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     # First page with nextToken
     events_page1 = [
@@ -229,25 +245,24 @@ def test_fetch_log_events_multiple_pages():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        start = datetime.now(tz=UTC) - timedelta(hours=1)
-        end = datetime.now(tz=UTC)
+    start = datetime.now(tz=UTC) - timedelta(hours=1)
+    end = datetime.now(tz=UTC)
 
-        results = list(fetch_log_events('/test/log-group', start, end))
+    results = await _collect(fetch_log_events(client, '/test/log-group', start, end))
 
-        # Should have all events from both pages
-        assert len(results) == 3
-        assert results[0].event_id == 'event-1'
-        assert results[1].event_id == 'event-2'
-        assert results[2].event_id == 'event-3'
+    # Should have all events from both pages
+    assert len(results) == 3
+    assert results[0].event_id == 'event-1'
+    assert results[1].event_id == 'event-2'
+    assert results[2].event_id == 'event-3'
 
     stub.deactivate()
 
 
-def test_fetch_log_events_empty_page():
+async def test_fetch_log_events_empty_page(logs_client: Any):
     """Test handling of empty pages."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     # First page: empty with nextToken
     stub.add_response(
@@ -286,28 +301,28 @@ def test_fetch_log_events_empty_page():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        start = datetime.now(tz=UTC) - timedelta(hours=1)
-        end = datetime.now(tz=UTC)
+    start = datetime.now(tz=UTC) - timedelta(hours=1)
+    end = datetime.now(tz=UTC)
 
-        results = list(fetch_log_events('/test/log-group', start, end))
+    results = await _collect(fetch_log_events(client, '/test/log-group', start, end))
 
-        # Should only have events from second page
-        assert len(results) == 1
-        assert results[0].event_id == 'event-1'
+    # Should only have events from second page
+    assert len(results) == 1
+    assert results[0].event_id == 'event-1'
 
     stub.deactivate()
 
 
-def test_fetch_log_events_with_progress_callback():
+async def test_fetch_log_events_with_progress_callback(logs_client: Any):
     """Progress callback should receive monotonic updates."""
 
     class DummyPaginator:
         def __init__(self, pages) -> None:
             self._pages = pages
 
-        def paginate(self, **_kwargs):
-            yield from self._pages
+        async def paginate(self, **_kwargs):
+            for page in self._pages:
+                yield page
 
     class DummyClient:
         def __init__(self, pages) -> None:
@@ -337,15 +352,16 @@ def test_fetch_log_events_with_progress_callback():
     start = datetime.now(tz=UTC) - timedelta(hours=1)
     end = datetime.now(tz=UTC)
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=DummyClient(pages)):
-        results = list(
-            fetch_log_events(
-                '/test/log-group',
-                start,
-                end,
-                progress_callback=progress,
-            ),
-        )
+    client = DummyClient(pages)
+    results = await _collect(
+        fetch_log_events(
+            client,
+            '/test/log-group',
+            start,
+            end,
+            progress_callback=progress,
+        ),
+    )
 
     assert len(results) == total_events
     assert calls, 'Expected progress callback to be invoked'
@@ -356,15 +372,16 @@ def test_fetch_log_events_with_progress_callback():
         assert status.startswith('Fetched')
 
 
-def test_fetch_log_events_progress_callback_frequency():
+async def test_fetch_log_events_progress_callback_frequency(logs_client: Any):
     """Progress callback should fire roughly every 100 events."""
 
     class DummyPaginator:
         def __init__(self, pages) -> None:
             self._pages = pages
 
-        def paginate(self, **_kwargs):
-            yield from self._pages
+        async def paginate(self, **_kwargs):
+            for page in self._pages:
+                yield page
 
     class DummyClient:
         def __init__(self, pages) -> None:
@@ -391,28 +408,30 @@ def test_fetch_log_events_progress_callback_frequency():
     start = datetime.now(tz=UTC) - timedelta(minutes=30)
     end = datetime.now(tz=UTC)
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=DummyClient(pages)):
-        list(
-            fetch_log_events(
-                '/test/log-group',
-                start,
-                end,
-                progress_callback=progress,
-            ),
-        )
+    client = DummyClient(pages)
+    await _collect(
+        fetch_log_events(
+            client,
+            '/test/log-group',
+            start,
+            end,
+            progress_callback=progress,
+        ),
+    )
 
     assert calls == [100, 200]
 
 
-def test_fetch_log_events_without_progress_callback():
+async def test_fetch_log_events_without_progress_callback(logs_client: Any):
     """Ensure fetch works when no progress callback is supplied."""
 
     class DummyPaginator:
         def __init__(self, pages) -> None:
             self._pages = pages
 
-        def paginate(self, **_kwargs):
-            yield from self._pages
+        async def paginate(self, **_kwargs):
+            for page in self._pages:
+                yield page
 
     class DummyClient:
         def __init__(self, pages) -> None:
@@ -431,18 +450,18 @@ def test_fetch_log_events_without_progress_callback():
         for i in range(50)
     ]
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=DummyClient([{'events': events}])):
-        start = datetime.now(tz=UTC) - timedelta(minutes=5)
-        end = datetime.now(tz=UTC)
-        results = list(fetch_log_events('/test/log-group', start, end))
+    client = DummyClient([{'events': events}])
+    start = datetime.now(tz=UTC) - timedelta(minutes=5)
+    end = datetime.now(tz=UTC)
+    results = await _collect(fetch_log_events(client, '/test/log-group', start, end))
 
     assert len(results) == 50
 
 
-def test_fetch_log_events_with_filter_pattern():
+async def test_fetch_log_events_with_filter_pattern(logs_client: Any):
     """Test with CloudWatch filter pattern."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     events = [_make_cw_event()]
 
@@ -464,28 +483,28 @@ def test_fetch_log_events_with_filter_pattern():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        start = datetime.now(tz=UTC) - timedelta(hours=1)
-        end = datetime.now(tz=UTC)
+    start = datetime.now(tz=UTC) - timedelta(hours=1)
+    end = datetime.now(tz=UTC)
 
-        results = list(
-            fetch_log_events(
-                '/test/log-group',
-                start,
-                end,
-                filter_pattern='[ERROR]',
-            ),
-        )
+    results = await _collect(
+        fetch_log_events(
+            client,
+            '/test/log-group',
+            start,
+            end,
+            filter_pattern='[ERROR]',
+        ),
+    )
 
-        assert len(results) == 1
+    assert len(results) == 1
 
     stub.deactivate()
 
 
-def test_fetch_log_events_with_log_streams():
+async def test_fetch_log_events_with_log_streams(logs_client: Any):
     """Test filtering by specific log streams."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     events = [_make_cw_event()]
 
@@ -507,28 +526,28 @@ def test_fetch_log_events_with_log_streams():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        start = datetime.now(tz=UTC) - timedelta(hours=1)
-        end = datetime.now(tz=UTC)
+    start = datetime.now(tz=UTC) - timedelta(hours=1)
+    end = datetime.now(tz=UTC)
 
-        results = list(
-            fetch_log_events(
-                '/test/log-group',
-                start,
-                end,
-                log_stream_names=['stream-1', 'stream-2'],
-            ),
-        )
+    results = await _collect(
+        fetch_log_events(
+            client,
+            '/test/log-group',
+            start,
+            end,
+            log_stream_names=['stream-1', 'stream-2'],
+        ),
+    )
 
-        assert len(results) == 1
+    assert len(results) == 1
 
     stub.deactivate()
 
 
-def test_fetch_log_events_without_ingestion_time():
+async def test_fetch_log_events_without_ingestion_time(logs_client: Any):
     """Test handling events without ingestionTime field."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     # Create event without ingestionTime
     events = [_make_cw_event(include_ingestion_time=False)]
@@ -550,22 +569,21 @@ def test_fetch_log_events_without_ingestion_time():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        start = datetime.now(tz=UTC) - timedelta(hours=1)
-        end = datetime.now(tz=UTC)
+    start = datetime.now(tz=UTC) - timedelta(hours=1)
+    end = datetime.now(tz=UTC)
 
-        results = list(fetch_log_events('/test/log-group', start, end))
+    results = await _collect(fetch_log_events(client, '/test/log-group', start, end))
 
-        assert len(results) == 1
-        assert results[0].ingestion_time is None
+    assert len(results) == 1
+    assert results[0].ingestion_time is None
 
     stub.deactivate()
 
 
-def test_fetch_log_events_client_error():
+async def test_fetch_log_events_client_error(logs_client: Any):
     """Test error handling for boto3 client errors."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     # Add a client error
     stub.add_client_error(
@@ -576,25 +594,22 @@ def test_fetch_log_events_client_error():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        start = datetime.now(tz=UTC) - timedelta(hours=1)
-        end = datetime.now(tz=UTC)
+    start = datetime.now(tz=UTC) - timedelta(hours=1)
+    end = datetime.now(tz=UTC)
 
-        # Error should bubble up from the generator
-        generator = fetch_log_events('/test/log-group', start, end)
+    # Error should bubble up from the generator
+    with pytest.raises(ClientError) as exc_info:
+        await _collect(fetch_log_events(client, '/test/log-group', start, end))
 
-        with pytest.raises(ClientError) as exc_info:
-            list(generator)
-
-        assert exc_info.value.response['Error']['Code'] == 'ThrottlingException'
+    assert exc_info.value.response['Error']['Code'] == 'ThrottlingException'
 
     stub.deactivate()
 
 
-def test_fetch_log_events_time_conversion():
+async def test_fetch_log_events_time_conversion(logs_client: Any):
     """Test datetime to epoch milliseconds conversion."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     # Create specific datetime with known epoch values
     start = datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
@@ -622,9 +637,8 @@ def test_fetch_log_events_time_conversion():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        results = list(fetch_log_events('/test/log-group', start, end))
-        assert len(results) == 1
+    results = await _collect(fetch_log_events(client, '/test/log-group', start, end))
+    assert len(results) == 1
 
     stub.deactivate()
 
@@ -645,10 +659,10 @@ def test_log_event_dataclass_immutability():
         event.message = 'modified'  # type: ignore[misc]
 
 
-def test_fetch_log_events_interleaved_false():
+async def test_fetch_log_events_interleaved_false(logs_client: Any):
     """Test with interleaved=False."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     events = [_make_cw_event()]
 
@@ -669,23 +683,22 @@ def test_fetch_log_events_interleaved_false():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        start = datetime.now(tz=UTC) - timedelta(hours=1)
-        end = datetime.now(tz=UTC)
+    start = datetime.now(tz=UTC) - timedelta(hours=1)
+    end = datetime.now(tz=UTC)
 
-        results = list(
-            fetch_log_events('/test/log-group', start, end, interleaved=False),
-        )
+    results = await _collect(
+        fetch_log_events(client, '/test/log-group', start, end, interleaved=False),
+    )
 
-        assert len(results) == 1
+    assert len(results) == 1
 
     stub.deactivate()
 
 
-def test_fetch_log_events_large_time_range():
+async def test_fetch_log_events_large_time_range(logs_client: Any):
     """Test with very large time range."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     # 30 days time range
     start = datetime.now(tz=UTC) - timedelta(days=30)
@@ -710,17 +723,16 @@ def test_fetch_log_events_large_time_range():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        results = list(fetch_log_events('/test/log-group', start, end))
-        assert len(results) == 1
+    results = await _collect(fetch_log_events(client, '/test/log-group', start, end))
+    assert len(results) == 1
 
     stub.deactivate()
 
 
-def test_fetch_log_events_microsecond_precision():
+async def test_fetch_log_events_microsecond_precision(logs_client: Any):
     """Test datetime with microsecond precision."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     # Create datetime with microseconds
     start = datetime(2023, 11, 14, 22, 13, 20, 123456, tzinfo=UTC)
@@ -745,17 +757,16 @@ def test_fetch_log_events_microsecond_precision():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        results = list(fetch_log_events('/test/log-group', start, end))
-        assert len(results) == 1
+    results = await _collect(fetch_log_events(client, '/test/log-group', start, end))
+    assert len(results) == 1
 
     stub.deactivate()
 
 
-def test_fetch_log_events_special_characters_in_log_group():
+async def test_fetch_log_events_special_characters_in_log_group(logs_client: Any):
     """Test log group names with special characters."""
-    client = _create_logs_client()
-    stub = Stubber(client)
+    client = logs_client
+    stub = AioStubber(client)
 
     log_group = '/aws/lambda/my-function-name_v2'
     events = [_make_cw_event()]
@@ -777,12 +788,11 @@ def test_fetch_log_events_special_characters_in_log_group():
 
     stub.activate()
 
-    with patch('tail_cw.aws.client._create_logs_client', return_value=client):
-        start = datetime.now(tz=UTC) - timedelta(hours=1)
-        end = datetime.now(tz=UTC)
+    start = datetime.now(tz=UTC) - timedelta(hours=1)
+    end = datetime.now(tz=UTC)
 
-        results = list(fetch_log_events(log_group, start, end))
-        assert len(results) == 1
-        assert results[0].log_group == log_group
+    results = await _collect(fetch_log_events(client, log_group, start, end))
+    assert len(results) == 1
+    assert results[0].log_group == log_group
 
     stub.deactivate()

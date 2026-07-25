@@ -271,18 +271,18 @@ class GroupsScreen(ShellScreen):
             self._picker.show_detail(NO_GROUP_SERVICE)
             self._picker.set_status(NO_GROUP_SERVICE)
             return
-        self.run_worker(self._fetch_groups, name='list_groups', group='list_groups', exclusive=True, thread=True)
+        self.run_worker(self._fetch_groups(), name='list_groups', group='list_groups', exclusive=True)
 
-    def _fetch_groups(self) -> None:
+    async def _fetch_groups(self) -> None:
         list_groups = self.shell.services.list_groups
         if list_groups is None:  # pragma: no cover - guarded by the caller
             return
         try:
-            groups = list_groups()
+            groups = await list_groups()
         except Exception as err:
-            self.app.call_from_thread(self.notify, f'Listing log groups failed: {err}', severity='error')
+            self.notify(f'Listing log groups failed: {err}', severity='error')
             return
-        self.app.call_from_thread(self._apply_groups, groups)
+        self._apply_groups(groups)
 
     def _apply_groups(self, groups: list[LogGroupInfo]) -> None:
         self._groups = sort_by_recency(groups, self._recent)
@@ -346,23 +346,22 @@ class GroupsScreen(ShellScreen):
 
     def _start_preview(self, name: str) -> None:
         self.run_worker(
-            lambda: self._fetch_preview(name),
+            self._fetch_preview(name),
             name='preview_group',
             group='preview_group',
             exclusive=True,
-            thread=True,
         )
 
-    def _fetch_preview(self, name: str) -> None:
+    async def _fetch_preview(self, name: str) -> None:
         preview_group = self.shell.services.preview_group
         if preview_group is None:  # pragma: no cover - guarded by the caller
             return
         try:
-            preview = preview_group(name)
+            preview = await preview_group(name)
         except Exception as err:
-            self.app.call_from_thread(self.notify, f'Preview of {name} failed: {err}', severity='warning')
+            self.notify(f'Preview of {name} failed: {err}', severity='warning')
             return
-        self.app.call_from_thread(self._apply_preview, preview)
+        self._apply_preview(preview)
 
     def _apply_preview(self, preview: GroupPreview) -> None:
         self._previews[preview.log_group] = preview

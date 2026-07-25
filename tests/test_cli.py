@@ -1,10 +1,13 @@
+# ruff: file-ignore[unused-async] - the AWS fakes are async generators or awaitable stand-ins
 """Unit tests for the CLI module (time parsing, arg parsing, export pipelines)."""
 
+import contextlib
 import io
 import json
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -48,14 +51,42 @@ def _make_events(count: int = 3, *, log_group: str = '/aws/test/group') -> list[
     ]
 
 
+_CLIENT = object()
+"""Stand-in client: every fake fetcher ignores it, and no real call is made."""
+
+
+async def _collect(events: AsyncIterator[LogEvent]) -> list[LogEvent]:
+    return [event async for event in events]
+
+
+def _async_iter_factory(items: list[Any]) -> Callable[..., AsyncIterator[Any]]:
+    """Build a replacement for an async-generator AWS call that yields `items`."""
+
+    async def factory(*_args: Any, **_kwargs: Any) -> AsyncIterator[Any]:
+        for item in items:
+            yield item
+
+    return factory
+
+
+def _async_value_factory(value: Any) -> Callable[..., Any]:
+    """Build a replacement for a coroutine AWS call that returns `value`."""
+
+    async def factory(*_args: Any, **_kwargs: Any) -> Any:
+        return value
+
+    return factory
+
+
 class _FakeFetcher:
     def __init__(self, events: list[LogEvent]) -> None:
         self.events = events
         self.calls: list[dict[str, object]] = []
 
-    def __call__(self, log_group, start_time, end_time, **kwargs) -> Iterator[LogEvent]:
+    async def __call__(self, _client, log_group, start_time, end_time, **kwargs) -> AsyncIterator[LogEvent]:
         self.calls.append({'log_group': log_group, 'start_time': start_time, 'end_time': end_time, **kwargs})
-        return iter(self.events)
+        for event in self.events:
+            yield event
 
 
 class _GroupFetcher:
@@ -65,12 +96,13 @@ class _GroupFetcher:
         self.populated = populated
         self.calls: list[str] = []
 
-    def __call__(self, log_group, start_time, end_time, **kwargs) -> Iterator[LogEvent]:
+    async def __call__(self, _client, log_group, start_time, end_time, **kwargs) -> AsyncIterator[LogEvent]:
         del start_time, end_time, kwargs
         self.calls.append(log_group)
         if log_group not in self.populated:
-            return iter([])
-        return iter(_make_events(2, log_group=log_group))
+            return
+        for event in _make_events(2, log_group=log_group):
+            yield event
 
 
 class _FakeStreamer:
@@ -78,9 +110,34 @@ class _FakeStreamer:
         self.events = events
         self.calls: list[dict[str, object]] = []
 
-    def __call__(self, log_groups, **kwargs) -> Iterator[LogEvent]:
+    async def __call__(self, _client, log_groups, **kwargs) -> AsyncIterator[LogEvent]:
         self.calls.append({'log_groups': log_groups, **kwargs})
-        return iter(self.events)
+        for event in self.events:
+            yield event
+
+
+class _FakePool:
+    """Stands in for a ClientPool without opening any AWS client."""
+
+    def __init__(self) -> None:
+        self.requested: list[str] = []
+        self.opened_with: dict[str, object] = {}
+
+    async def client(self, service_name: str) -> str:
+        self.requested.append(service_name)
+        return f'client:{service_name}'
+
+
+@contextlib.asynccontextmanager
+async def _fake_client_pool(**kwargs: object) -> AsyncIterator[_FakePool]:
+    """Replacement for `client_pool` that records its credentials and opens nothing.
+
+    Yields:
+        The fake pool.
+    """
+    pool = _FakePool()
+    pool.opened_with = dict(kwargs)
+    yield pool
 
 
 class _RecordingShell:
@@ -431,88 +488,90 @@ def test_session_from_args_rejects_start_at_or_after_end(start, end):
         session_from_args(args, NOW)
 
 
-def test_resolve_parquet_path_fetches_on_miss(tmp_path):
+async def test_resolve_parquet_path_fetches_on_miss(tmp_path):
     fetcher = _FakeFetcher(_make_events())
 
-    result = resolve_parquet_path(_make_request(), _make_config(tmp_path), fetch_events=fetcher)
+    result = await resolve_parquet_path(_CLIENT, _make_request(), _make_config(tmp_path), fetch_events=fetcher)
 
     assert result is not None
     assert result.exists()
     assert len(fetcher.calls) == 1
 
 
-def test_resolve_parquet_path_uses_cache_on_hit(tmp_path):
+async def test_resolve_parquet_path_uses_cache_on_hit(tmp_path):
     config = _make_config(tmp_path)
     request = _make_request()
-    first_path = resolve_parquet_path(request, config, fetch_events=_FakeFetcher(_make_events()))
+    first_path = await resolve_parquet_path(_CLIENT, request, config, fetch_events=_FakeFetcher(_make_events()))
 
     second_fetcher = _FakeFetcher(_make_events())
-    second_path = resolve_parquet_path(request, config, fetch_events=second_fetcher)
+    second_path = await resolve_parquet_path(_CLIENT, request, config, fetch_events=second_fetcher)
 
     assert second_path == first_path
     assert second_fetcher.calls == []
 
 
-def test_resolve_parquet_path_no_cache_refetches(tmp_path):
+async def test_resolve_parquet_path_no_cache_refetches(tmp_path):
     config = _make_config(tmp_path)
     request = _make_request()
-    resolve_parquet_path(request, config, fetch_events=_FakeFetcher(_make_events()))
+    await resolve_parquet_path(_CLIENT, request, config, fetch_events=_FakeFetcher(_make_events()))
 
     refetcher = _FakeFetcher(_make_events())
-    result = resolve_parquet_path(request, config, use_cache=False, fetch_events=refetcher)
+    result = await resolve_parquet_path(_CLIENT, request, config, use_cache=False, fetch_events=refetcher)
 
     assert result is not None
     assert len(refetcher.calls) == 1
 
 
-def test_resolve_parquet_path_empty_fetch_returns_none(tmp_path):
+async def test_resolve_parquet_path_empty_fetch_returns_none(tmp_path):
     fetcher = _FakeFetcher([])
 
-    result = resolve_parquet_path(_make_request(), _make_config(tmp_path), fetch_events=fetcher)
+    result = await resolve_parquet_path(_CLIENT, _make_request(), _make_config(tmp_path), fetch_events=fetcher)
 
     assert result is None
 
 
-def test_resolve_parquet_path_threads_fetch_parameters(tmp_path):
+async def test_resolve_parquet_path_threads_fetch_parameters(tmp_path):
     fetcher = _FakeFetcher(_make_events())
     request = _make_request(filter_pattern='ERROR', profile='dev', region='us-west-2')
 
-    resolve_parquet_path(request, _make_config(tmp_path), fetch_events=fetcher)
+    await resolve_parquet_path(_CLIENT, request, _make_config(tmp_path), fetch_events=fetcher)
 
     call = fetcher.calls[0]
     assert call['log_group'] == '/aws/test/group'
     assert call['filter_pattern'] == 'ERROR'
-    assert call['profile_name'] == 'dev'
-    assert call['region_name'] == 'us-west-2'
+    # Profile and region reach the pool that built the client, and the cache key, not the fetch itself
+    assert 'profile_name' not in call
 
 
-def test_resolve_parquet_path_profile_changes_cache_entry(tmp_path):
+async def test_resolve_parquet_path_profile_changes_cache_entry(tmp_path):
     config = _make_config(tmp_path)
     request = _make_request()
-    resolve_parquet_path(request, config, fetch_events=_FakeFetcher(_make_events()))
+    await resolve_parquet_path(_CLIENT, request, config, fetch_events=_FakeFetcher(_make_events()))
 
     profiled_fetcher = _FakeFetcher(_make_events())
-    resolve_parquet_path(_make_request(profile='dev'), config, fetch_events=profiled_fetcher)
+    await resolve_parquet_path(_CLIENT, _make_request(profile='dev'), config, fetch_events=profiled_fetcher)
 
     assert len(profiled_fetcher.calls) == 1
 
 
-def test_resolve_parquet_paths_empty_request_list(tmp_path):
-    assert resolve_parquet_paths([], _make_config(tmp_path)) == []
+async def test_resolve_parquet_paths_empty_request_list(tmp_path):
+    assert await resolve_parquet_paths(_CLIENT, [], _make_config(tmp_path)) == []
 
 
-def test_resolve_parquet_paths_single_request(tmp_path):
+async def test_resolve_parquet_paths_single_request(tmp_path):
     fetcher = _FakeFetcher(_make_events())
 
-    paths = resolve_parquet_paths([_make_request()], _make_config(tmp_path), fetch_events=fetcher)
+    paths = await resolve_parquet_paths(_CLIENT, [_make_request()], _make_config(tmp_path), fetch_events=fetcher)
 
     assert len(paths) == 1
     assert paths[0].exists()
     assert len(fetcher.calls) == 1
 
 
-def test_resolve_parquet_paths_single_request_without_events(tmp_path):
-    paths = resolve_parquet_paths([_make_request()], _make_config(tmp_path), fetch_events=_FakeFetcher([]))
+async def test_resolve_parquet_paths_single_request_without_events(tmp_path):
+    paths = await resolve_parquet_paths(
+        _CLIENT, [_make_request()], _make_config(tmp_path), fetch_events=_FakeFetcher([])
+    )
 
     assert paths == []
 
@@ -521,34 +580,34 @@ def _first_group(path: Path) -> str:
     return next(iter(read_parquet_to_log_events(path))).log_group
 
 
-def test_resolve_parquet_paths_keeps_request_order(tmp_path):
+async def test_resolve_parquet_paths_keeps_request_order(tmp_path):
     groups = [f'/group/{index}' for index in range(4)]
     fetcher = _GroupFetcher(set(groups))
     requests = [_make_request(group) for group in groups]
 
-    paths = resolve_parquet_paths(requests, _make_config(tmp_path), fetch_events=fetcher, max_workers=1)
+    paths = await resolve_parquet_paths(_CLIENT, requests, _make_config(tmp_path), fetch_events=fetcher)
 
     assert [_first_group(path) for path in paths] == groups
 
 
-def test_resolve_parquet_paths_drops_empty_results(tmp_path):
+async def test_resolve_parquet_paths_drops_empty_results(tmp_path):
     groups = ['/group/a', '/group/b', '/group/c']
     fetcher = _GroupFetcher({'/group/a', '/group/c'})
     requests = [_make_request(group) for group in groups]
 
-    paths = resolve_parquet_paths(requests, _make_config(tmp_path), fetch_events=fetcher, max_workers=1)
+    paths = await resolve_parquet_paths(_CLIENT, requests, _make_config(tmp_path), fetch_events=fetcher)
 
     assert [_first_group(path) for path in paths] == ['/group/a', '/group/c']
     assert sorted(fetcher.calls) == groups
 
 
-def test_resolve_parquet_paths_parallel_fanout_keeps_every_group(tmp_path):
+async def test_resolve_parquet_paths_parallel_fanout_keeps_every_group(tmp_path):
     """A parallel fan-out keeps every group: workers share one cache instance."""
     groups = [f'/group/{index}' for index in range(6)]
     fetcher = _GroupFetcher(set(groups))
     requests = [_make_request(group) for group in groups]
 
-    paths = resolve_parquet_paths(requests, _make_config(tmp_path), fetch_events=fetcher, max_workers=4)
+    paths = await resolve_parquet_paths(_CLIENT, requests, _make_config(tmp_path), fetch_events=fetcher)
 
     assert [_first_group(path) for path in paths] == groups
 
@@ -569,7 +628,7 @@ def test_write_ndjson():
     assert datetime.fromisoformat(record['timestamp']) == NOW - timedelta(minutes=2)
 
 
-def test_stream_ndjson_flushes_per_line():
+async def test_stream_ndjson_flushes_per_line():
     class _FlushCountingStream(io.StringIO):
         def __init__(self) -> None:
             super().__init__()
@@ -581,25 +640,25 @@ def test_stream_ndjson_flushes_per_line():
 
     stream = _FlushCountingStream()
 
-    count = stream_ndjson(_make_events(3), stream)
+    count = await stream_ndjson(_async_iter_factory(_make_events(3))(), stream)
 
     assert count == 3
     assert stream.flush_count == 3
     assert len(stream.getvalue().strip().splitlines()) == 3
 
 
-def test_iter_tail_events_without_backfill_skips_fetch():
+async def test_iter_tail_events_without_backfill_skips_fetch():
     fetcher = _FakeFetcher(_make_events(2))
     streamer = _FakeStreamer(_make_events(1))
     request = TailRequest(log_groups=('/aws/test/group',))
 
-    events = list(iter_tail_events(request, now=NOW, fetch_events=fetcher, stream_events=streamer))
+    events = await _collect(iter_tail_events(_CLIENT, request, now=NOW, fetch_events=fetcher, stream_events=streamer))
 
     assert len(events) == 1
     assert fetcher.calls == []
 
 
-def test_iter_tail_events_backfills_each_group():
+async def test_iter_tail_events_backfills_each_group():
     fetcher = _FakeFetcher(_make_events(1))
     streamer = _FakeStreamer([])
     request = TailRequest(
@@ -608,7 +667,7 @@ def test_iter_tail_events_backfills_each_group():
         filter_pattern='ERROR',
     )
 
-    events = list(iter_tail_events(request, now=NOW, fetch_events=fetcher, stream_events=streamer))
+    events = await _collect(iter_tail_events(_CLIENT, request, now=NOW, fetch_events=fetcher, stream_events=streamer))
 
     assert len(events) == 2
     assert [call['log_group'] for call in fetcher.calls] == ['/group/one', '/group/two']
@@ -883,9 +942,10 @@ def test_run_cli_export_tail_bad_config(tmp_path, capsys):
 def test_run_cli_export_tail_keyboard_interrupt_exits_cleanly(tmp_path, capsys):
     config_path = _write_config_file(tmp_path)
 
-    def interrupted_stream(log_groups, **kwargs) -> Iterator[LogEvent]:
+    async def interrupted_stream(_client, log_groups, **kwargs) -> AsyncIterator[LogEvent]:
         del log_groups, kwargs
-        yield from _make_events(1)
+        for event in _make_events(1):
+            yield event
         raise KeyboardInterrupt
 
     result = run_cli(
@@ -902,7 +962,8 @@ def test_run_cli_export_tail_keyboard_interrupt_exits_cleanly(tmp_path, capsys):
 def test_run_cli_export_groups_writes_every_group(tmp_path, capsys, monkeypatch):
     config_path = _write_config_file(tmp_path)
     groups = [_make_group('/aws/lambda/api'), _make_group('/ecs/web')]
-    monkeypatch.setattr('tail_cw.cli.describe_log_groups', lambda **_kwargs: iter(groups))
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    monkeypatch.setattr('tail_cw.cli.describe_log_groups', _async_iter_factory(groups))
 
     result = run_cli(['export', 'groups', '--config', str(config_path)], None, is_tty=False)
 
@@ -916,7 +977,8 @@ def test_run_cli_export_groups_writes_every_group(tmp_path, capsys, monkeypatch)
 def test_run_cli_export_groups_filters_by_pattern(tmp_path, capsys, monkeypatch):
     config_path = _write_config_file(tmp_path)
     groups = [_make_group('/aws/lambda/api'), _make_group('/ecs/web')]
-    monkeypatch.setattr('tail_cw.cli.describe_log_groups', lambda **_kwargs: iter(groups))
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    monkeypatch.setattr('tail_cw.cli.describe_log_groups', _async_iter_factory(groups))
 
     result = run_cli(['export', 'groups', '/aws/lambda/*', '--config', str(config_path)], None, is_tty=False)
 
@@ -941,7 +1003,8 @@ def test_run_cli_export_dashboards_writes_summaries(tmp_path, capsys, monkeypatc
         DashboardSummary(name='prod-overview', arn='arn:one', size=120),
         DashboardSummary(name='api-latency', arn='arn:two', size=80),
     ]
-    monkeypatch.setattr('tail_cw.cli.list_dashboards', lambda **_kwargs: summaries)
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    monkeypatch.setattr('tail_cw.cli.list_dashboards', _async_value_factory(summaries))
 
     result = run_cli(['export', 'dashboards', '--config', str(config_path)], None, is_tty=False)
 
@@ -952,14 +1015,19 @@ def test_run_cli_export_dashboards_writes_summaries(tmp_path, capsys, monkeypatc
 
 
 def test_run_cli_export_dashboards_threads_credentials(tmp_path, capsys, monkeypatch):
+    """Credentials reach the client pool, which is now what resolves them."""
     config_path = _write_config_file(tmp_path)
-    calls: list[dict[str, object]] = []
+    pools: list[_FakePool] = []
 
-    def _list(**kwargs) -> list[DashboardSummary]:
-        calls.append(kwargs)
-        return []
+    @contextlib.asynccontextmanager
+    async def _recording_pool(**kwargs: object) -> AsyncIterator[_FakePool]:
+        pool = _FakePool()
+        pool.opened_with = dict(kwargs)
+        pools.append(pool)
+        yield pool
 
-    monkeypatch.setattr('tail_cw.cli.list_dashboards', _list)
+    monkeypatch.setattr('tail_cw.cli.client_pool', _recording_pool)
+    monkeypatch.setattr('tail_cw.cli.list_dashboards', _async_value_factory([]))
 
     result = run_cli(
         ['export', 'dashboards', '--profile', 'dev', '--region', 'us-west-2', '--config', str(config_path)],
@@ -969,7 +1037,8 @@ def test_run_cli_export_dashboards_threads_credentials(tmp_path, capsys, monkeyp
 
     assert result == 0
     assert not capsys.readouterr().out
-    assert calls == [{'profile_name': 'dev', 'region_name': 'us-west-2'}]
+    assert pools[0].opened_with == {'profile_name': 'dev', 'region_name': 'us-west-2'}
+    assert pools[0].requested == ['cloudwatch']
 
 
 def test_run_cli_export_dashboards_bad_config(tmp_path, capsys):
@@ -984,7 +1053,12 @@ def test_run_cli_export_dashboards_bad_config(tmp_path, capsys):
 
 def test_run_cli_export_dashboard_by_name(tmp_path, capsys, monkeypatch):
     config_path = _write_config_file(tmp_path)
-    monkeypatch.setattr('tail_cw.cli.get_dashboard', lambda name, **_kwargs: _make_dashboard(name))
+
+    async def _get(_client, name, **_kwargs) -> Dashboard:
+        return _make_dashboard(name)
+
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    monkeypatch.setattr('tail_cw.cli.get_dashboard', _get)
 
     result = run_cli(['export', 'dashboard', 'prod-overview', '--config', str(config_path)], None, is_tty=False)
 
@@ -1032,10 +1106,11 @@ def test_run_cli_export_dashboard_requires_a_source(capsys):
 def test_run_cli_export_dashboard_reports_load_failure(tmp_path, capsys, monkeypatch):
     config_path = _write_config_file(tmp_path)
 
-    def _raise(name, **_kwargs) -> Dashboard:
+    async def _raise(_client, name, **_kwargs) -> Dashboard:
         msg = f'Dashboard {name} not found'
         raise ValueError(msg)
 
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
     monkeypatch.setattr('tail_cw.cli.get_dashboard', _raise)
 
     result = run_cli(['export', 'dashboard', 'missing', '--config', str(config_path)], None, is_tty=False)

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -12,6 +13,8 @@ from tail_cw.aws.client import LogEvent
 from tail_cw.cache.storage import LogCache, generate_preview_cache_key
 from tail_cw.config.config import CacheConfig, PreviewConfig, TailCWConfig
 from tail_cw.preview import DEFAULT_VOLUME_BUCKETS, bucket_event_counts, build_group_preview
+
+_CLIENT = object()
 
 NOW = datetime(2026, 1, 15, 12, tzinfo=UTC)
 WINDOW = timedelta(minutes=15)
@@ -43,13 +46,14 @@ class _RecordingFetcher:
         self._messages = messages
         self.calls: list[dict[str, object]] = []
 
-    def __call__(
+    async def __call__(
         self,
+        _client: object,
         log_group_name: str,
         start_time: datetime,
         end_time: datetime,
         **kwargs: object,
-    ) -> Iterator[LogEvent]:
+    ) -> AsyncIterator[LogEvent]:
         self.calls.append(
             {
                 'log_group_name': log_group_name,
@@ -58,12 +62,11 @@ class _RecordingFetcher:
                 **kwargs,
             },
         )
-        return iter(
-            [_make_event(message, timedelta(seconds=index)) for index, message in enumerate(self._messages)],
-        )
+        for index, message in enumerate(self._messages):
+            yield _make_event(message, timedelta(seconds=index))
 
 
-def test_preview_clusters_sampled_messages(fix_test_cache: Path):
+async def test_preview_clusters_sampled_messages(fix_test_cache: Path):
     fetcher = _RecordingFetcher(
         [
             'request completed status=200 duration=12ms',
@@ -72,7 +75,8 @@ def test_preview_clusters_sampled_messages(fix_test_cache: Path):
         ],
     )
 
-    preview = build_group_preview(
+    preview = await build_group_preview(
+        _CLIENT,
         GROUP,
         window=WINDOW,
         now=NOW,
@@ -90,10 +94,11 @@ def test_preview_clusters_sampled_messages(fix_test_cache: Path):
     assert fetcher.calls[0]['end_time'] == NOW
 
 
-def test_preview_patterns_are_count_descending(fix_test_cache: Path):
+async def test_preview_patterns_are_count_descending(fix_test_cache: Path):
     fetcher = _RecordingFetcher(['rare event'] + ['common event'] * 3 + ['middling event'] * 2)
 
-    preview = build_group_preview(
+    preview = await build_group_preview(
+        _CLIENT,
         GROUP,
         window=WINDOW,
         now=NOW,
@@ -106,10 +111,11 @@ def test_preview_patterns_are_count_descending(fix_test_cache: Path):
     assert preview.patterns[0].example == 'common event'
 
 
-def test_preview_honors_sample_limit(fix_test_cache: Path):
+async def test_preview_honors_sample_limit(fix_test_cache: Path):
     fetcher = _RecordingFetcher([f'message {index}' for index in range(50)])
 
-    preview = build_group_preview(
+    preview = await build_group_preview(
+        _CLIENT,
         GROUP,
         window=WINDOW,
         now=NOW,
@@ -121,12 +127,13 @@ def test_preview_honors_sample_limit(fix_test_cache: Path):
     assert preview.event_count == 7
 
 
-def test_preview_caches_within_ttl(fix_test_cache: Path):
+async def test_preview_caches_within_ttl(fix_test_cache: Path):
     fetcher = _RecordingFetcher(['request completed status=200'] * 4)
     config = _make_config(fix_test_cache)
 
-    first = build_group_preview(GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher)
-    second = build_group_preview(
+    first = await build_group_preview(_CLIENT, GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher)
+    second = await build_group_preview(
+        _CLIENT,
         GROUP,
         window=WINDOW,
         now=NOW + timedelta(seconds=30),
@@ -138,42 +145,43 @@ def test_preview_caches_within_ttl(fix_test_cache: Path):
     assert second == first
 
 
-def test_preview_refetches_after_ttl_expiry(fix_test_cache: Path):
+async def test_preview_refetches_after_ttl_expiry(fix_test_cache: Path):
     fetcher = _RecordingFetcher(['request completed status=200'])
     config = _make_config(fix_test_cache, ttl_seconds=-1)
 
-    build_group_preview(GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher)
-    build_group_preview(GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher)
+    await build_group_preview(_CLIENT, GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher)
+    await build_group_preview(_CLIENT, GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher)
 
     assert len(fetcher.calls) == 2
 
 
-def test_preview_refetches_for_a_different_window(fix_test_cache: Path):
+async def test_preview_refetches_for_a_different_window(fix_test_cache: Path):
     fetcher = _RecordingFetcher(['request completed status=200'])
     config = _make_config(fix_test_cache)
 
-    build_group_preview(GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher)
-    build_group_preview(GROUP, window=timedelta(hours=1), now=NOW, config=config, fetch_events=fetcher)
+    await build_group_preview(_CLIENT, GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher)
+    await build_group_preview(_CLIENT, GROUP, window=timedelta(hours=1), now=NOW, config=config, fetch_events=fetcher)
 
     assert len(fetcher.calls) == 2
 
 
-def test_preview_refetches_for_a_different_profile(fix_test_cache: Path):
+async def test_preview_refetches_for_a_different_profile(fix_test_cache: Path):
     fetcher = _RecordingFetcher(['request completed status=200'])
     config = _make_config(fix_test_cache)
 
-    build_group_preview(GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher, profile_name='dev')
-    build_group_preview(GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher, profile_name='prod')
+    kwargs: dict[str, Any] = {'window': WINDOW, 'now': NOW, 'config': config, 'fetch_events': fetcher}
+    await build_group_preview(_CLIENT, GROUP, profile_name='dev', **kwargs)
+    await build_group_preview(_CLIENT, GROUP, profile_name='prod', **kwargs)
 
+    # The profile reaches the cache key, not the fetch, so two calls prove the keys differ
     assert len(fetcher.calls) == 2
-    assert fetcher.calls[0]['profile_name'] == 'dev'
-    assert fetcher.calls[1]['profile_name'] == 'prod'
 
 
-def test_preview_empty_group(fix_test_cache: Path):
+async def test_preview_empty_group(fix_test_cache: Path):
     fetcher = _RecordingFetcher([])
 
-    preview = build_group_preview(
+    preview = await build_group_preview(
+        _CLIENT,
         GROUP,
         window=WINDOW,
         now=NOW,
@@ -185,35 +193,36 @@ def test_preview_empty_group(fix_test_cache: Path):
     assert preview.patterns == []
 
 
-def test_preview_ignores_an_unrecognized_cached_payload(fix_test_cache: Path):
+async def test_preview_ignores_an_unrecognized_cached_payload(fix_test_cache: Path):
     fetcher = _RecordingFetcher(['request completed status=200'])
     config = _make_config(fix_test_cache)
     cache_key = generate_preview_cache_key(GROUP, window_seconds=900)
     with LogCache(fix_test_cache) as cache:
         cache.write_payload(cache_key, {'unexpected': 'shape'})
 
-    preview = build_group_preview(GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher)
+    preview = await build_group_preview(_CLIENT, GROUP, window=WINDOW, now=NOW, config=config, fetch_events=fetcher)
 
     assert preview.event_count == 1
     assert len(fetcher.calls) == 1
 
 
-def test_preview_defaults_to_the_aws_fetcher(monkeypatch: pytest.MonkeyPatch, fix_test_cache: Path):
+async def test_preview_defaults_to_the_aws_fetcher(monkeypatch: pytest.MonkeyPatch, fix_test_cache: Path):
     fetcher = _RecordingFetcher(['request completed status=200'])
     monkeypatch.setattr('tail_cw.preview.fetch_log_events', fetcher)
 
-    preview = build_group_preview(GROUP, window=WINDOW, now=NOW, config=_make_config(fix_test_cache))
+    preview = await build_group_preview(_CLIENT, GROUP, window=WINDOW, now=NOW, config=_make_config(fix_test_cache))
 
     assert preview.event_count == 1
     assert len(fetcher.calls) == 1
 
 
-def test_preview_falls_back_to_the_default_cache_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+async def test_preview_falls_back_to_the_default_cache_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     default_dir = tmp_path / 'default_cache'
     monkeypatch.setattr('tail_cw.preview.get_default_cache_dir', lambda: default_dir)
     fetcher = _RecordingFetcher(['request completed status=200'])
 
-    preview = build_group_preview(
+    preview = await build_group_preview(
+        _CLIENT,
         GROUP,
         window=WINDOW,
         now=NOW,

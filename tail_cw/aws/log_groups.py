@@ -7,13 +7,13 @@ resolution rules stay unit-testable.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from fnmatch import fnmatchcase
 from typing import Any
 
-from tail_cw.aws.client import _epoch_ms_to_datetime, build_client
+from tail_cw.aws.client import _epoch_ms_to_datetime
 
 GLOB_METACHARACTERS = frozenset('*?[')
 """Characters that mark a pattern as a glob rather than a name or prefix."""
@@ -50,28 +50,26 @@ def _to_log_group_info(group: dict[str, Any]) -> LogGroupInfo:
     )
 
 
-def describe_log_groups(
+async def describe_log_groups(
+    client: Any,
     *,
     prefix: str | None = None,
-    profile_name: str | None = None,
-    region_name: str | None = None,
-    client: Any | None = None,
-) -> Iterator[LogGroupInfo]:
+) -> AsyncIterator[LogGroupInfo]:
     """Stream log groups from ``DescribeLogGroups``, paginating as needed.
 
-    A boto3 CloudWatch Logs client may be injected for testing; otherwise one is
-    built from the profile and region.
+    Args:
+        client: An open CloudWatch Logs client, from :meth:`ClientPool.client`.
+        prefix: Restrict results to this ``logGroupNamePrefix``.
 
     Yields:
         LogGroupInfo records in the order the API returns them.
     """
-    logs = client if client is not None else build_client('logs', region_name=region_name, profile_name=profile_name)
     kwargs: dict[str, Any] = {}
     if prefix is not None:
         kwargs['logGroupNamePrefix'] = prefix
 
-    paginator = logs.get_paginator('describe_log_groups')
-    for page in paginator.paginate(**kwargs):
+    paginator = client.get_paginator('describe_log_groups')
+    async for page in paginator.paginate(**kwargs):
         for group in page.get('logGroups', []):
             yield _to_log_group_info(group)
 

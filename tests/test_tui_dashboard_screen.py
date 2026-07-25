@@ -1,3 +1,4 @@
+# ruff: file-ignore[unused-async] - the service fakes conform to awaitable signatures
 """Tests for the dashboard screen: grid sizing, motions, commands, and dive."""
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ from tail_cw.tui.plot_widget import PlotChart
 from tail_cw.tui.shell import ShellServices, TailCWApp
 from tail_cw.tui.views import build_screen
 from tail_cw.tui.which_key import WhichKeyScreen
+
+from .asyncsupport import returns
 
 _NOW = datetime(2026, 7, 24, 12, 0, tzinfo=UTC)
 
@@ -71,7 +74,7 @@ def _build_app(
         build_screen=build_screen,
         services=services
         if services is not None
-        else ShellServices(load_dashboard=lambda _name: dashboard, fetch_metrics=lambda *_: _series(_NOW)),
+        else ShellServices(load_dashboard=returns(dashboard), fetch_metrics=returns(_series(_NOW))),
         target=NavTarget(kind=ViewKind.DASHBOARD, label=name, payload=(name,)),
     )
 
@@ -113,11 +116,11 @@ async def test_screen_creates_cells_and_fetches_metrics() -> None:
     )
     calls: list[tuple[datetime, datetime]] = []
 
-    def fetch(_queries: object, start: datetime, end: datetime) -> list[MetricSeries]:
+    async def fetch(_queries: object, start: datetime, end: datetime) -> list[MetricSeries]:
         calls.append((start, end))
         return _series(start)
 
-    app = _build_app(dashboard, services=ShellServices(load_dashboard=lambda _name: dashboard, fetch_metrics=fetch))
+    app = _build_app(dashboard, services=ShellServices(load_dashboard=returns(dashboard), fetch_metrics=fetch))
     async with app.run_test(size=(160, 48)) as pilot:
         await _settle(app, pilot)
         assert len(_screen(app)._panels) == 3
@@ -249,11 +252,11 @@ async def test_refresh_view_refetches_after_a_window_change() -> None:
     dashboard = Dashboard(name='demo', widgets=[_metric('one')])
     calls: list[tuple[datetime, datetime]] = []
 
-    def fetch(_queries: object, start: datetime, end: datetime) -> list[MetricSeries]:
+    async def fetch(_queries: object, start: datetime, end: datetime) -> list[MetricSeries]:
         calls.append((start, end))
         return _series(start)
 
-    app = _build_app(dashboard, services=ShellServices(load_dashboard=lambda _name: dashboard, fetch_metrics=fetch))
+    app = _build_app(dashboard, services=ShellServices(load_dashboard=returns(dashboard), fetch_metrics=fetch))
     async with app.run_test(size=(160, 48)) as pilot:
         await _settle(app, pilot)
         assert len(calls) == 1
@@ -324,12 +327,12 @@ async def test_dive_ranks_candidates_then_opens_the_chosen_group(monkeypatch: py
 
     monkeypatch.setattr(TailCWApp, 'open_logs', fake_open_logs)
     services = ShellServices(
-        load_dashboard=lambda _name: dashboard,
-        fetch_metrics=lambda *_: _series(_NOW),
-        list_groups=lambda: [
-            LogGroupInfo(name='/aws/lambda/api', arn='arn', stored_bytes=None, retention_days=None, created=None)
-        ],
-        count_events=lambda *_: 7,
+        load_dashboard=returns(dashboard),
+        fetch_metrics=returns(_series(_NOW)),
+        list_groups=returns(
+            [LogGroupInfo(name='/aws/lambda/api', arn='arn', stored_bytes=None, retention_days=None, created=None)]
+        ),
+        count_events=returns(7),
     )
     app = _build_app(dashboard, services=services)
     async with app.run_test(size=(160, 48)) as pilot:
@@ -382,11 +385,11 @@ async def test_log_widget_cells_render_their_volume_sparkline() -> None:
     dashboard = Dashboard(name='demo', widgets=[widget])
     volume_calls: list[str] = []
 
-    def log_volume(group: str, _start: datetime, _end: datetime) -> list[float]:
+    async def log_volume(group: str, _start: datetime, _end: datetime) -> list[float]:
         volume_calls.append(group)
         return [1.0, 4.0, 2.0]
 
-    services = ShellServices(load_dashboard=lambda _name: dashboard, log_volume=log_volume)
+    services = ShellServices(load_dashboard=returns(dashboard), log_volume=log_volume)
     app = _build_app(dashboard, services=services)
     async with app.run_test(size=(160, 48)) as pilot:
         await _settle(app, pilot)
@@ -397,11 +400,11 @@ async def test_log_widget_cells_render_their_volume_sparkline() -> None:
 async def test_metric_fetch_failure_shows_the_error_in_the_cell() -> None:
     dashboard = Dashboard(name='demo', widgets=[_metric('one')])
 
-    def fetch(*_args: object) -> list[MetricSeries]:
+    async def fetch(*_args: object) -> list[MetricSeries]:
         msg = 'throttled'
         raise RuntimeError(msg)
 
-    app = _build_app(dashboard, services=ShellServices(load_dashboard=lambda _name: dashboard, fetch_metrics=fetch))
+    app = _build_app(dashboard, services=ShellServices(load_dashboard=returns(dashboard), fetch_metrics=fetch))
     async with app.run_test(size=(160, 48)) as pilot:
         await _settle(app, pilot)
         assert 'throttled' in str(_screen(app)._panels[0].cell.render())
@@ -430,7 +433,7 @@ async def test_which_key_lists_the_dashboard_bindings() -> None:
 
 @pytest.mark.asyncio
 async def test_load_failure_reports_in_the_status_line() -> None:
-    def load(_name: str) -> Dashboard:
+    async def load(_name: str) -> Dashboard:
         msg = 'access denied'
         raise RuntimeError(msg)
 

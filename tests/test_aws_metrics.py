@@ -131,12 +131,12 @@ class _FakeCloudWatch:
         self._pages = pages
         self.calls: list[dict[str, Any]] = []
 
-    def get_metric_data(self, **kwargs: Any) -> dict[str, Any]:
+    async def get_metric_data(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(kwargs)
         return self._pages[len(self.calls) - 1]
 
 
-def test_fetch_paginates_and_concatenates_visible_series() -> None:
+async def test_fetch_paginates_and_concatenates_visible_series() -> None:
     ts1 = datetime(2026, 7, 24, 0, 0, tzinfo=UTC)
     ts2 = datetime(2026, 7, 24, 0, 5, tzinfo=UTC)
     pages: list[dict[str, Any]] = [
@@ -148,7 +148,7 @@ def test_fetch_paginates_and_concatenates_visible_series() -> None:
     ]
     fake = _FakeCloudWatch(pages)
     queries: list[dict[str, Any]] = [{'Id': 'e1', 'Expression': 'x', 'ReturnData': True}]
-    series = fetch_metric_data(queries, ts1, ts2, client=fake)
+    series = await fetch_metric_data(fake, queries, ts1, ts2)
     assert len(fake.calls) == 2
     assert fake.calls[1]['NextToken'] == 'more'
     assert len(series) == 1
@@ -156,8 +156,8 @@ def test_fetch_paginates_and_concatenates_visible_series() -> None:
     assert series[0].timestamps == [ts1, ts2]
 
 
-def test_fetch_rejects_empty_queries() -> None:
+async def test_fetch_rejects_empty_queries() -> None:
     with pytest.raises(ValueError, match='At least one metric query'):
-        fetch_metric_data(
-            [], datetime(2026, 7, 24, tzinfo=UTC), datetime(2026, 7, 24, 1, tzinfo=UTC), client=_FakeCloudWatch([])
+        await fetch_metric_data(
+            _FakeCloudWatch([]), [], datetime(2026, 7, 24, tzinfo=UTC), datetime(2026, 7, 24, 1, tzinfo=UTC)
         )

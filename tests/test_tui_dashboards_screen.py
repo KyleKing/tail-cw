@@ -1,3 +1,4 @@
+# ruff: file-ignore[unused-async] - the service fakes conform to awaitable signatures
 """Tests for the dashboard browser: listing, filtering, previews, and opening."""
 
 from __future__ import annotations
@@ -30,6 +31,8 @@ from tail_cw.tui.dashboards_screen import (
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.picker import Picker, resolve_name_pattern
 from tail_cw.tui.shell import ShellScreen, ShellServices, TailCWApp
+
+from .asyncsupport import calls, returns
 
 _NOW = datetime(2026, 7, 24, 12, 0, tzinfo=UTC)
 _TICK = 0.01
@@ -127,7 +130,7 @@ def test_resolve_name_pattern_reuses_the_group_ladder() -> None:
 async def test_list_populates_and_publishes_names_for_completion() -> None:
     calls: list[int] = []
 
-    def list_dashboards() -> list[DashboardSummary]:
+    async def list_dashboards() -> list[DashboardSummary]:
         calls.append(1)
         return list(_SUMMARIES)
 
@@ -143,7 +146,7 @@ async def test_list_populates_and_publishes_names_for_completion() -> None:
 
 
 async def test_filter_narrows_the_list() -> None:
-    app = _app(ShellServices(list_dashboards=lambda: list(_SUMMARIES)))
+    app = _app(ShellServices(list_dashboards=calls(lambda: list(_SUMMARIES))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -177,7 +180,7 @@ async def test_filter_narrows_the_list() -> None:
 
 
 async def test_enter_opens_the_highlighted_dashboard() -> None:
-    app = _app(ShellServices(list_dashboards=lambda: list(_SUMMARIES)))
+    app = _app(ShellServices(list_dashboards=calls(lambda: list(_SUMMARIES))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         await pilot.press('down')
@@ -191,7 +194,7 @@ async def test_enter_opens_the_highlighted_dashboard() -> None:
 
 
 async def test_open_without_a_row_warns_instead_of_navigating() -> None:
-    app = _app(ShellServices(list_dashboards=list))
+    app = _app(ShellServices(list_dashboards=returns([])))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         _screen(app).action_open_dashboard()
@@ -202,11 +205,11 @@ async def test_open_without_a_row_warns_instead_of_navigating() -> None:
 async def test_detail_pane_previews_widget_titles() -> None:
     requested: list[str] = []
 
-    def load_dashboard(name: str) -> Dashboard:
+    async def load_dashboard(name: str) -> Dashboard:
         requested.append(name)
         return Dashboard(name=name, widgets=list(_DASHBOARD.widgets))
 
-    app = _app(ShellServices(list_dashboards=lambda: list(_SUMMARIES), load_dashboard=load_dashboard))
+    app = _app(ShellServices(list_dashboards=calls(lambda: list(_SUMMARIES)), load_dashboard=load_dashboard))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -217,11 +220,13 @@ async def test_detail_pane_previews_widget_titles() -> None:
 async def test_detail_debounces_a_burst_into_one_call() -> None:
     requested: list[str] = []
 
-    def load_dashboard(name: str) -> Dashboard:
+    async def load_dashboard(name: str) -> Dashboard:
         requested.append(name)
         return Dashboard(name=name)
 
-    app = _app(ShellServices(list_dashboards=lambda: list(_SUMMARIES), load_dashboard=load_dashboard), debounce=30.0)
+    app = _app(
+        ShellServices(list_dashboards=calls(lambda: list(_SUMMARIES)), load_dashboard=load_dashboard), debounce=30.0
+    )
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -241,11 +246,11 @@ async def test_detail_debounces_a_burst_into_one_call() -> None:
 async def test_a_cached_body_is_not_refetched() -> None:
     requested: list[str] = []
 
-    def load_dashboard(name: str) -> Dashboard:
+    async def load_dashboard(name: str) -> Dashboard:
         requested.append(name)
         return Dashboard(name=name)
 
-    app = _app(ShellServices(list_dashboards=lambda: list(_SUMMARIES), load_dashboard=load_dashboard))
+    app = _app(ShellServices(list_dashboards=calls(lambda: list(_SUMMARIES)), load_dashboard=load_dashboard))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -262,17 +267,17 @@ async def test_a_cached_body_is_not_refetched() -> None:
 
 
 async def test_failures_leave_the_view_usable() -> None:
-    def load_dashboard(name: str) -> Dashboard:
+    async def load_dashboard(name: str) -> Dashboard:
         msg = f'boom {name}'
         raise RuntimeError(msg)
 
-    app = _app(ShellServices(list_dashboards=lambda: list(_SUMMARIES), load_dashboard=load_dashboard))
+    app = _app(ShellServices(list_dashboards=calls(lambda: list(_SUMMARIES)), load_dashboard=load_dashboard))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
         assert screen.visible_dashboards == ['prod-overview', 'prod-lambda', 'staging']
 
-    def list_dashboards() -> list[DashboardSummary]:
+    async def list_dashboards() -> list[DashboardSummary]:
         raise RuntimeError('no credentials')
 
     app = _app(ShellServices(list_dashboards=list_dashboards))
@@ -287,14 +292,14 @@ async def test_missing_services_explain_themselves() -> None:
         await _settle(app, pilot)
         assert _screen(app).query_one(Picker).detail_text() == NO_LIST_SERVICE
 
-    app = _app(ShellServices(list_dashboards=lambda: list(_SUMMARIES)))
+    app = _app(ShellServices(list_dashboards=calls(lambda: list(_SUMMARIES))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         assert _screen(app).query_one(Picker).detail_text() == NO_DETAIL_SERVICE
 
 
 async def test_siblings_cycle_the_listed_dashboards() -> None:
-    app = _app(ShellServices(list_dashboards=lambda: list(_SUMMARIES)))
+    app = _app(ShellServices(list_dashboards=calls(lambda: list(_SUMMARIES))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -305,7 +310,7 @@ async def test_siblings_cycle_the_listed_dashboards() -> None:
 async def test_reload_command_refetches() -> None:
     calls: list[int] = []
 
-    def list_dashboards() -> list[DashboardSummary]:
+    async def list_dashboards() -> list[DashboardSummary]:
         calls.append(1)
         return list(_SUMMARIES)
 
@@ -321,7 +326,7 @@ async def test_reload_command_refetches() -> None:
 
 
 async def test_the_table_holds_focus_after_the_command_line_closes() -> None:
-    app = _app(ShellServices(list_dashboards=lambda: list(_SUMMARIES)))
+    app = _app(ShellServices(list_dashboards=calls(lambda: list(_SUMMARIES))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)

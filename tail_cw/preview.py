@@ -9,18 +9,18 @@ layer, so no Textual import belongs here.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from itertools import islice
 from typing import Any
 
 from tail_cw.aws.client import LogEvent, fetch_log_events
 from tail_cw.cache.storage import LogCache, generate_preview_cache_key
+from tail_cw.concurrency import take
 from tail_cw.config.config import TailCWConfig, get_default_cache_dir
 from tail_cw.query.patterns import MessagePattern, cluster_messages
 
-FetchEvents = Callable[..., Iterator[LogEvent]]
+FetchEvents = Callable[..., AsyncIterator[LogEvent]]
 
 DEFAULT_VOLUME_BUCKETS = 48
 """Buckets per log-volume series; the sparkline resamples this to the cell width."""
@@ -36,7 +36,8 @@ class GroupPreview:
     patterns: list[MessagePattern]
 
 
-def build_group_preview(
+async def build_group_preview(
+    client: Any,
     log_group: str,
     *,
     window: timedelta,
@@ -55,12 +56,13 @@ def build_group_preview(
     AWS call at all.
 
     Args:
+        client: An open CloudWatch Logs client, from :meth:`ClientPool.client`.
         log_group: CloudWatch log group name.
         window: How far back from `now` to sample.
         now: Timezone-aware end of the sampled window.
         config: Application configuration supplying cache and preview settings.
-        profile_name: Optional AWS profile name.
-        region_name: Optional AWS region name.
+        profile_name: Optional AWS profile name, part of the cache key only.
+        region_name: Optional AWS region name, part of the cache key only.
         fetch_events: Optional replacement for :func:`fetch_log_events`.
         sample_limit: Maximum number of events read from the window.
 
@@ -86,13 +88,12 @@ def build_group_preview(
         if payload is not None and (cached := _decode_payload(log_group, payload)) is not None:
             return cached
 
-        preview = _sample_group(
+        preview = await _sample_group(
+            client,
             log_group,
             window=window,
             window_seconds=window_seconds,
             now=now,
-            profile_name=profile_name,
-            region_name=region_name,
             fetch_events=fetch_events,
             sample_limit=sample_limit,
         )
@@ -101,26 +102,19 @@ def build_group_preview(
     return preview
 
 
-def _sample_group(
+async def _sample_group(
+    client: Any,
     log_group: str,
     *,
     window: timedelta,
     window_seconds: int,
     now: datetime,
-    profile_name: str | None,
-    region_name: str | None,
     fetch_events: FetchEvents | None,
     sample_limit: int,
 ) -> GroupPreview:
     effective_fetch = fetch_events if fetch_events is not None else fetch_log_events
-    events = effective_fetch(
-        log_group,
-        now - window,
-        now,
-        profile_name=profile_name,
-        region_name=region_name,
-    )
-    messages = [event.message for event in islice(iter(events), sample_limit)]
+    events = await take(effective_fetch(client, log_group, now - window, now), sample_limit)
+    messages = [event.message for event in events]
 
     return GroupPreview(
         log_group=log_group,

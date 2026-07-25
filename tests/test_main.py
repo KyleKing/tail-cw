@@ -1,10 +1,13 @@
+# ruff: file-ignore[unused-async] - the fakes conform to awaitable service signatures
 """Unit tests for the __main__ entry point (shell wiring and exit codes)."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import fields
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -30,6 +33,23 @@ NOW = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC)
 
 def _make_session() -> Session:
     return Session(start=NOW - timedelta(hours=1), end=NOW, profile='dev', region='us-west-2')
+
+
+class _FakePool:
+    """Hands out one sentinel per service so wiring can be asserted without AWS."""
+
+    def __init__(self) -> None:
+        self.requested: list[str] = []
+
+    async def client(self, service_name: str) -> str:
+        self.requested.append(service_name)
+        return f'client:{service_name}'
+
+
+def _live(config: TailCWConfig, session: Session) -> tuple[ShellServices, _FakePool]:
+    pool = _FakePool()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        return _live_services(config, session, pool, executor), pool
 
 
 def test_main_function_exists():
@@ -119,18 +139,18 @@ def test_target_label_several_groups():
     assert _target_label(ShellSeed(view='logs', targets=('/one', '/two', '/three'))) == '3 groups'
 
 
-def test_demo_services_load_dashboard_needs_no_aws():
+async def test_demo_services_load_dashboard_needs_no_aws():
     services = _demo_services()
 
     assert services.load_dashboard is not None
-    assert isinstance(services.load_dashboard('anything'), Dashboard)
+    assert isinstance(await services.load_dashboard('anything'), Dashboard)
 
 
-def test_demo_services_lists_the_demo_dashboard():
+async def test_demo_services_lists_the_demo_dashboard():
     services = _demo_services()
 
     assert services.list_dashboards is not None
-    summaries = services.list_dashboards()
+    summaries = await services.list_dashboards()
     assert [summary.name for summary in summaries] == ['demo']
 
 
@@ -166,39 +186,39 @@ def test_demo_resolve_logs_defaults_to_the_demo_group():
 
 def test_live_services_populates_every_service():
     """A live dashboard gets the same service set the demo does, log volume included."""
-    services = _live_services(TailCWConfig(), _make_session())
+    services, _ = _live(TailCWConfig(), _make_session())
     unset = {field.name for field in fields(ShellServices) if getattr(services, field.name) is None}
 
     assert unset == set()
 
 
 def test_live_services_are_callable_without_touching_aws():
-    services = _live_services(TailCWConfig(), _make_session())
+    services, _ = _live(TailCWConfig(), _make_session())
     populated = [field.name for field in fields(ShellServices) if getattr(services, field.name) is not None]
 
     assert all(callable(getattr(services, name)) for name in populated)
 
 
-def test_live_services_fetch_metrics_threads_session_credentials():
+async def test_live_services_fetch_metrics_uses_the_pooled_cloudwatch_client():
     session = _make_session()
-    services = _live_services(TailCWConfig(), session)
+    services, pool = _live(TailCWConfig(), session)
     recorded: list[dict[str, object]] = []
 
-    def fake_fetch(queries, start_time, end_time, **kwargs):
-        recorded.append({'queries': queries, 'start': start_time, 'end': end_time, **kwargs})
+    async def fake_fetch(client, queries, start_time, end_time):
+        recorded.append({'client': client, 'queries': queries, 'start': start_time, 'end': end_time})
         return []
 
     assert services.fetch_metrics is not None
     with patch('tail_cw.__main__.fetch_metric_data', fake_fetch):
-        assert services.fetch_metrics([{'Id': 'm1'}], session.start, session.end) == []
+        assert await services.fetch_metrics([{'Id': 'm1'}], session.start, session.end) == []
 
-    assert recorded[0]['profile_name'] == 'dev'
-    assert recorded[0]['region_name'] == 'us-west-2'
+    assert recorded[0]['client'] == 'client:cloudwatch'
+    assert pool.requested == ['cloudwatch']
 
 
-def test_live_services_count_events_caps_the_scan():
+async def test_live_services_count_events_caps_the_scan():
     session = _make_session()
-    services = _live_services(TailCWConfig(), session)
+    services, _ = _live(TailCWConfig(), session)
     events = [
         LogEvent(
             log_group='/g',
@@ -211,25 +231,29 @@ def test_live_services_count_events_caps_the_scan():
         for index in range(3)
     ]
 
+    async def fake_fetch(*_args: Any, **_kwargs: Any) -> AsyncIterator[LogEvent]:
+        for event in events:
+            yield event
+
     assert services.count_events is not None
-    with patch('tail_cw.__main__.fetch_log_events', lambda *_args, **_kwargs: iter(events)):
-        assert services.count_events('/g', session.start, session.end) == 3
+    with patch('tail_cw.__main__.fetch_log_events', fake_fetch):
+        assert await services.count_events('/g', session.start, session.end) == 3
 
 
-def test_live_services_resolve_logs_builds_one_request_per_group(tmp_path):
+async def test_live_services_resolve_logs_builds_one_request_per_group(tmp_path):
     session = _make_session()
     config = TailCWConfig()
     config.cache.cache_dir = tmp_path / 'cache'
-    services = _live_services(config, session)
+    services, _ = _live(config, session)
     recorded: list[Sequence[FetchRequest]] = []
 
-    def fake_resolve(requests, _config):
+    async def fake_resolve(_client, requests, _config, **_kwargs):
         recorded.append(requests)
         return []
 
     assert services.resolve_logs is not None
     with patch('tail_cw.__main__.resolve_parquet_paths', fake_resolve):
-        services.resolve_logs(['/one', '/two'], session.start, session.end, 'ERROR')
+        await services.resolve_logs(['/one', '/two'], session.start, session.end, 'ERROR')
 
     requests = recorded[0]
     assert [request.log_group for request in requests] == ['/one', '/two']
@@ -245,10 +269,10 @@ def _run_shell_without_a_terminal(
 ) -> TailCWApp:
     started: list[TailCWApp] = []
 
-    def fake_run(app: TailCWApp) -> None:
+    async def fake_run_async(app: TailCWApp) -> None:
         started.append(app)
 
-    monkeypatch.setattr(TailCWApp, 'run', fake_run)
+    monkeypatch.setattr(TailCWApp, 'run_async', fake_run_async)
     _run_shell(config, session, seed)
     assert len(started) == 1
     return started[0]

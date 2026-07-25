@@ -13,8 +13,9 @@ driven headless with no network.
 
 from __future__ import annotations
 
+import asyncio
 import math
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar
@@ -238,19 +239,19 @@ class DashboardScreen(ShellScreen):
     def on_mount(self) -> None:
         """Draw the breadcrumb and load the dashboard off the message loop."""
         super().on_mount()
-        self.run_worker(self._load_dashboard, name='dashboard_load', group='dashboard_load', thread=True)
+        self.run_worker(self._load_dashboard(), name='dashboard_load', group='dashboard_load')
 
-    def _load_dashboard(self) -> None:
+    async def _load_dashboard(self) -> None:
         load = self.shell.services.load_dashboard
         if load is None:
-            self.app.call_from_thread(self._show_status, 'no dashboard pipeline wired')
+            self._show_status('no dashboard pipeline wired')
             return
         try:
-            dashboard = load(self.dashboard_name)
+            dashboard = await load(self.dashboard_name)
         except Exception as err:
-            self.app.call_from_thread(self._show_status, f'load failed: {err}')
+            self._show_status(f'load failed: {err}')
             return
-        self.app.call_from_thread(self.build_grid, dashboard)
+        self.build_grid(dashboard)
 
     def _show_status(self, message: str) -> None:
         self.query_one('#dash_status', Label).update(message)
@@ -327,24 +328,23 @@ class DashboardScreen(ShellScreen):
         for panel in self._panels:
             if isinstance(panel.widget, LogWidget):
                 self.run_worker(
-                    lambda p=panel: self._fetch_log_volume(p),
+                    self._fetch_log_volume(panel),
                     name='log_volume',
                     group=f'log_volume_{panel.cell.index}',
                     exclusive=True,
-                    thread=True,
                 )
 
-    def _fetch_log_volume(self, panel: _Panel) -> None:
+    async def _fetch_log_volume(self, panel: _Panel) -> None:
         log_volume = self.shell.services.log_volume
         if log_volume is None or not isinstance(panel.widget, LogWidget):
             return
         source = _widget_source(panel.widget) or panel.widget.title
         session = self.shell.session
         try:
-            volume = log_volume(source, session.start, session.end)
+            volume = await log_volume(source, session.start, session.end)
         except Exception:
             return
-        self.app.call_from_thread(self._render_log_volume, panel, volume)
+        self._render_log_volume(panel, volume)
 
     @staticmethod
     def _render_log_volume(panel: _Panel, volume: list[float]) -> None:
@@ -357,14 +357,13 @@ class DashboardScreen(ShellScreen):
 
     def _load_panel(self, panel: _Panel) -> None:
         self.run_worker(
-            lambda: self._fetch_panel(panel),
+            self._fetch_panel(panel),
             name='metric_fetch',
             group=f'metric_fetch_{panel.cell.index}',
             exclusive=True,
-            thread=True,
         )
 
-    def _fetch_panel(self, panel: _Panel) -> None:
+    async def _fetch_panel(self, panel: _Panel) -> None:
         widget = panel.widget
         fetch_metrics = self.shell.services.fetch_metrics
         if fetch_metrics is None or not isinstance(widget, MetricWidget):
@@ -379,15 +378,15 @@ class DashboardScreen(ShellScreen):
             return
         session = self.shell.session
         try:
-            series = fetch_metrics(queries, session.start, session.end)
+            series = await fetch_metrics(queries, session.start, session.end)
         except Exception as err:
-            self.app.call_from_thread(panel.cell.render_static, f'[red]error:[/] {err}')
+            panel.cell.render_static(f'[red]error:[/] {err}')
             return
         visible = [item for item in series if item.values]
         panel.series = visible
-        self.app.call_from_thread(panel.cell.set_series, visible)
+        panel.cell.set_series(visible)
         if panel.cell.index in self._staged:
-            self.app.call_from_thread(self._rebuild_stage)
+            self._rebuild_stage()
 
     def _focused_panel(self) -> _Panel | None:
         return self._panel_by_cell_id.get(id(self.focused)) if self.focused is not None else None
@@ -513,33 +512,39 @@ class DashboardScreen(ShellScreen):
         widget = panel.widget
         self.notify('Ranking log groups...', severity='information')
         self.run_worker(
-            lambda: self._dive_worker(widget),
+            self._dive_worker(widget),
             name='dive_rank',
             group='dive_rank',
             exclusive=True,
-            thread=True,
         )
 
-    def _dive_worker(self, widget: Widget) -> None:
+    async def _dive_worker(self, widget: Widget) -> None:
         try:
-            candidates = self._rank_candidates(widget)
+            candidates = await self._rank_candidates(widget)
         except Exception as err:
-            self.app.call_from_thread(self.notify, f'Dive ranking failed: {err}', severity='error')
+            self.notify(f'Dive ranking failed: {err}', severity='error')
             return
-        self.app.call_from_thread(self.shell.dive, widget, candidates)
+        self.shell.dive(widget, candidates)
 
-    def _rank_candidates(self, widget: Widget) -> list[DiveCandidate]:
-        services = self.shell.services
+    async def _count_candidates(self, widget: Widget, known: Collection[str]) -> dict[str, int]:
+        count_events = self.shell.services.count_events
+        groups = {log_group for log_group, _ in candidate_log_groups(widget) if log_group in known}
+        if count_events is None or not groups:
+            return {}
         session = self.shell.session
-        known = {info.name for info in services.list_groups()} if services.list_groups is not None else set()
-        count_events = services.count_events
 
-        def count(log_group: str) -> int:
-            if count_events is None:
-                return 0
-            return count_events(log_group, session.start, session.end)
+        async def count(log_group: str) -> int:
+            return await count_events(log_group, session.start, session.end)
 
-        return rank_dive_candidates(widget, known_groups=known, count_events=count)
+        async with asyncio.TaskGroup() as task_group:
+            counts = {log_group: task_group.create_task(count(log_group)) for log_group in groups}
+        return {log_group: task.result() for log_group, task in counts.items()}
+
+    async def _rank_candidates(self, widget: Widget) -> list[DiveCandidate]:
+        services = self.shell.services
+        known = {info.name for info in await services.list_groups()} if services.list_groups is not None else set()
+        counts = await self._count_candidates(widget, known)
+        return rank_dive_candidates(widget, known_groups=known, count_events=lambda group: counts.get(group, 0))
 
     def commands(self) -> dict[str, ShellCommand]:
         """The dashboard's own ``:`` commands."""

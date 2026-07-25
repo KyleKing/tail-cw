@@ -1,9 +1,9 @@
+# ruff: file-ignore[unused-async] - the stream fakes are async generators, so `async def` is required
 """Tests for the CloudWatch Logs StartLiveTail wrapper."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 from botocore.exceptions import EventStreamError  # type: ignore[import-untyped]
@@ -14,6 +14,11 @@ from tail_cw.aws.live_tail import (
     resolve_log_group_arns,
     stream_live_tail,
 )
+
+
+async def _collect(events: AsyncIterator[Any]) -> list[Any]:
+    return [event async for event in events]
+
 
 ACCOUNT_ARN_PREFIX = 'arn:aws:logs:us-east-1:123456789012:log-group:'
 
@@ -60,7 +65,7 @@ class _FakePaginator:
     def __init__(self, pages: list[dict[str, Any]]) -> None:
         self._pages = pages
 
-    def paginate(self, **kwargs: Any) -> Iterator[dict[str, Any]]:
+    async def paginate(self, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:
         prefix = kwargs['logGroupNamePrefix']
         for page in self._pages:
             groups = [group for group in page.get('logGroups', []) if group['logGroupName'].startswith(prefix)]
@@ -71,7 +76,7 @@ class _FakeLogsClient:
     def __init__(
         self,
         describe_pages: list[dict[str, Any]],
-        streams: list[Callable[[], Iterator[dict[str, Any]]]],
+        streams: list[Callable[[], AsyncIterator[dict[str, Any]]]],
     ) -> None:
         self._describe_pages = describe_pages
         self._streams = streams
@@ -81,7 +86,7 @@ class _FakeLogsClient:
         assert name == 'describe_log_groups'
         return _FakePaginator(self._describe_pages)
 
-    def start_live_tail(self, **kwargs: Any) -> dict[str, Any]:
+    async def start_live_tail(self, **kwargs: Any) -> dict[str, Any]:
         self.start_calls.append(kwargs)
         return {'responseStream': self._streams.pop(0)()}
 
@@ -93,23 +98,23 @@ def _describe_page(name: str, *, with_log_group_arn: bool = False) -> dict[str, 
     return {'logGroups': [group]}
 
 
-def test_resolve_log_group_arns_strips_trailing_wildcard():
+async def test_resolve_log_group_arns_strips_trailing_wildcard():
     client = _FakeLogsClient([_describe_page('/test/group')], [])
 
-    arns = resolve_log_group_arns(client, ['/test/group'])
+    arns = await resolve_log_group_arns(client, ['/test/group'])
 
     assert arns == [f'{ACCOUNT_ARN_PREFIX}/test/group']
 
 
-def test_resolve_log_group_arns_prefers_log_group_arn_field():
+async def test_resolve_log_group_arns_prefers_log_group_arn_field():
     client = _FakeLogsClient([_describe_page('/test/group', with_log_group_arn=True)], [])
 
-    arns = resolve_log_group_arns(client, ['/test/group'])
+    arns = await resolve_log_group_arns(client, ['/test/group'])
 
     assert arns == [f'{ACCOUNT_ARN_PREFIX}/test/group']
 
 
-def test_resolve_log_group_arns_exact_match_only():
+async def test_resolve_log_group_arns_exact_match_only():
     pages = [
         {
             'logGroups': [
@@ -120,16 +125,16 @@ def test_resolve_log_group_arns_exact_match_only():
     ]
     client = _FakeLogsClient(pages, [])
 
-    arns = resolve_log_group_arns(client, ['/test/group'])
+    arns = await resolve_log_group_arns(client, ['/test/group'])
 
     assert arns == [f'{ACCOUNT_ARN_PREFIX}/test/group']
 
 
-def test_resolve_log_group_arns_missing_group_raises():
+async def test_resolve_log_group_arns_missing_group_raises():
     client = _FakeLogsClient([{'logGroups': []}], [])
 
     with pytest.raises(ValueError, match='Log group not found'):
-        resolve_log_group_arns(client, ['/missing/group'])
+        await resolve_log_group_arns(client, ['/missing/group'])
 
 
 def test_live_event_conversion_resolves_group_name_from_arn():
@@ -163,16 +168,15 @@ def test_live_event_conversion_is_deterministic():
     assert first.event_id != other.event_id
 
 
-def test_stream_live_tail_yields_events_and_passes_filter():
-    def stream() -> Iterator[dict[str, Any]]:
+async def test_stream_live_tail_yields_events_and_passes_filter():
+    async def stream() -> AsyncIterator[dict[str, Any]]:
         yield {'sessionStart': {'sessionId': 'abc'}}
         yield _session_update([_make_live_event(message='one'), _make_live_event(message='two')])
         yield _session_update([])
 
     client = _FakeLogsClient([_describe_page('/test/group')], [stream])
 
-    with patch('tail_cw.aws.live_tail._create_logs_client', return_value=client):
-        events = list(stream_live_tail(['/test/group'], filter_pattern='ERROR'))
+    events = await _collect(stream_live_tail(client, ['/test/group'], filter_pattern='ERROR'))
 
     assert [event.message for event in events] == ['one', 'two']
     assert client.start_calls == [
@@ -183,25 +187,24 @@ def test_stream_live_tail_yields_events_and_passes_filter():
     ]
 
 
-def test_stream_live_tail_reconnects_after_stream_error():
-    def failing_stream() -> Iterator[dict[str, Any]]:
+async def test_stream_live_tail_reconnects_after_stream_error():
+    async def failing_stream() -> AsyncIterator[dict[str, Any]]:
         yield _session_update([_make_live_event(message='before-error')])
         raise _timeout_error()
 
-    def healthy_stream() -> Iterator[dict[str, Any]]:
+    async def healthy_stream() -> AsyncIterator[dict[str, Any]]:
         yield _session_update([_make_live_event(message='after-reconnect')])
 
     client = _FakeLogsClient([_describe_page('/test/group')], [failing_stream, healthy_stream])
 
-    with patch('tail_cw.aws.live_tail._create_logs_client', return_value=client):
-        events = list(stream_live_tail(['/test/group']))
+    events = await _collect(stream_live_tail(client, ['/test/group']))
 
     assert [event.message for event in events] == ['before-error', 'after-reconnect']
     assert len(client.start_calls) == 2
 
 
-def test_stream_live_tail_raises_after_exhausted_retries():
-    def failing_stream() -> Iterator[dict[str, Any]]:
+async def test_stream_live_tail_raises_after_exhausted_retries():
+    async def failing_stream() -> AsyncIterator[dict[str, Any]]:
         yield _session_update([])
         raise _timeout_error()
 
@@ -210,21 +213,18 @@ def test_stream_live_tail_raises_after_exhausted_retries():
         [failing_stream, failing_stream, failing_stream],
     )
 
-    with (
-        patch('tail_cw.aws.live_tail._create_logs_client', return_value=client),
-        pytest.raises(LiveTailSessionError, match='after 2 reconnect attempts'),
-    ):
-        list(stream_live_tail(['/test/group'], max_reconnect_attempts=2))
+    with pytest.raises(LiveTailSessionError, match='after 2 reconnect attempts'):
+        await _collect(stream_live_tail(client, ['/test/group'], max_reconnect_attempts=2))
 
     assert len(client.start_calls) == 3
 
 
-def test_stream_live_tail_resets_failure_count_on_progress():
-    def failing_stream() -> Iterator[dict[str, Any]]:
+async def test_stream_live_tail_resets_failure_count_on_progress():
+    async def failing_stream() -> AsyncIterator[dict[str, Any]]:
         yield _session_update([_make_live_event(message='progress')])
         raise _timeout_error()
 
-    def final_stream() -> Iterator[dict[str, Any]]:
+    async def final_stream() -> AsyncIterator[dict[str, Any]]:
         yield _session_update([_make_live_event(message='done')])
 
     client = _FakeLogsClient(
@@ -232,28 +232,27 @@ def test_stream_live_tail_resets_failure_count_on_progress():
         [failing_stream, failing_stream, failing_stream, final_stream],
     )
 
-    with patch('tail_cw.aws.live_tail._create_logs_client', return_value=client):
-        events = list(stream_live_tail(['/test/group'], max_reconnect_attempts=1))
+    events = await _collect(stream_live_tail(client, ['/test/group'], max_reconnect_attempts=1))
 
     assert [event.message for event in events] == ['progress', 'progress', 'progress', 'done']
 
 
-def test_stream_live_tail_reports_sampling():
-    def stream() -> Iterator[dict[str, Any]]:
+async def test_stream_live_tail_reports_sampling():
+    async def stream() -> AsyncIterator[dict[str, Any]]:
         yield _session_update([_make_live_event()], sampled=True)
 
     client = _FakeLogsClient([_describe_page('/test/group')], [stream])
     sampled_flags: list[bool] = []
 
-    with patch('tail_cw.aws.live_tail._create_logs_client', return_value=client):
-        list(stream_live_tail(['/test/group'], on_sampled=sampled_flags.append))
+    await _collect(stream_live_tail(client, ['/test/group'], on_sampled=sampled_flags.append))
 
     assert sampled_flags == [True]
 
 
 @pytest.mark.parametrize('group_count', [0, 11])
-def test_stream_live_tail_rejects_invalid_group_count(group_count):
+async def test_stream_live_tail_rejects_invalid_group_count(group_count):
+    client = _FakeLogsClient([], [])
     log_groups = [f'/test/group-{index}' for index in range(group_count)]
 
     with pytest.raises(ValueError, match='1 to 10 log groups'):
-        list(stream_live_tail(log_groups))
+        await _collect(stream_live_tail(client, log_groups))

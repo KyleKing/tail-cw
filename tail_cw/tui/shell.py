@@ -10,7 +10,7 @@ fakes, so the app itself stays importable without boto3 credentials.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -48,15 +48,15 @@ from tail_cw.tui.navigation import (
 )
 from tail_cw.tui.which_key import WhichKeyScreen
 
-ListGroups = Callable[[], list[LogGroupInfo]]
-PreviewGroup = Callable[[str], GroupPreview]
-ListDashboards = Callable[[], list[DashboardSummary]]
-LoadDashboard = Callable[[str], Dashboard]
-FetchMetrics = Callable[[Sequence[dict[str, object]], datetime, datetime], list[MetricSeries]]
-ResolveLogs = Callable[[Sequence[str], datetime, datetime, str | None], list[Path]]
-LiveStream = Callable[[Sequence[str], str | None], Iterator[LogEvent]]
-LogVolume = Callable[[str, datetime, datetime], list[float]]
-CountEvents = Callable[[str, datetime, datetime], int]
+ListGroups = Callable[[], Awaitable[list[LogGroupInfo]]]
+PreviewGroup = Callable[[str], Awaitable[GroupPreview]]
+ListDashboards = Callable[[], Awaitable[list[DashboardSummary]]]
+LoadDashboard = Callable[[str], Awaitable[Dashboard]]
+FetchMetrics = Callable[[Sequence[dict[str, object]], datetime, datetime], Awaitable[list[MetricSeries]]]
+ResolveLogs = Callable[[Sequence[str], datetime, datetime, str | None], Awaitable[list[Path]]]
+LiveStream = Callable[[Sequence[str], str | None], AsyncIterator[LogEvent]]
+LogVolume = Callable[[str, datetime, datetime], Awaitable[list[float]]]
+CountEvents = Callable[[str, datetime, datetime], Awaitable[int]]
 ScreenFactory = Callable[[NavTarget], 'ShellScreen']
 
 MAX_SELECTED_GROUPS = 10

@@ -9,21 +9,21 @@ not import Textual; the TUI runner is injected by ``tail_cw.__main__``.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import re
 import sys
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from beartype.typing import Protocol
 
-from tail_cw.aws.client import LogEvent, fetch_log_events
+from tail_cw.aws.client import ClientProvider, LogEvent, client_pool, fetch_log_events
 from tail_cw.aws.dashboards import (
     DashboardSummary,
     dashboard_to_dict,
@@ -34,11 +34,12 @@ from tail_cw.aws.dashboards import (
 from tail_cw.aws.live_tail import MAX_LIVE_TAIL_LOG_GROUPS, stream_live_tail
 from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups, resolve_group_pattern
 from tail_cw.cache.storage import LogCache, generate_cache_key, read_parquet_to_log_events
+from tail_cw.concurrency import blocking_pool, closing_stream, consume_in_thread, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
 from tail_cw.demo import demo_dashboard
 
-FetchEvents = Callable[..., Iterator[LogEvent]]
-StreamEvents = Callable[..., Iterator[LogEvent]]
+FetchEvents = Callable[..., AsyncIterator[LogEvent]]
+StreamEvents = Callable[..., AsyncIterator[LogEvent]]
 ShellView = Literal['groups', 'logs', 'tail', 'dashboards', 'dashboard']
 
 DEFAULT_WINDOW = '1h'
@@ -303,13 +304,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def iter_tail_events(
+async def iter_tail_events(
+    client: Any,
     request: TailRequest,
     *,
     now: datetime,
     fetch_events: FetchEvents | None = None,
     stream_events: StreamEvents | None = None,
-) -> Iterator[LogEvent]:
+) -> AsyncIterator[LogEvent]:
     """Yield backfill events (when requested) followed by the live stream.
 
     The same filter pattern is pushed server-side to both FilterLogEvents
@@ -320,20 +322,16 @@ def iter_tail_events(
     effective_stream = stream_events if stream_events is not None else stream_live_tail
     if request.backfill_start is not None:
         for log_group in request.log_groups:
-            yield from effective_fetch(
+            async for event in effective_fetch(
+                client,
                 log_group,
                 request.backfill_start,
                 now,
                 filter_pattern=request.filter_pattern,
-                profile_name=request.profile,
-                region_name=request.region,
-            )
-    yield from effective_stream(
-        request.log_groups,
-        filter_pattern=request.filter_pattern,
-        profile_name=request.profile,
-        region_name=request.region,
-    )
+            ):
+                yield event
+    async for event in effective_stream(client, request.log_groups, filter_pattern=request.filter_pattern):
+        yield event
 
 
 def open_log_cache(config: TailCWConfig) -> LogCache:
@@ -349,12 +347,14 @@ def open_log_cache(config: TailCWConfig) -> LogCache:
     )
 
 
-def _resolve_into_cache(
+async def _resolve_into_cache(
+    client: Any,
     request: FetchRequest,
     cache: LogCache,
     *,
     use_cache: bool,
     fetch_events: FetchEvents | None,
+    executor: ThreadPoolExecutor | None,
 ) -> Path | None:
     effective_fetch = fetch_events if fetch_events is not None else fetch_log_events
     cache_key = generate_cache_key(
@@ -367,66 +367,88 @@ def _resolve_into_cache(
     )
     if use_cache and (cached_path := cache.get_parquet_path(cache_key)) is not None:
         return cached_path
-    events = iter(
-        effective_fetch(
-            request.log_group,
-            request.start_time,
-            request.end_time,
-            filter_pattern=request.filter_pattern,
-            profile_name=request.profile,
-            region_name=request.region,
-        ),
+    events = effective_fetch(
+        client,
+        request.log_group,
+        request.start_time,
+        request.end_time,
+        filter_pattern=request.filter_pattern,
     )
-    try:
-        first_event = next(events)
-    except StopIteration:
+    first_event = await anext(events, None)
+    if first_event is None:
         return None
-    cache.write(chain([first_event], events), cache_key)
-    return cache.get_parquet_path(cache_key)
+
+    def write(remaining: Iterator[LogEvent]) -> Path | None:
+        cache.write(chain([first_event], remaining), cache_key)
+        return cache.get_parquet_path(cache_key)
+
+    return await consume_in_thread(executor, events, write)
 
 
-def resolve_parquet_path(
+async def resolve_parquet_path(
+    client: Any,
     request: FetchRequest,
     config: TailCWConfig,
     *,
     use_cache: bool = True,
     fetch_events: FetchEvents | None = None,
+    executor: ThreadPoolExecutor | None = None,
 ) -> Path | None:
     """Return the cached Parquet path for a request, fetching from AWS on miss.
 
     Returns None when the request matches no events.
     """
     with open_log_cache(config) as cache:
-        return _resolve_into_cache(request, cache, use_cache=use_cache, fetch_events=fetch_events)
+        return await _resolve_into_cache(
+            client,
+            request,
+            cache,
+            use_cache=use_cache,
+            fetch_events=fetch_events,
+            executor=executor,
+        )
 
 
-def resolve_parquet_paths(
+async def resolve_parquet_paths(
+    client: Any,
     requests: Sequence[FetchRequest],
     config: TailCWConfig,
     *,
     use_cache: bool = True,
     fetch_events: FetchEvents | None = None,
-    max_workers: int = 4,
+    executor: ThreadPoolExecutor | None = None,
 ) -> list[Path]:
-    """Resolve several fetches in parallel, dropping the ones with no events.
+    """Resolve several fetches concurrently, dropping the ones with no events.
 
     One Parquet file per request keeps each log group independently cacheable;
     the caller merges them at read time. Results keep the request order rather
     than completion order so the caller's group list stays meaningful.
 
-    Every worker shares one ``LogCache``. Separate instances over the same
+    Every request shares one ``LogCache``. Separate instances over the same
     directory delete each other's not-yet-referenced Parquet files during orphan
     cleanup, which silently drops groups from the result.
+
+    Fetches all start together; the Parquet writes queue on ``executor``, which is
+    where the real bound sits. A failure cancels the siblings rather than leaving
+    them to finish writing into a cache nobody will read.
     """
     if not requests:
         return []
     with open_log_cache(config) as cache:
-        resolve = partial(_resolve_into_cache, cache=cache, use_cache=use_cache, fetch_events=fetch_events)
-        if len(requests) == 1:
-            path = resolve(requests[0])
-            return [] if path is None else [path]
-        with ThreadPoolExecutor(max_workers=min(max_workers, len(requests))) as pool:
-            return [path for path in pool.map(resolve, requests) if path is not None]
+
+        async def resolve(request: FetchRequest) -> Path | None:
+            return await _resolve_into_cache(
+                client,
+                request,
+                cache,
+                use_cache=use_cache,
+                fetch_events=fetch_events,
+                executor=executor,
+            )
+
+        async with asyncio.TaskGroup() as group:
+            tasks = [group.create_task(resolve(request)) for request in requests]
+    return [path for task in tasks if (path := task.result()) is not None]
 
 
 def request_cache_dir(config: TailCWConfig) -> Path:
@@ -453,10 +475,10 @@ def write_ndjson(events: Iterable[LogEvent], stream: SupportsWriteStr) -> int:
     return count
 
 
-def stream_ndjson(events: Iterable[LogEvent], stream: SupportsWriteFlushStr) -> int:
+async def stream_ndjson(events: AsyncIterator[LogEvent], stream: SupportsWriteFlushStr) -> int:
     """Write log events as NDJSON, flushing after every line for live consumers."""
     count = 0
-    for event in events:
+    async for event in events:
         stream.write(json.dumps(_event_to_record(event), separators=(',', ':')) + '\n')
         stream.flush()
         count += 1
@@ -600,7 +622,14 @@ def _run_shell_command(args: argparse.Namespace, now: datetime, run_shell: RunSh
     return 0
 
 
-def _export_logs(args: argparse.Namespace, now: datetime, *, fetch_events: FetchEvents | None) -> int:
+async def _export_logs(
+    pool: ClientProvider,
+    args: argparse.Namespace,
+    now: datetime,
+    *,
+    fetch_events: FetchEvents | None,
+    executor: ThreadPoolExecutor,
+) -> int:
     try:
         start_time, end_time = _window_from_args(args, now)
     except ValueError as err:
@@ -617,15 +646,23 @@ def _export_logs(args: argparse.Namespace, now: datetime, *, fetch_events: Fetch
         profile=args.profile,
         region=args.region,
     )
-    parquet_path = resolve_parquet_path(request, config, use_cache=not args.no_cache, fetch_events=fetch_events)
+    parquet_path = await resolve_parquet_path(
+        await pool.client('logs'),
+        request,
+        config,
+        use_cache=not args.no_cache,
+        fetch_events=fetch_events,
+        executor=executor,
+    )
     if parquet_path is None:
         sys.stderr.write('No events found for the requested range\n')
         return 0
-    write_ndjson(read_parquet_to_log_events(parquet_path), sys.stdout)
+    await run_blocking(executor, lambda: write_ndjson(read_parquet_to_log_events(parquet_path), sys.stdout))
     return 0
 
 
-def _export_tail(
+async def _export_tail(
+    pool: ClientProvider,
     args: argparse.Namespace,
     now: datetime,
     *,
@@ -652,18 +689,26 @@ def _export_tail(
         profile=args.profile,
         region=args.region,
     )
-    events = iter_tail_events(request, now=now, fetch_events=fetch_events, stream_events=stream_events)
-    try:
-        stream_ndjson(events, sys.stdout)
-    except KeyboardInterrupt:
-        return 0
+    events = iter_tail_events(
+        await pool.client('logs'),
+        request,
+        now=now,
+        fetch_events=fetch_events,
+        stream_events=stream_events,
+    )
+    async with closing_stream(events) as stream:
+        try:
+            await stream_ndjson(stream, sys.stdout)
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            return 0
     return 0
 
 
-def _export_groups(args: argparse.Namespace) -> int:
+async def _export_groups(pool: ClientProvider, args: argparse.Namespace) -> int:
     if _load_config_or_report(args.config_path) is None:
         return 1
-    groups = list(describe_log_groups(profile_name=args.profile, region_name=args.region))
+    logs = await pool.client('logs')
+    groups = [group async for group in describe_log_groups(logs)]
     if args.pattern is not None:
         groups = resolve_group_pattern(args.pattern, groups)
     for group in groups:
@@ -671,15 +716,15 @@ def _export_groups(args: argparse.Namespace) -> int:
     return 0
 
 
-def _export_dashboards(args: argparse.Namespace) -> int:
+async def _export_dashboards(pool: ClientProvider, args: argparse.Namespace) -> int:
     if _load_config_or_report(args.config_path) is None:
         return 1
-    for summary in list_dashboards(profile_name=args.profile, region_name=args.region):
+    for summary in await list_dashboards(await pool.client('cloudwatch')):
         _write_json_line(_dashboard_summary_to_record(summary))
     return 0
 
 
-def _export_dashboard(args: argparse.Namespace) -> int:
+async def _export_dashboard(pool: ClientProvider, args: argparse.Namespace) -> int:
     if not args.demo and args.name is None and args.dashboard_file is None:
         sys.stderr.write('Provide a dashboard name, --file, or --demo\n')
         return 2
@@ -691,7 +736,7 @@ def _export_dashboard(args: argparse.Namespace) -> int:
         elif args.dashboard_file is not None:
             dashboard = load_dashboard_file(args.dashboard_file)
         else:
-            dashboard = get_dashboard(str(args.name), profile_name=args.profile, region_name=args.region)
+            dashboard = await get_dashboard(await pool.client('cloudwatch'), str(args.name))
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 1
@@ -699,7 +744,7 @@ def _export_dashboard(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_export_command(
+async def _run_export_command(
     args: argparse.Namespace,
     now: datetime,
     parser: argparse.ArgumentParser,
@@ -707,20 +752,28 @@ def _run_export_command(
     fetch_events: FetchEvents | None,
     stream_events: StreamEvents | None,
 ) -> int:
-    match args.export_command:
-        case 'logs':
-            return _export_logs(args, now, fetch_events=fetch_events)
-        case 'tail':
-            return _export_tail(args, now, fetch_events=fetch_events, stream_events=stream_events)
-        case 'groups':
-            return _export_groups(args)
-        case 'dashboards':
-            return _export_dashboards(args)
-        case 'dashboard':
-            return _export_dashboard(args)
-        case _:
-            parser.print_help(sys.stderr)
-            return 2
+    if args.export_command not in {'logs', 'tail', 'groups', 'dashboards', 'dashboard'}:
+        parser.print_help(sys.stderr)
+        return 2
+    with blocking_pool() as executor:
+        async with client_pool(profile_name=args.profile, region_name=args.region) as pool:
+            match args.export_command:
+                case 'logs':
+                    return await _export_logs(pool, args, now, fetch_events=fetch_events, executor=executor)
+                case 'tail':
+                    return await _export_tail(
+                        pool,
+                        args,
+                        now,
+                        fetch_events=fetch_events,
+                        stream_events=stream_events,
+                    )
+                case 'groups':
+                    return await _export_groups(pool, args)
+                case 'dashboards':
+                    return await _export_dashboards(pool, args)
+                case _:
+                    return await _export_dashboard(pool, args)
 
 
 def run_cli(
@@ -743,7 +796,9 @@ def run_cli(
     interactive = sys.stdout.isatty() if is_tty is None else is_tty
     match args.command:
         case 'export':
-            return _run_export_command(args, now, parser, fetch_events=fetch_events, stream_events=stream_events)
+            return asyncio.run(
+                _run_export_command(args, now, parser, fetch_events=fetch_events, stream_events=stream_events),
+            )
         case 'logs' | 'tail' | 'dash':
             return _run_shell_command(args, now, run_shell)
         case _ if interactive:

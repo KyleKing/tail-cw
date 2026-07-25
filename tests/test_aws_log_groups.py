@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups, resolve_group_pattern
+
+
+async def _collect(groups: AsyncIterator[LogGroupInfo]) -> list[LogGroupInfo]:
+    return [group async for group in groups]
+
 
 ACCOUNT_ARN_PREFIX = 'arn:aws:logs:us-east-1:123456789012:log-group:'
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -40,9 +45,10 @@ class _FakePaginator:
         self._pages = pages
         self._calls = calls
 
-    def paginate(self, **kwargs: Any) -> Iterator[dict[str, Any]]:
+    async def paginate(self, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:
         self._calls.append(kwargs)
-        yield from self._pages
+        for page in self._pages:
+            yield page
 
 
 class _FakeLogsClient:
@@ -67,7 +73,7 @@ def _api_group(name: str, *, include_optional: bool = True) -> dict[str, Any]:
     return group
 
 
-def test_describe_log_groups_paginates_across_pages():
+async def test_describe_log_groups_paginates_across_pages():
     client = _FakeLogsClient(
         [
             {'logGroups': [_api_group('/aws/lambda/api'), _api_group('/aws/lambda/worker')]},
@@ -75,56 +81,56 @@ def test_describe_log_groups_paginates_across_pages():
         ],
     )
 
-    groups = list(describe_log_groups(client=client))
+    groups = await _collect(describe_log_groups(client))
 
     assert _names(groups) == ['/aws/lambda/api', '/aws/lambda/worker', '/ecs/api']
 
 
-def test_describe_log_groups_strips_trailing_wildcard_from_arn():
+async def test_describe_log_groups_strips_trailing_wildcard_from_arn():
     client = _FakeLogsClient([{'logGroups': [_api_group('/aws/lambda/api')]}])
 
-    groups = list(describe_log_groups(client=client))
+    groups = await _collect(describe_log_groups(client))
 
     assert groups[0].arn == f'{ACCOUNT_ARN_PREFIX}/aws/lambda/api'
 
 
-def test_describe_log_groups_prefers_unsuffixed_log_group_arn():
+async def test_describe_log_groups_prefers_unsuffixed_log_group_arn():
     raw = _api_group('/aws/lambda/api')
     raw['logGroupArn'] = f'{ACCOUNT_ARN_PREFIX}/aws/lambda/api'
     client = _FakeLogsClient([{'logGroups': [raw]}])
 
-    groups = list(describe_log_groups(client=client))
+    groups = await _collect(describe_log_groups(client))
 
     assert groups[0].arn == f'{ACCOUNT_ARN_PREFIX}/aws/lambda/api'
 
 
-def test_describe_log_groups_converts_creation_time_from_epoch_ms():
+async def test_describe_log_groups_converts_creation_time_from_epoch_ms():
     client = _FakeLogsClient([{'logGroups': [_api_group('/aws/lambda/api')]}])
 
-    groups = list(describe_log_groups(client=client))
+    groups = await _collect(describe_log_groups(client))
 
     assert groups[0].created == CREATED
     assert groups[0].created is not None
     assert groups[0].created.tzinfo == UTC
 
 
-def test_describe_log_groups_tolerates_absent_optional_fields():
+async def test_describe_log_groups_tolerates_absent_optional_fields():
     raw = _api_group('/aws/lambda/api', include_optional=False)
     del raw['creationTime']
     client = _FakeLogsClient([{'logGroups': [raw]}])
 
-    groups = list(describe_log_groups(client=client))
+    groups = await _collect(describe_log_groups(client))
 
     assert groups[0].stored_bytes is None
     assert groups[0].retention_days is None
     assert groups[0].created is None
 
 
-def test_describe_log_groups_forwards_prefix_only_when_given():
+async def test_describe_log_groups_forwards_prefix_only_when_given():
     client = _FakeLogsClient([{'logGroups': []}])
 
-    list(describe_log_groups(client=client))
-    list(describe_log_groups(prefix='/aws/lambda/', client=client))
+    await _collect(describe_log_groups(client))
+    await _collect(describe_log_groups(client, prefix='/aws/lambda/'))
 
     assert client.paginate_calls == [{}, {'logGroupNamePrefix': '/aws/lambda/'}]
 

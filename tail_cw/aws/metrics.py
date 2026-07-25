@@ -18,8 +18,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from tail_cw.aws.client import build_client
-
 DEFAULT_STAT = 'Average'
 DITTO = '.'
 DITTO_ALL = '...'
@@ -170,21 +168,23 @@ def build_metric_data_queries(
     return queries
 
 
-def fetch_metric_data(
+async def fetch_metric_data(
+    client: Any,
     queries: Sequence[dict[str, Any]],
     start_time: datetime,
     end_time: datetime,
-    *,
-    profile_name: str | None = None,
-    region_name: str | None = None,
-    client: Any | None = None,
 ) -> list[MetricSeries]:
     """Fetch metric series for the given queries via GetMetricData.
 
     Only series whose query has ``ReturnData`` true are returned (source metrics
     feeding an expression are excluded). Paginates across ``NextToken`` and
-    concatenates datapoints per id. A boto3 CloudWatch client may be injected
-    for testing; otherwise one is built from the profile and region.
+    concatenates datapoints per id.
+
+    Args:
+        client: An open CloudWatch client, from :meth:`ClientPool.client`.
+        queries: ``MetricDataQueries`` from :func:`build_metric_data_queries`.
+        start_time: Start of the window.
+        end_time: End of the window.
 
     Raises:
         ValueError: If queries is empty.
@@ -193,9 +193,6 @@ def fetch_metric_data(
         msg = 'At least one metric query is required'
         raise ValueError(msg)
 
-    cw = (
-        client if client is not None else build_client('cloudwatch', region_name=region_name, profile_name=profile_name)
-    )
     labels: dict[str, str] = {}
     ordered_ids: list[str] = []
     timestamps: dict[str, list[datetime]] = {}
@@ -211,7 +208,7 @@ def fetch_metric_data(
         }
         if next_token is not None:
             kwargs['NextToken'] = next_token
-        response = cw.get_metric_data(**kwargs)
+        response = await client.get_metric_data(**kwargs)
         for result in response.get('MetricDataResults', []):
             result_id = result['Id']
             if result_id not in timestamps:

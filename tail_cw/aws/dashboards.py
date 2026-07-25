@@ -15,8 +15,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from tail_cw.aws.client import build_client
-
 _DEFAULT_WIDTH = 6
 _DEFAULT_HEIGHT = 6
 _SOURCE_RE = re.compile(r"SOURCE\s+'([^']+)'")
@@ -317,16 +315,11 @@ def load_dashboard_file(path: Path) -> Dashboard:
     return parse_dashboard_body(path.stem, body)
 
 
-def list_dashboards(
-    *,
-    profile_name: str | None = None,
-    region_name: str | None = None,
-) -> list[DashboardSummary]:
+async def list_dashboards(client: Any) -> list[DashboardSummary]:
     """List dashboards in the account, paginating fully."""
-    client = build_client('cloudwatch', region_name=region_name, profile_name=profile_name)
     summaries: list[DashboardSummary] = []
     paginator = client.get_paginator('list_dashboards')
-    for page in paginator.paginate():
+    async for page in paginator.paginate():
         summaries.extend(
             DashboardSummary(
                 name=entry['DashboardName'],
@@ -338,13 +331,7 @@ def list_dashboards(
     return summaries
 
 
-def get_dashboard(
-    name: str,
-    *,
-    profile_name: str | None = None,
-    region_name: str | None = None,
-) -> Dashboard:
+async def get_dashboard(client: Any, name: str) -> Dashboard:
     """Fetch and parse a dashboard by name."""
-    client = build_client('cloudwatch', region_name=region_name, profile_name=profile_name)
-    response = client.get_dashboard(DashboardName=name)
+    response = await client.get_dashboard(DashboardName=name)
     return parse_dashboard_body(name, response['DashboardBody'])

@@ -1,9 +1,10 @@
+# ruff: file-ignore[unused-async] - the service fakes conform to awaitable signatures
 """Tests for the log view screen, historical and live."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -22,6 +23,8 @@ from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.shell import ShellServices, TailCWApp
 from tail_cw.tui.trace_viewer import TraceViewerScreen
 from tail_cw.tui.views import build_screen
+
+from .asyncsupport import streams
 
 BASE_TIME = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
 LIVE_BASE_TIME = datetime(2026, 7, 5, 12, 0, 0, tzinfo=UTC)
@@ -75,7 +78,7 @@ def _session(**overrides: Any) -> Session:
 
 
 def _resolving_to(paths: Sequence[Path]) -> ShellServices:
-    def resolve(
+    async def resolve(
         groups: Sequence[str],
         start: datetime,
         end: datetime,
@@ -328,7 +331,7 @@ async def test_missing_parquet_paths_report_no_events():
 async def test_resolve_failure_reports_error(tmp_path: Path):
     del tmp_path
 
-    def failing_resolve(
+    async def failing_resolve(
         groups: Sequence[str],
         start: datetime,
         end: datetime,
@@ -670,7 +673,7 @@ async def test_refresh_extends_window_and_reloads(tmp_path: Path):
     path = _write_parquet(events, tmp_path / 'events.parquet')
     calls: list[tuple[datetime, datetime, str | None]] = []
 
-    def resolve(
+    async def resolve(
         groups: Sequence[str],
         start: datetime,
         end: datetime,
@@ -713,7 +716,7 @@ async def test_shared_filter_change_reresolves(tmp_path: Path):
     path = _write_parquet(_make_test_log_events(2), tmp_path / 'events.parquet')
     calls: list[str | None] = []
 
-    def resolve(
+    async def resolve(
         groups: Sequence[str],
         start: datetime,
         end: datetime,
@@ -738,7 +741,7 @@ async def test_shared_filter_change_reresolves(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_view_commands_toggle_live_and_trace():
-    app = _make_app(services=ShellServices(live_stream=lambda _groups, _pattern: iter(())))
+    app = _make_app(services=ShellServices(live_stream=streams(())))
 
     async with _running(app) as pilot:
         screen = _logs_screen(app)
@@ -789,7 +792,7 @@ async def test_live_worker_streams_events_into_table():
     app = _make_app(
         live=True,
         config=TailCWConfig(tui=TUIConfig(live_buffer_limit=100)),
-        services=ShellServices(live_stream=lambda _groups, _pattern: iter(events)),
+        services=ShellServices(live_stream=streams(events)),
     )
 
     async with _running(app) as pilot:
@@ -814,7 +817,7 @@ async def test_live_batched_flush_and_pause_resume():
 
     async with _running(app) as pilot:
         screen = _logs_screen(app)
-        screen._live_stream_factory = lambda: iter(())
+        screen._live_stream_factory = streams(())
         screen._live_active = True
 
         first_batch = _make_live_events(3)
@@ -850,7 +853,7 @@ async def test_live_buffer_evicts_oldest_and_rebuilds_table():
 
     async with _running(app) as pilot:
         screen = _logs_screen(app)
-        screen._live_stream_factory = lambda: iter(())
+        screen._live_stream_factory = streams(())
         screen._live_active = True
 
         screen._pending_live_events.extend(_make_live_events(120))
@@ -870,7 +873,7 @@ async def test_live_search_filters_buffered_events():
 
     async with _running(app) as pilot:
         screen = _logs_screen(app)
-        screen._live_stream_factory = lambda: iter(())
+        screen._live_stream_factory = streams(())
         screen._live_active = True
 
         screen._pending_live_events.extend(_make_live_events(4))
@@ -892,9 +895,10 @@ async def test_live_search_filters_buffered_events():
 
 @pytest.mark.asyncio
 async def test_live_worker_error_keeps_buffer_browsable():
-    def failing_stream(groups: Sequence[str], pattern: str | None) -> Iterator[LogEvent]:
+    async def failing_stream(groups: Sequence[str], pattern: str | None) -> AsyncIterator[LogEvent]:
         del groups, pattern
-        yield from _make_live_events(2)
+        for event in _make_live_events(2):
+            yield event
         msg = 'session exhausted'
         raise RuntimeError(msg)
 
@@ -928,7 +932,7 @@ async def test_live_toggle_round_trip_preserves_filter(tmp_path: Path):
     resolve_calls: list[tuple[tuple[str, ...], str | None]] = []
     live_calls: list[tuple[tuple[str, ...], str | None]] = []
 
-    def resolve(
+    async def resolve(
         groups: Sequence[str],
         start: datetime,
         end: datetime,
@@ -938,9 +942,10 @@ async def test_live_toggle_round_trip_preserves_filter(tmp_path: Path):
         resolve_calls.append((tuple(groups), filter_pattern))
         return [path]
 
-    def live_stream(groups: Sequence[str], filter_pattern: str | None) -> Iterator[LogEvent]:
+    async def live_stream(groups: Sequence[str], filter_pattern: str | None) -> AsyncIterator[LogEvent]:
         live_calls.append((tuple(groups), filter_pattern))
-        return iter(_make_live_events(2))
+        for event in _make_live_events(2):
+            yield event
 
     session = _session(filter_pattern='ERROR', selected_groups=['/aws/test/a', '/aws/test/b'])
     app = _make_app(
@@ -988,7 +993,7 @@ async def test_live_toggle_without_service_notifies():
 
 @pytest.mark.asyncio
 async def test_refresh_while_live_is_a_no_op():
-    app = _make_app(live=True, services=ShellServices(live_stream=lambda _groups, _pattern: iter(())))
+    app = _make_app(live=True, services=ShellServices(live_stream=streams(())))
 
     async with _running(app) as pilot:
         screen = _logs_screen(app)
@@ -1002,10 +1007,11 @@ async def test_refresh_while_live_is_a_no_op():
 async def test_live_refresh_view_restarts_stream():
     live_calls: list[str | None] = []
 
-    def live_stream(groups: Sequence[str], filter_pattern: str | None) -> Iterator[LogEvent]:
+    async def live_stream(groups: Sequence[str], filter_pattern: str | None) -> AsyncIterator[LogEvent]:
         del groups
         live_calls.append(filter_pattern)
-        return iter(())
+        for event in _make_live_events(0):
+            yield event
 
     app = _make_app(live=True, services=ShellServices(live_stream=live_stream))
 

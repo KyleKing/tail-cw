@@ -149,7 +149,17 @@ Cost note: `GetMetricData` and `GetDashboard` bill at $0.01 per 1,000 requests, 
 
 Goal: every CloudWatch call is a coroutine, the Textual thread workers become async workers, and a cancelled request stops sending bytes instead of running to completion in a thread we no longer read.
 
-Three problems in the shipped code motivate this, all visible once a dashboard has a few dozen widgets:
+**Delivered 2026-07-25.** All ten thread workers are async workers and the twenty-two `call_from_thread` hops are gone. `boto3` is dropped; `aiobotocore` and `botocore` are declared directly. Three deviations from the plan below, all deliberate.
+
+The sync prep steps (deliverables 1 and 2) were skipped, because full async supersedes both: the session-scoped client became the async client's lifetime owner, and async fan-out removed the executor cap outright.
+
+Blocking cache and query work moved to a dedicated bounded pool in `tail_cw/concurrency.py` rather than bare `asyncio.to_thread`. DuckDB and Polars both release the GIL, so a thread is a real offload (measured: four threads of DuckDB queries scale 3.09x where pure-Python CPU work scales 1.07x). Both also parallelize internally, so the pool stays at four workers: eight concurrent DuckDB queries through `to_thread` stalled the loop for 90ms against 1-2ms through a small pool. `polars.LazyFrame.collect_async()` is documented for this and does not work ([pola-rs/polars#18718](https://github.com/pola-rs/polars/issues/18718) is open since Sept 2024), so it is not used.
+
+Streaming an async fetch into the blocking Parquet writer needed a bridge, and cancelling it needed care in both directions. Cancelling an async task does not interrupt the thread it started, so a bridged consumer would hold its pool slot forever. `consume_in_thread` cancels the in-flight pull to wake a thread blocked on the network, and raises `BridgeCancelledError` inside the thread so `LogCache.write` aborts rather than committing a truncated Parquet file as a complete cache entry. That exception exists because `concurrent.futures.CancelledError` derives from `Exception`, not `BaseException`, so any `except Exception` in between would quietly absorb a cancellation.
+
+Two bugs surfaced during the work, both now covered by tests. A shared module-level `botocore.Config` is mutated by client creation (`max_attempts` is rewritten to `total_max_attempts`), so the retry config is built fresh per client. And `_live_services` takes a `ClientProvider` Protocol rather than the concrete pool, so tests wire a fake without credentials.
+
+Three problems in the shipped code motivated this, all visible once a dashboard has a few dozen widgets:
 
 - Textual thread workers run on asyncio's default executor (`run_in_executor(None, ...)`, `textual/worker.py:326`), which caps at `min(32, cpu_count + 4)`. On a 12-core machine that is 16 slots shared by every metric panel, log-volume sparkline, Parquet load, and the live tail worker, which holds one slot for the life of a three-hour session. The verified `irm-prod-main` dashboard has 28 metric widgets, so a refresh fetches in two waves
 - `exclusive=True` cancels the worker, not the HTTP request. A debounced dashboard reload or a time-range change abandons the thread mid-`GetMetricData`, so the old request still completes, still bills, and still burns a slot. Async workers cancel the coroutine and close the connection
@@ -160,9 +170,9 @@ Feasibility was checked before scheduling, and the two things that could have bl
 - `StartLiveTail` needs an async event stream. `aiobotocore` provides `AioEventStream` with `__aiter__`/`__anext__`, and its `__iter__` raises `NotImplementedError('Use async-for instead')`, so `live_tail.py` becomes `async for chunk in response['responseStream']`
 - SSO with two profiles needs the async credential chain. `aiobotocore` ships `AioSSOProvider` over `AioSSOTokenProvider` and honours `profile_name`, so `sso-session` config resolves the same way
 
-Take `aiobotocore` directly, not `aioboto3`. The project only ever creates clients, so the `boto3`-shaped resource and file-transfer layer that `aioboto3` wraps is unused, and skipping it drops `aioboto3` plus `aiofiles` from the tree. That still adds `aiohttp`, `aioitertools`, `multidict`, and `wrapt`, which is the dependency cost to accept under the AGENTS.md "fewest dependencies" rule.
+Take `aiobotocore` directly, not `aioboto3`. The project only ever creates clients, so the `boto3`-shaped resource and file-transfer layer that `aioboto3` wraps is unused, and skipping it drops `aioboto3` plus `aiofiles` from the tree. `aiobotocore` 3.x removed its `boto3` extra anyway. Net dependency change: `boto3` and `s3transfer` out, `aiobotocore` and `aiohttp` (plus `aioitertools`, `multidict`, `yarl`, `frozenlist`, `aiosignal`, `propcache`, `aiohappyeyeballs`) in.
 
-The standing cost is the version pin. `aiobotocore` 2.25.1 requires `botocore>=1.40.46,<1.40.62`, a sixteen-patch window, and the lock currently sits at 1.40.61. Every new AWS API or region update waits on an `aiobotocore` release, so `boto3>=1.35.0` in the `aws` dependency group gets replaced by a pin that Renovate cannot bump alone.
+The standing cost is the version pin. `aiobotocore` 3.8.0 requires `botocore>=1.43.3,<1.43.47`, a forty-four-patch window, and the lock sits at the 1.43.46 ceiling (down from 1.43.56). Every new AWS API or region update waits on an `aiobotocore` release, so this is a pin Renovate cannot bump alone.
 
 Deliverables, in order:
 

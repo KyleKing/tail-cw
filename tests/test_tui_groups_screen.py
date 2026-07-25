@@ -1,3 +1,4 @@
+# ruff: file-ignore[unused-async] - the service fakes conform to awaitable signatures
 """Tests for the group browser: listing, filtering, multi-select, and previews."""
 
 from __future__ import annotations
@@ -32,6 +33,8 @@ from tail_cw.tui.picker import (
     selection_status,
 )
 from tail_cw.tui.shell import MAX_SELECTED_GROUPS, ShellScreen, ShellServices, TailCWApp
+
+from .asyncsupport import calls, returns
 
 _NOW = datetime(2026, 7, 24, 12, 0, tzinfo=UTC)
 _TICK = 0.01
@@ -153,7 +156,7 @@ def test_render_preview_handles_an_empty_group() -> None:
 async def test_list_populates_and_publishes_names_for_completion() -> None:
     calls: list[int] = []
 
-    def list_groups() -> list[LogGroupInfo]:
+    async def list_groups() -> list[LogGroupInfo]:
         calls.append(1)
         return list(_GROUPS)
 
@@ -168,7 +171,7 @@ async def test_list_populates_and_publishes_names_for_completion() -> None:
 
 
 async def test_filter_runs_the_resolution_ladder() -> None:
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -197,7 +200,7 @@ async def test_filter_runs_the_resolution_ladder() -> None:
 
 
 async def test_filter_submit_keeps_and_escape_clears() -> None:
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -219,7 +222,7 @@ async def test_filter_submit_keeps_and_escape_clears() -> None:
 
 
 async def test_space_toggles_selection_and_marks_the_row() -> None:
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -237,7 +240,7 @@ async def test_space_toggles_selection_and_marks_the_row() -> None:
 
 
 async def test_selection_survives_a_filter_and_clears_on_c() -> None:
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -256,7 +259,7 @@ async def test_selection_survives_a_filter_and_clears_on_c() -> None:
 
 async def test_selection_stops_at_the_live_tail_cap() -> None:
     many = [_group(f'/aws/lambda/fn-{index:02d}') for index in range(12)]
-    app = _app(ShellServices(list_groups=lambda: list(many)))
+    app = _app(ShellServices(list_groups=calls(lambda: list(many))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -271,7 +274,7 @@ async def test_selection_stops_at_the_live_tail_cap() -> None:
 
 
 async def test_toggle_is_a_no_op_on_an_empty_list() -> None:
-    app = _app(ShellServices(list_groups=list))
+    app = _app(ShellServices(list_groups=returns([])))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -281,7 +284,7 @@ async def test_toggle_is_a_no_op_on_an_empty_list() -> None:
 
 
 async def test_enter_opens_logs_for_the_highlighted_group() -> None:
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         await pilot.press('enter')
@@ -293,7 +296,7 @@ async def test_enter_opens_logs_for_the_highlighted_group() -> None:
 
 
 async def test_t_streams_the_selection_live() -> None:
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -313,7 +316,7 @@ async def test_t_streams_the_selection_live() -> None:
 
 
 async def test_open_without_a_row_warns_instead_of_navigating() -> None:
-    app = _app(ShellServices(list_groups=list))
+    app = _app(ShellServices(list_groups=returns([])))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         _screen(app).action_open_logs()
@@ -324,11 +327,11 @@ async def test_open_without_a_row_warns_instead_of_navigating() -> None:
 async def test_preview_renders_for_the_highlighted_group() -> None:
     requested: list[str] = []
 
-    def preview_group(name: str) -> GroupPreview:
+    async def preview_group(name: str) -> GroupPreview:
         requested.append(name)
         return GroupPreview(log_group=name, event_count=412, window_seconds=900, patterns=_PREVIEW.patterns)
 
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS), preview_group=preview_group))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS)), preview_group=preview_group))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
 
@@ -341,11 +344,11 @@ async def test_preview_renders_for_the_highlighted_group() -> None:
 async def test_preview_debounces_a_burst_into_one_call() -> None:
     requested: list[str] = []
 
-    def preview_group(name: str) -> GroupPreview:
+    async def preview_group(name: str) -> GroupPreview:
         requested.append(name)
         return GroupPreview(log_group=name, event_count=1, window_seconds=900, patterns=[])
 
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS), preview_group=preview_group), debounce=30.0)
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS)), preview_group=preview_group), debounce=30.0)
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -366,11 +369,11 @@ async def test_preview_debounces_a_burst_into_one_call() -> None:
 async def test_a_cached_preview_is_not_refetched() -> None:
     requested: list[str] = []
 
-    def preview_group(name: str) -> GroupPreview:
+    async def preview_group(name: str) -> GroupPreview:
         requested.append(name)
         return GroupPreview(log_group=name, event_count=7, window_seconds=900, patterns=[])
 
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS), preview_group=preview_group))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS)), preview_group=preview_group))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
 
@@ -384,11 +387,11 @@ async def test_a_cached_preview_is_not_refetched() -> None:
 async def test_refresh_view_resamples_after_the_window_moves() -> None:
     requested: list[str] = []
 
-    def preview_group(name: str) -> GroupPreview:
+    async def preview_group(name: str) -> GroupPreview:
         requested.append(name)
         return GroupPreview(log_group=name, event_count=7, window_seconds=900, patterns=[])
 
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS), preview_group=preview_group))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS)), preview_group=preview_group))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         assert requested == ['/aws/lambda/api']
@@ -399,18 +402,18 @@ async def test_refresh_view_resamples_after_the_window_moves() -> None:
 
 
 async def test_a_failing_preview_leaves_the_view_usable() -> None:
-    def preview_group(name: str) -> GroupPreview:
+    async def preview_group(name: str) -> GroupPreview:
         msg = f'boom {name}'
         raise RuntimeError(msg)
 
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS), preview_group=preview_group))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS)), preview_group=preview_group))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         assert _screen(app).visible_groups == [info.name for info in _GROUPS]
 
 
 async def test_a_failing_list_leaves_the_view_usable() -> None:
-    def list_groups() -> list[LogGroupInfo]:
+    async def list_groups() -> list[LogGroupInfo]:
         raise RuntimeError('no credentials')
 
     app = _app(ShellServices(list_groups=list_groups))
@@ -425,7 +428,7 @@ async def test_missing_services_explain_themselves() -> None:
         await _settle(app, pilot)
         assert _screen(app).query_one(Picker).detail_text() == NO_GROUP_SERVICE
 
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         assert _screen(app).query_one(Picker).detail_text() == NO_PREVIEW_SERVICE
@@ -434,7 +437,7 @@ async def test_missing_services_explain_themselves() -> None:
 async def test_view_commands_reload_select_and_clear() -> None:
     calls: list[int] = []
 
-    def list_groups() -> list[LogGroupInfo]:
+    async def list_groups() -> list[LogGroupInfo]:
         calls.append(1)
         return list(_GROUPS)
 
@@ -462,7 +465,7 @@ async def test_view_commands_reload_select_and_clear() -> None:
 
 async def test_select_refuses_past_the_cap() -> None:
     many = [_group(f'/aws/lambda/fn-{index:02d}') for index in range(12)]
-    app = _app(ShellServices(list_groups=lambda: list(many)))
+    app = _app(ShellServices(list_groups=calls(lambda: list(many))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -475,7 +478,7 @@ async def test_select_refuses_past_the_cap() -> None:
 async def test_a_session_selection_is_adopted_on_mount() -> None:
     session = _session()
     session.selected_groups = ['/ecs/web']
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)), session)
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))), session)
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -484,7 +487,7 @@ async def test_a_session_selection_is_adopted_on_mount() -> None:
 
 
 async def test_the_table_holds_focus_after_the_command_line_closes() -> None:
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)))
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))))
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -499,7 +502,7 @@ async def test_the_table_holds_focus_after_the_command_line_closes() -> None:
 async def test_recent_groups_sort_first_and_are_marked(tmp_path: Path) -> None:
     path = tmp_path / 'recents.json'
     save_recents(Recents(by_profile={'': ('/ecs/web', '/aws/lambda/api-worker')}), path)
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)), recents_path=path)
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))), recents_path=path)
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -510,7 +513,7 @@ async def test_recent_groups_sort_first_and_are_marked(tmp_path: Path) -> None:
 async def test_selecting_a_recent_group_shows_the_selection_marker(tmp_path: Path) -> None:
     path = tmp_path / 'recents.json'
     save_recents(Recents(by_profile={'': ('/ecs/web',)}), path)
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)), recents_path=path)
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))), recents_path=path)
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -527,7 +530,7 @@ async def test_a_recent_group_from_another_profile_is_ignored(tmp_path: Path) ->
     save_recents(Recents(by_profile={'dev': ('/ecs/web',)}), path)
     session = _session()
     session.profile = 'prod'
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)), session, recents_path=path)
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))), session, recents_path=path)
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)
@@ -537,7 +540,7 @@ async def test_a_recent_group_from_another_profile_is_ignored(tmp_path: Path) ->
 
 async def test_opening_a_group_records_it_for_the_next_visit(tmp_path: Path) -> None:
     path = tmp_path / 'recents.json'
-    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)), recents_path=path)
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS))), recents_path=path)
     async with app.run_test(size=(140, 40)) as pilot:
         await _settle(app, pilot)
         screen = _screen(app)

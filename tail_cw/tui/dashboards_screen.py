@@ -211,23 +211,22 @@ class DashboardsScreen(ShellScreen):
             self._picker.set_status(NO_LIST_SERVICE)
             return
         self.run_worker(
-            self._fetch_dashboards,
+            self._fetch_dashboards(),
             name='list_dashboards',
             group='list_dashboards',
             exclusive=True,
-            thread=True,
         )
 
-    def _fetch_dashboards(self) -> None:
+    async def _fetch_dashboards(self) -> None:
         list_dashboards = self.shell.services.list_dashboards
         if list_dashboards is None:  # pragma: no cover - guarded by the caller
             return
         try:
-            summaries = list_dashboards()
+            summaries = await list_dashboards()
         except Exception as err:
-            self.app.call_from_thread(self.notify, f'Listing dashboards failed: {err}', severity='error')
+            self.notify(f'Listing dashboards failed: {err}', severity='error')
             return
-        self.app.call_from_thread(self._apply_dashboards, summaries)
+        self._apply_dashboards(summaries)
 
     def _apply_dashboards(self, summaries: list[DashboardSummary]) -> None:
         self._summaries = summaries
@@ -263,23 +262,22 @@ class DashboardsScreen(ShellScreen):
 
     def _start_detail(self, name: str) -> None:
         self.run_worker(
-            lambda: self._fetch_detail(name),
+            self._fetch_detail(name),
             name='load_dashboard',
             group='load_dashboard',
             exclusive=True,
-            thread=True,
         )
 
-    def _fetch_detail(self, name: str) -> None:
+    async def _fetch_detail(self, name: str) -> None:
         load_dashboard = self.shell.services.load_dashboard
         if load_dashboard is None:  # pragma: no cover - guarded by the caller
             return
         try:
-            dashboard = load_dashboard(name)
+            dashboard = await load_dashboard(name)
         except Exception as err:
-            self.app.call_from_thread(self.notify, f'Loading {name} failed: {err}', severity='warning')
+            self.notify(f'Loading {name} failed: {err}', severity='warning')
             return
-        self.app.call_from_thread(self._apply_detail, dashboard)
+        self._apply_detail(dashboard)
 
     def _apply_detail(self, dashboard: Dashboard) -> None:
         self._bodies[dashboard.name] = dashboard
