@@ -225,6 +225,11 @@ def demo_resolve_logs(_log_group: str, start: datetime, end: datetime) -> Path |
     return output
 
 
+def demo_count_events(_log_group: str, start: datetime, end: datetime) -> int:
+    """Count the synthetic ERROR-level events in the window, for the dive-candidate preview."""
+    return sum(1 for event in _demo_log_events(start, end) if '"level":"ERROR"' in event.message)
+
+
 def demo_log_volume(_source: str, start: datetime, end: datetime) -> list[float]:
     """Synthetic error-log volume per bucket, peaking during the incident."""
     timestamps = _timestamps(start, end)

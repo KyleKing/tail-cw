@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from tail_cw.aws.dashboards import MetricWidget
 from tail_cw.aws.metrics import build_metric_data_queries
-from tail_cw.demo import demo_dashboard, demo_fetch_metrics, demo_resolve_logs, demo_window
+from tail_cw.demo import demo_count_events, demo_dashboard, demo_fetch_metrics, demo_resolve_logs, demo_window
 
 _START = datetime(2026, 7, 24, 6, 0, tzinfo=UTC)
 _END = datetime(2026, 7, 24, 12, 0, tzinfo=UTC)
@@ -66,3 +66,7 @@ def test_demo_resolve_logs_writes_readable_parquet() -> None:
 def test_demo_window_spans_six_hours() -> None:
     start, end = demo_window(now=_END)
     assert end - start == timedelta(hours=6)
+
+
+def test_demo_count_events_reflects_the_incident_spike() -> None:
+    assert demo_count_events('demo/web-api', _START, _END) > 1
