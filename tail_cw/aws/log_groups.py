@@ -83,8 +83,11 @@ def resolve_group_pattern(pattern: str, groups: Sequence[LogGroupInfo]) -> list[
 
     A pattern holding any of ``*?[`` is a glob by intent and is matched with
     case-sensitive ``fnmatch`` alone. Otherwise the ladder runs exact name (which
-    wins by itself), then case-sensitive prefix, and stops at the first rung with
-    a hit. An empty or whitespace-only pattern returns every group.
+    wins by itself), then case-sensitive prefix, then case-sensitive substring,
+    then case-folded substring, and stops at the first rung with a hit. The
+    substring rungs matter because CloudWatch names are slash-heavy, so the part
+    a reader remembers (``handler``) is rarely the part a name starts with. An
+    empty or whitespace-only pattern returns every group.
     """
     stripped = pattern.strip()
     if not stripped:
@@ -94,4 +97,9 @@ def resolve_group_pattern(pattern: str, groups: Sequence[LogGroupInfo]) -> list[
     for group in groups:
         if group.name == stripped:
             return [group]
-    return [group for group in groups if group.name.startswith(stripped)]
+    if prefixed := [group for group in groups if group.name.startswith(stripped)]:
+        return prefixed
+    if contained := [group for group in groups if stripped in group.name]:
+        return contained
+    folded = stripped.casefold()
+    return [group for group in groups if folded in group.name.casefold()]

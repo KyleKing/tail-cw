@@ -143,8 +143,34 @@ def test_prefix_match_when_no_exact_match():
     assert _names(resolve_group_pattern('/aws/lambda/api-', GROUPS)) == ['/aws/lambda/api-handler']
 
 
-def test_prefix_match_is_case_sensitive():
-    assert resolve_group_pattern('/AWS/LAMBDA/', GROUPS) == []
+def test_prefix_match_is_case_sensitive_and_falls_through_to_the_folded_rung():
+    assert _names(resolve_group_pattern('/AWS/LAMBDA/', GROUPS)) == [
+        '/aws/lambda/api',
+        '/aws/lambda/api-handler',
+        '/aws/lambda/worker',
+    ]
+
+
+def test_substring_match_when_no_prefix_match():
+    assert _names(resolve_group_pattern('handler', GROUPS)) == ['/aws/lambda/api-handler']
+
+
+def test_substring_match_preserves_input_order():
+    assert _names(resolve_group_pattern('api', GROUPS)) == [
+        '/aws/lambda/api',
+        '/aws/lambda/api-handler',
+        '/ecs/api',
+    ]
+
+
+def test_prefix_match_wins_over_a_broader_substring_match():
+    groups = [*GROUPS, _group('api-gateway-stage')]
+
+    assert _names(resolve_group_pattern('api', groups)) == ['api-gateway-stage']
+
+
+def test_folded_substring_match_is_the_last_rung():
+    assert _names(resolve_group_pattern('HANDLER', GROUPS)) == ['/aws/lambda/api-handler']
 
 
 def test_prefix_match_preserves_input_order():
