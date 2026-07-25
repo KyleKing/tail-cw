@@ -60,6 +60,8 @@ uv run tail-cw tail @api                          # open a named preset from con
 
 `logs`, `tail`, and `dash` only choose the opening view; every one of them lands in the same app, so anything reachable from one is reachable from the others.
 
+A group pattern resolves down a ladder, stopping at the first rung that matches: anything containing `*`, `?`, or `[` is treated as a glob, and otherwise an exact name wins alone, then a prefix, then a substring, then a case-insensitive substring. So `handler` finds `/aws/lambda/api-handler` without the leading path, which is what you want when the memorable part of a CloudWatch name sits in the middle.
+
 For stdout instead of a terminal app, use `export`:
 
 ```sh
@@ -80,7 +82,7 @@ In a log view: `/` searches, `Enter` opens the record detail, `L` toggles live, 
 
 In a dashboard: `hjkl` move, `Enter` focuses a chart on the stage, `Esc` clears the stage and then goes up, `s` cycles the statistic, `p` the period, `d` dives into the logs.
 
-Commands include `:groups`, `:logs`, `:tail`, `:dash <name>`, `:dashboards`, `:range 6h`, `:filter ERROR`, `:panels errors`, `:focus latency`, `:stat`, `:period`, and `:help`. Set `AWS_PROFILE`, `--profile`, or `--region` to pick an account.
+Commands include `:groups`, `:logs`, `:tail`, `:dash <name>`, `:dashboards`, `:range 6h`, `:filter ERROR`, `:panels errors`, `:focus latency`, `:stat`, `:period`, and `:help`. In a dashboard, `:add <title>` puts a second panel beside the staged one, `:dive` opens the logs behind the focused widget, and `:reset` clears the stage. Set `AWS_PROFILE`, `--profile`, or `--region` to pick an account.
 
 ## Requirements
 

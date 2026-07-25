@@ -106,6 +106,7 @@ References:
 - If you’re unsure between feature breadth and testability, choose testability.
 - When in doubt about performance in Textual, profile and reduce work per frame; batch and reuse renderables.
 - Trace heuristics should inspect structured fields (levels, status, message bodies) before falling back to free-text keyword scans to avoid misclassifying IDs like `trace-error` as failures.
+- A trace spans every selected log group, so trace grouping reads all of `_parquet_paths` rather than the first, and goes through the `load_traces` service onto the blocking pool. Do not add a span-hierarchy feature keyed on `parent_span_id`: our logs do not carry it, and [ADR 0012](docs/docs/adr/0012-export-traces-instead-of-drawing-them.md) sends trace rendering out as OTLP JSON instead of drawing it here.
 - Give Textual shortcuts a usable default focus (table/tree) so bindings like `t`, `e`, and `c` fire even before the user switches focus manually.
 
 ---

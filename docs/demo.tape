@@ -16,7 +16,7 @@ Type `cd ~/Developer/kyleking/tail-cw`  Enter
 Type `clear`  Enter
 Show
 
-Type `uv run tail-cw dashboard --demo`  Sleep 500ms  Enter
+Type `uv run tail-cw dash --demo`  Sleep 500ms  Enter
 Sleep 3.5s
 
 # Navigate the overview grid (hjkl), then focus a chart on the stage
