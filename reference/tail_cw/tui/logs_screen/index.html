@@ -3418,11 +3418,11 @@ a callable on <code>ShellServices</code>; the screen itself reads Parquet and re
 <span class="linenos" data-linenos="241 "></span>            <span class="k">return</span>
 <span class="linenos" data-linenos="242 "></span>
 <span class="linenos" data-linenos="243 "></span>        <span class="n">column_widths</span> <span class="o">=</span> <span class="p">{</span>
-<span class="linenos" data-linenos="244 "></span>            <span class="s1">&#39;timestamp&#39;</span><span class="p">:</span> <span class="mi">25</span><span class="p">,</span>
-<span class="linenos" data-linenos="245 "></span>            <span class="s1">&#39;log_group&#39;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
-<span class="linenos" data-linenos="246 "></span>            <span class="s1">&#39;log_stream&#39;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
+<span class="linenos" data-linenos="244 "></span>            <span class="s1">&#39;timestamp&#39;</span><span class="p">:</span> <span class="mi">23</span><span class="p">,</span>
+<span class="linenos" data-linenos="245 "></span>            <span class="s1">&#39;log_group&#39;</span><span class="p">:</span> <span class="mi">20</span><span class="p">,</span>
+<span class="linenos" data-linenos="246 "></span>            <span class="s1">&#39;log_stream&#39;</span><span class="p">:</span> <span class="mi">16</span><span class="p">,</span>
 <span class="linenos" data-linenos="247 "></span>            <span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="248 "></span>            <span class="s1">&#39;event_id&#39;</span><span class="p">:</span> <span class="mi">20</span><span class="p">,</span>
+<span class="linenos" data-linenos="248 "></span>            <span class="s1">&#39;event_id&#39;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span>
 <span class="linenos" data-linenos="249 "></span>        <span class="p">}</span>
 <span class="linenos" data-linenos="250 "></span>        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">get_column_definitions</span><span class="p">():</span>
 <span class="linenos" data-linenos="251 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="n">column_widths</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
