@@ -168,6 +168,15 @@ known-first-party = ['tail_cw']
   'too-many-positional-arguments', # Too many positional arguments (6/5) - cache key needs all parameters
   'unspecified-encoding', # Text mode without explicit encoding (UTF-8 default is fine)
 ]
+'demo-aws/src/*.py' = [
+  'suspicious-non-cryptographic-random-usage', # The demo seeds `random` to replay a scenario, not to make secrets
+]
+'demo-aws/tests/*.py' = [
+  'assert', # Use of `assert` detected
+  'magic-value-comparison', # Magic value used in comparison (acceptable in tests)
+  'suspicious-non-cryptographic-random-usage', # Seeded `random` is the thing under test
+  'undocumented-public-function', # Missing docstring in public function
+]
 'tests/*.py' = [
   'assert', # Use of `assert` detected
   'import-private-name', # Private name import `_<>` from external module
