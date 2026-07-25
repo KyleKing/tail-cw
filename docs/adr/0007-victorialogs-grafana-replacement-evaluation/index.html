@@ -892,6 +892,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0010-keep-tail-cw-with-a-narrower-scope/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0010: Keep tail-cw, and narrow what it builds
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2372,7 +2400,10 @@
 
 
 <h1 id="adr-0007-victorialogs-and-grafana-as-a-replacement-candidate">ADR 0007: VictoriaLogs and Grafana as a replacement candidate<a class="headerlink" href="#adr-0007-victorialogs-and-grafana-as-a-replacement-candidate" title="Permanent link">⚓︎</a></h1>
-<p>Date: 2026-07-24 Status: Proposed (open question, no code commitment yet)</p>
+<p>Date: 2026-07-24 Status: Superseded by <a href="../0010-keep-tail-cw-with-a-narrower-scope/">ADR 0010</a> on 2026-07-25</p>
+<blockquote>
+<p>Resolved: keep tail-cw and narrow its scope. Two premises below did not hold. The &ldquo;roughly 2000 lines&rdquo; figure was 7,965 on the day this was written, and the Kafka-worker topology has been replaced by Hatchet. The decisive change is that tracing stopped being a reason to switch: X-Ray accepts OTLP natively and Transaction Search puts spans in an ordinary <code>aws/spans</code> log group, while VictoriaTraces remains pre-GA with an unstable on-disk format. See ADR 0010 for the evidence and the consequences.</p>
+</blockquote>
 <h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">⚓︎</a></h2>
 <p>tail-cw is roughly 2000 lines of Python that depend on pyarrow, duckdb, polars, and textual, and the roadmap keeps adding surface: dashboards (M4), then discovery (M2), investigation (M3), and eventually tracing. A parallel exploration (originally on the <code>victorialogs</code> branch, now folded here) asked a fair question: does a mature open-source observability stack already do most of this with far less code to own?</p>
 <p>Two facts sharpen the question:</p>

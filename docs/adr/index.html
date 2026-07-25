@@ -800,6 +800,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="0010-keep-tail-cw-with-a-narrower-scope/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0010: Keep tail-cw, and narrow what it builds
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2260,7 +2288,7 @@
 <tr>
 <td><a href="0007-victorialogs-grafana-replacement-evaluation/">0007</a></td>
 <td>VictoriaLogs and Grafana replacement candidate</td>
-<td>Open question on replacing the custom stack, tracing gap, LogsQL ideas, decision gate</td>
+<td>Superseded by 0010: the replacement question, its criteria, and the original tracing gate</td>
 </tr>
 <tr>
 <td><a href="0008-single-interactive-tui/">0008</a></td>
@@ -2271,6 +2299,11 @@
 <td><a href="0009-no-in-app-profile-switching/">0009</a></td>
 <td>No in-app profile switching</td>
 <td>Why a <code>:profile</code> switch is a teardown rather than a setting (closes the deferral in 0006)</td>
+</tr>
+<tr>
+<td><a href="0010-keep-tail-cw-with-a-narrower-scope/">0010</a></td>
+<td>Keep tail-cw, and narrow what it builds</td>
+<td>Rejects the VictoriaLogs stack, lifts and redirects the tracing gate to <code>aws/spans</code>, delegates query features to Logs Insights (supersedes 0007)</td>
 </tr>
 </tbody>
 </table>
