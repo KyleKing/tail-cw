@@ -22,7 +22,7 @@ Run `tail-cw` with no arguments and you land in the log group browser. Everythin
 
 ## Demo
 
-`tail-cw dash --demo` renders a synthetic service dashboard from seed data (a mid-window incident: a latency and error spike with a traffic dip), so it needs no AWS account. The clip shows the overview grid, focusing a chart on the stage, `:filter` and `:range` on the command line, the which-key reference, and diving into the logs behind the errors panel.
+`tail-cw dash --demo` renders a synthetic service dashboard from seed data (a mid-window incident: a latency and error spike with a traffic dip), so it needs no AWS account. The clip shows the overview grid, focusing a chart on the stage, `:panels` and `:range` on the command line, the which-key reference, and diving into the logs behind the errors panel.
 
 ![tail-cw dashboard demo](docs/images/demo.gif)
 

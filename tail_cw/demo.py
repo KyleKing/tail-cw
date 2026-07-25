@@ -24,7 +24,7 @@ from tail_cw.aws.metrics import MetricSeries
 from tail_cw.cache.storage import write_log_events_to_parquet
 
 _STEP = timedelta(minutes=5)
-_DEMO_LOG_GROUP = 'demo/web-api'
+DEMO_LOG_GROUP = 'demo/web-api'
 
 
 def _demo_body() -> dict[str, Any]:
@@ -123,7 +123,7 @@ def _demo_body() -> dict[str, Any]:
                 'properties': {
                     'title': 'Recent errors',
                     'view': 'table',
-                    'query': f"SOURCE '{_DEMO_LOG_GROUP}' | filter level = 'ERROR' | fields @timestamp, message",
+                    'query': f"SOURCE '{DEMO_LOG_GROUP}' | filter level = 'ERROR' | fields @timestamp, message",
                 },
             },
         ],
@@ -207,7 +207,7 @@ def _demo_log_events(start: datetime, end: datetime) -> list[LogEvent]:
         )
         events.append(
             LogEvent(
-                log_group=_DEMO_LOG_GROUP,
+                log_group=DEMO_LOG_GROUP,
                 log_stream='demo-stream',
                 timestamp=moment,
                 message=message,

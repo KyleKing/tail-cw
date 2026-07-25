@@ -25,7 +25,7 @@ from tail_cw.cache.storage import read_parquet_to_log_events
 from tail_cw.cli import FetchRequest, Session, ShellSeed, resolve_parquet_paths, run_cli
 from tail_cw.concurrency import blocking_pool, run_blocking, take
 from tail_cw.config import TailCWConfig
-from tail_cw.demo import demo_dashboard, demo_fetch_metrics, demo_log_volume, demo_resolve_logs
+from tail_cw.demo import DEMO_LOG_GROUP, demo_dashboard, demo_fetch_metrics, demo_log_volume, demo_resolve_logs
 from tail_cw.preview import GroupPreview, bucket_event_counts, build_group_preview
 from tail_cw.query.trace import TraceGroup, query_traces_from_parquet_files
 from tail_cw.tui.navigation import NavTarget, ViewKind
@@ -86,7 +86,17 @@ def _demo_services() -> ShellServices:
         log_volume=lambda group, start, end: _ready(demo_log_volume(group, start, end)),
         resolve_logs=lambda groups, start, end, pattern: _ready(_demo_resolve_logs(groups, start, end, pattern)),
         count_events=lambda _group, _start, _end: _ready(1),
-        list_groups=lambda: _ready([]),
+        list_groups=lambda: _ready(
+            [
+                LogGroupInfo(
+                    name=DEMO_LOG_GROUP,
+                    arn=f'arn:demo:{DEMO_LOG_GROUP}',
+                    stored_bytes=None,
+                    retention_days=None,
+                    created=None,
+                )
+            ]
+        ),
     )
 
 

@@ -25,6 +25,7 @@ from tail_cw.aws.client import LogEvent
 from tail_cw.aws.dashboards import Dashboard
 from tail_cw.cli import FetchRequest, Session, ShellSeed
 from tail_cw.config import TailCWConfig
+from tail_cw.demo import DEMO_LOG_GROUP
 from tail_cw.tui.navigation import ViewKind
 from tail_cw.tui.shell import ShellServices, TailCWApp
 
@@ -168,6 +169,14 @@ def test_demo_services_are_callable():
         'resolve_logs',
     }
     assert all(callable(getattr(services, name)) for name in populated)
+
+
+async def test_demo_services_list_groups_resolves_the_demo_group():
+    services = _demo_services()
+
+    assert services.list_groups is not None
+    groups = await services.list_groups()
+    assert [info.name for info in groups] == [DEMO_LOG_GROUP]
 
 
 def test_demo_resolve_logs_writes_parquet_files():

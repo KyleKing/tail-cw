@@ -7,8 +7,12 @@ description = "Launch the offline demo dashboard (screenshot this in a Kitty-gra
 run = "uv run tail-cw dash --demo"
 
 [tasks.gif]
-description = "Record the demo interaction to docs/images/demo.gif with VHS (VHS lacks the Kitty graphics protocol, so charts show the Unicode fallback; use WezTerm screenshots for the real charts)"
-run = "vhs docs/demo.tape"
+description = "Record the demo interaction to docs/images/demo.gif with VHS, then compress it under 1 MB (VHS lacks the Kitty graphics protocol, so charts show the Unicode fallback; use WezTerm screenshots for the real charts)"
+run = '''
+vhs docs/demo.tape
+ffmpeg -y -i docs/images/demo.gif -vf "fps=8,scale=1000:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=48[p];[s1][p]paletteuse=dither=none" docs/images/demo.compressed.gif
+mv docs/images/demo.compressed.gif docs/images/demo.gif
+'''
 
 [tools]
 python = ["3.11.11", "3.13.11"]

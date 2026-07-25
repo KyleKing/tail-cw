@@ -25,15 +25,15 @@ Type "j"  Sleep 600ms
 Enter
 Sleep 2s
 
-# Command line: filter the grid to error and latency panels
+# Command line: narrow the grid to error and latency panels
 Type ":"  Sleep 600ms
-Type "filter errors latency"  Sleep 500ms
+Type "panels errors latency"  Sleep 500ms
 Enter
 Sleep 2s
 
-# Reset the filter
+# Reset the panel filter
 Type ":"  Sleep 400ms
-Type "filter all"  Sleep 400ms
+Type "panels all"  Sleep 400ms
 Enter
 Sleep 1s
 
@@ -51,10 +51,14 @@ Type ","  Sleep 2s
 Escape
 Sleep 500ms
 
-# Dive from the errors panel into the logs behind it
-Type "l"  Sleep 300ms
-Type "j"  Sleep 300ms
-Type "d"  Sleep 2.5s
+# Dive from the recent-errors log panel into the logs behind it
+Type ":"  Sleep 400ms
+Type "focus recent"  Sleep 400ms
+Enter
+Sleep 500ms
+Type "d"  Sleep 1.5s
+Enter
+Sleep 1s
 
 # Search within the dived logs, then go back
 Type "/"  Sleep 400ms
