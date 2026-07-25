@@ -18,6 +18,12 @@ from tail_cw.cache.storage import (
     write_log_events_to_parquet,
 )
 
+_SHORT_TTL = 0.05
+"""Fractional TTL so expiry tests finish in milliseconds instead of seconds."""
+
+_PAST_TTL = _SHORT_TTL * 3
+"""Sleep long enough to clear _SHORT_TTL on a loaded CI machine."""
+
 
 def _make_log_event(
     log_group: str = '/aws/lambda/test-function',
@@ -578,15 +584,15 @@ def test_log_cache_ttl_expiration(fix_test_cache: Path):
         end = datetime(2025, 1, 2, tzinfo=UTC)
         cache_key = generate_cache_key('/aws/lambda/fn', start, end)
 
-        # Write with 1 second TTL
+        # Fractional TTL so the test outlasts it without a long sleep
         events = [_make_log_event(event_id='event-1')]
-        cache.write(events, cache_key, ttl_seconds=1)
+        cache.write(events, cache_key, ttl_seconds=_SHORT_TTL)
 
         # Exists immediately
         assert cache.exists(cache_key) is True
 
         # Wait for expiration
-        time.sleep(1.5)
+        time.sleep(_PAST_TTL)
 
         # Trigger expiration
         cleaned = cache.evict_expired()
@@ -932,8 +938,8 @@ def test_log_cache_default_ttl(fix_test_cache: Path):
     """Test LogCache with default TTL."""
     cache_dir = fix_test_cache / 'cache_default_ttl'
 
-    # Create cache with 1 second default TTL
-    with LogCache(cache_dir, default_ttl_seconds=1) as cache:
+    # Create cache with a fractional default TTL
+    with LogCache(cache_dir, default_ttl_seconds=_SHORT_TTL) as cache:
         start = datetime(2025, 1, 1, tzinfo=UTC)
         end = datetime(2025, 1, 2, tzinfo=UTC)
         cache_key = generate_cache_key('/aws/lambda/fn', start, end)
@@ -946,7 +952,7 @@ def test_log_cache_default_ttl(fix_test_cache: Path):
         assert cache.exists(cache_key) is True
 
         # Wait for expiration
-        time.sleep(1.5)
+        time.sleep(_PAST_TTL)
 
         # Trigger expiration
         cache.evict_expired()
@@ -959,8 +965,8 @@ def test_log_cache_override_default_ttl(fix_test_cache: Path):
     """Test overriding default TTL with explicit value."""
     cache_dir = fix_test_cache / 'cache_override_ttl'
 
-    # Create cache with 1 second default TTL
-    with LogCache(cache_dir, default_ttl_seconds=1) as cache:
+    # Create cache with a fractional default TTL
+    with LogCache(cache_dir, default_ttl_seconds=_SHORT_TTL) as cache:
         start = datetime(2025, 1, 1, tzinfo=UTC)
         end = datetime(2025, 1, 2, tzinfo=UTC)
         cache_key = generate_cache_key('/aws/lambda/fn', start, end)
@@ -970,7 +976,7 @@ def test_log_cache_override_default_ttl(fix_test_cache: Path):
         cache.write(events, cache_key, ttl_seconds=10)
 
         # Wait past default TTL
-        time.sleep(1.5)
+        time.sleep(_PAST_TTL)
 
         # Trigger expiration
         cache.evict_expired()

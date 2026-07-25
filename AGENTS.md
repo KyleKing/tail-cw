@@ -10,6 +10,7 @@ A concise, agent-focused guide for working on this Python project with uv toolin
 - Package manager/config in repo: uv (via `pyproject.toml`)
 - Linters/types: Ruff, Mypy, Pyright
 - Docs: MkDocs in `docs/`
+- AWS I/O is async over aiobotocore, and `botocore` is pinned to the window aiobotocore accepts. A `botocore` upgrade that Renovate cannot land alone is expected; check aiobotocore's supported range first ([ADR 0011](docs/docs/adr/0011-async-aws-io-and-blocking-work.md))
 
 ## Core commands
 
@@ -18,8 +19,10 @@ WARN: the `./run` commands (and nox) are currently broken. Use the direct comman
 - Format: `uv run ruff format`
 - Lint: `uv run ruff check --fix --unsafe-fixes`
 - Types: `uv run mypy` and `uv run pyright`
-- Tests: `uv run pytest -q --ff`
+- Tests: `uv run pytest -q -n auto` (about 7s; roughly 50s without `-n auto`, since Textual Pilot tests are the bulk). Drop `-n auto` when debugging one test or using `--pdb`, which xdist cannot support
 - Pre-Commit: `prek run --all-files`
+
+`-n auto` is not in `addopts` on purpose, so the default invocation stays debuggable. Every fixture is per-test (`tmp_path`), so parallel runs are safe; do not introduce a fixture that writes to a shared path.
 
 Agents should run tests and lint/type checks before finishing a task and fix any failures.
 
@@ -42,7 +45,10 @@ Agents should run tests and lint/type checks before finishing a task and fix any
 - Testing
     - Unit-test pure functions thoroughly. Add at least one edge/boundary test per function.
     - For I/O, isolate adapters and test with fakes; avoid network calls in tests.
-    - Keep tests fast and deterministic; avoid sleeps and random without seeding.
+    - Keep tests fast and deterministic; avoid sleeps and random without seeding. Where a TTL or timeout must really elapse, use a fractional value (`_SHORT_TTL` in `tests/test_cache.py`) rather than a whole second.
+    - Every fixture must be per-test (`tmp_path`). A fixture writing to a shared path breaks parallel runs and lets tests delete each other's data.
+    - `tests/test_async_invariants.py` guards the properties of [ADR 0011](docs/docs/adr/0011-async-aws-io-and-blocking-work.md) that a functional test cannot see: no thread workers or `call_from_thread`, no `boto3` import, no `asyncio.gather`, no module-level asyncio primitives, and fan-out that genuinely overlaps. Add to it when you add a concurrency rule, and check a new guard actually fails when the invariant is broken.
+    - Assert concurrency with a barrier that times out (see `_Barrier` there), not with wall-clock thresholds, so a serialized regression fails with a clear message instead of flaking.
     - When synthesising datetimes, use `timedelta` arithmetic instead of `datetime.replace` to stay within valid ranges.
     - Make boolean parameters keyword-only in helpers/fixtures to avoid Ruff FBT warnings and improve readability.
 
@@ -57,8 +63,15 @@ If you introduce or modify Textual UI code:
     - Avoid per-frame allocation of large Python objects; precompute immutable renderables where possible.
 - Spatial locality
     - For large widget trees, avoid O(n) per frame visibility checks. Let Textual’s spatial map prune non-visible widgets.
-- Async and workers
-    - Offload blocking I/O (e.g., AWS calls) to Textual workers; keep the message loop responsive.
+- Async and workers (see [ADR 0011](docs/docs/adr/0011-async-aws-io-and-blocking-work.md))
+    - AWS calls are natively async through aiobotocore, so use plain async workers (`run_worker(self._coro())`), never `thread=True`. An async worker already runs on the message loop, so it updates widgets directly with no `call_from_thread`.
+    - A thread worker cannot be interrupted, so `exclusive=True` on one cancels the bookkeeping and leaves the request running. Async workers cancel the coroutine and close the connection, which is why the AWS paths must stay async.
+    - Blocking work (DuckDB, Polars, Parquet) goes through `tail_cw.concurrency`: `run_blocking` for a one-shot call, `consume_in_thread` to feed a blocking consumer from an async source. Do not use bare `asyncio.to_thread`, which lands on asyncio's shared default executor.
+    - Do not wrap the sync query layer in `async def`. A thread is still required underneath, and hiding the hop makes it easy to lose.
+    - Concurrent work uses `asyncio.TaskGroup`, not `asyncio.gather`; `gather` leaves siblings running when one fails.
+    - Never declare an `asyncio.Semaphore`, `Lock`, or `Event` at module level. They bind to the first event loop that touches them. Build them inside the running loop.
+    - `async def` with no `await` is a bug unless it is an async generator or an adapter conforming to an awaitable signature.
+    - Before offloading a new blocking library to a thread, measure whether it releases the GIL. Threads are a real offload for DuckDB and Polars (3.09x on four threads, against 1.07x for pure-Python CPU work); a GIL-holding library needs a process pool instead.
 - Efficient log views (common TUI pattern)
     - Use `deque(maxlen=...)` as a ring buffer for tailing logs.
     - Chunk incoming lines; coalesce updates to reduce render churn.

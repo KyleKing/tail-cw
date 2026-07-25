@@ -24,6 +24,9 @@ from diskcache import Cache, JSONDisk
 from tail_cw.aws.client import LogEvent
 
 # Progress callback signature: current progress, total (or -1 when unknown), status message.
+TtlSeconds = int | float
+"""Cache TTL in seconds. Explicit union because beartype does not widen int to float."""
+
 ProgressCallback = Callable[[int, int, str], None]
 
 METADATA_DIRNAME = 'metadata-v2'
@@ -483,7 +486,7 @@ class LogCache:
         self,
         cache_dir: Path,
         size_limit_mb: int = 1000,
-        default_ttl_seconds: int | None = None,
+        default_ttl_seconds: TtlSeconds | None = None,
         eviction_policy: str = 'least-recently-stored',
         compression_level: int = 3,
         row_group_size: int = 100_000,
@@ -617,7 +620,7 @@ class LogCache:
         self,
         log_events: Iterable[LogEvent],
         cache_key: str,
-        ttl_seconds: int | None = None,
+        ttl_seconds: TtlSeconds | None = None,
         compression_level: int | None = None,
         row_group_size: int | None = None,
         infer_schema_length: int | None = None,
@@ -628,7 +631,8 @@ class LogCache:
         Args:
             log_events: Iterator of log events to cache.
             cache_key: Cache key to store under. Use generate_cache_key() to create.
-            ttl_seconds: TTL for this entry in seconds. If None, uses default_ttl_seconds.
+            ttl_seconds: TTL for this entry in seconds; fractions are allowed. If None,
+                uses default_ttl_seconds.
                 Pass None explicitly to override default and use no expiration.
             compression_level: Optional override for compression level used during
                 this write.
@@ -745,7 +749,7 @@ class LogCache:
         self,
         cache_key: str,
         payload: dict[str, Any],
-        ttl_seconds: int | None = None,
+        ttl_seconds: TtlSeconds | None = None,
     ) -> None:
         """Store a JSON-serializable payload under a cache key.
 

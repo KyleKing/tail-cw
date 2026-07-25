@@ -1,93 +1,20 @@
 # Roadmap: make tail-cw a daily-driver CloudWatch tool
 
-Written 2026-07-05, based on a code capability review and a survey of the CloudWatch tooling landscape. Updated 2026-07-06 to prioritize navigation-first UX (M2) after M0/M1 shipped.
+Written 2026-07-05 from a code capability review and a survey of the CloudWatch tooling landscape. Pruned 2026-07-25: M0, M1, M2, M4, and M5 are delivered, so their planning detail moved into the ADRs that record the decisions, and what remains below is what is still ahead.
 
-## Problem
+## Delivered
 
-The package is at 0.0.1 with well-tested modules that are not wired together. Running `tail-cw` opens an empty table:
+| Milestone                     | Outcome                                                                                                                        | Record                                                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 wire the drivetrain        | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                           | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
+| M1 live tail                  | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached    | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
+| M2 navigation-first discovery | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets             | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
+| M4 dashboards and metrics     | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
+| M5 async AWS I/O              | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests  | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
 
-- `fetch_log_events` (`tail_cw/aws/client.py`) calls only `FilterLogEvents` and is never invoked outside tests
-- `LogCache` (Parquet + DuckDB/Polars engine) works but the TUI never reads or writes it
-- The TUI data entry points (`load_events`, `set_parquet_source`) are only called from tests
-- `__main__.py` has no argument parsing; refresh and copy-to-clipboard are stubs
-- No `StartLiveTail`, no `DescribeLogGroups`, no Logs Insights, no profile selection
+Two deviations from the original plans are worth carrying forward, because they change what a reader should expect to find. There is no `tail-cw groups` subcommand: the browser is the home view and `tail-cw export groups` covers the NDJSON case. And log groups do not sort by last-event time, because `DescribeLogGroups` does not return it (that would be a `DescribeLogStreams` call per group); your own selection recency sorts the list instead, which is what the console's "recently accessed" actually gives you.
 
-Day-to-day needs this must serve: dev-loop tailing after a deploy, incident triage across Lambda/ECS/CodeBuild groups, exploratory search and quick ad-hoc activity graphs, orientation ("what are we even logging, what's noisy"), all against one SSO account with two profiles.
-
-## Landscape (why build this at all)
-
-Dedicated CloudWatch tailers (awslogs, saw, cw, utern) are abandoned or dormant since 2019-2023 and predate the Live Tail API and the newer Insights query languages (PPL, SQL). Gonzo is a strong log-analysis TUI but has no native CloudWatch source. The official AWS CloudWatch MCP server covers Insights and pattern analysis but has no live tail and no human surface. Unclaimed in 2026:
-
-- a real TUI over `StartLiveTail` (WebSocket, up to 10 groups, 3h sessions)
-- log group discovery with metadata (last write, size, retention) in the terminal
-- one filter model that works identically across live tail, historical fetch, and cached data
-- correlation-ID pivot across log groups
-- surfacing server-side `pattern`/`diff`/anomaly-detection APIs outside the console
-
-Explicitly not worth building: plain multi-group colored tailing (solved by `aws logs tail`, cw, utern) and generic in-TUI AI summarization (Gonzo does this over piped input).
-
-## Design principles
-
-- Every feature lands CLI-first with `--json` NDJSON output; the TUI is a view over the same functions. AI agents consume the CLI
-- Subcommand CLI via stdlib argparse: `tail-cw tail`, `tail-cw fetch`, `tail-cw groups`, `tail-cw query`
-- Frugal by default: cache everything fetched as Parquet, re-filter locally for free, keep default time ranges tight
-- Keep logic in pure functions with side effects at the edges (per AGENTS.md)
-
-## Milestones
-
-### M0: wire the drivetrain
-
-Goal: `tail-cw fetch <group> --start 2h --profile X` pulls events through cache into the TUI.
-
-- argparse subcommand skeleton in `__main__.py` (`fetch` first; `tail`, `groups`, `query` reserved)
-- flags: log group, `--start`/`--end` (relative like `2h` and absolute), `--filter`, `--profile`, `--region`, `--config`, `--json` (NDJSON to stdout, no TUI)
-- thread `profile_name` through a `boto3.Session` in `aws/client.py`
-- pipeline: cache-key lookup → `fetch_log_events` on miss → `LogCache` write → `set_parquet_source` → `app.run()`
-- make `action_refresh` re-fetch the tail of the current range; implement clipboard copy or remove the binding
-
-### M1 (Avenue B): live tail with a unified filter model
-
-Goal: `tail-cw tail <group...>` streams via `StartLiveTail`; the existing filter DSL applies identically to the live stream, historical backfill, and cached Parquet.
-
-- `StartLiveTail` client wrapper (handle 3h session expiry, >500 events/sec sampling, reconnect)
-- ring buffer (`deque`) feeding coalesced TUI updates; periodic flush into the Parquet cache so scrollback past tail-start and post-hoc re-filtering are free
-- one filter expression evaluated three ways: pushed down to Live Tail's server filter where expressible, `FilterLogEvents` pattern for backfill, query engine for cached data
-- `--json` streaming NDJSON mode for agents and piping
-
-### M2 (Avenue A): navigation-first discovery
-
-Goal: the user should never need to know an exact log group name. Every entry point either resolves a loose pattern or drops into an interactive browser.
-
-**Delivered.** The bulk landed on 2026-07-24 with the single-TUI work ([ADR 0008](../docs/docs/adr/0008-single-interactive-tui.md)), which took the browser as the app's home view rather than as a fifth subcommand: the resolution ladder (`resolve_group_pattern`), `DescribeLogGroups` metadata, `/` filtering, ten-group multi-select, and a preview pane that goes further than this plan asked by clustering each group's distinct message shapes instead of dumping the last N lines. Recents and named presets followed on 2026-07-25, closing the milestone.
-
-Two deviations from the text below, both deliberate. There is no `tail-cw groups` subcommand, because the browser is the home view and `tail-cw export groups` covers the NDJSON case. Sorting by last-event time is not implemented, because `DescribeLogGroups` does not return it (that is a `DescribeLogStreams` call per group); recency of your own selections sorts the list instead, which is the behaviour the console's "recently accessed" actually gives you.
-
-How comparable tools handle this, and what we take from each:
-
-| Tool                 | Group selection UX                                                         | Takeaway                                                     |
-| -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `aws logs tail`      | Exact name required; community wraps it in `describe-log-groups \| fzf`    | The gap to close; don't require exact names                  |
-| utern / cw / awslogs | Group argument is a regex/prefix resolved against all groups               | Accept patterns everywhere a group is accepted               |
-| CloudWatch console   | Multi-select up to 10, surfaces recently accessed groups first             | Keep local recents and sort them to the top                  |
-| k9s                  | Never type a resource name: `/` fuzzy-filters a live list, Enter drills in | The browser is the home screen, not a subcommand you look up |
-| stern (k8s)          | Pod query is a regex; new matches join the tail automatically              | Pattern selection composes with live tail                    |
-
-Deliverables, in order:
-
-1. Group resolution layer (pure function, CLI-first)
-    - anywhere a `<group>` is accepted (`tail`, `fetch`), resolve in stages: exact match, then server-side `logGroupNamePrefix`, then server-side `logGroupNamePattern` (substring, verified in botocore), then client-side fnmatch for `*` globs
-    - unambiguous single match proceeds silently; multiple matches for `tail` expand up to the 10-group Live Tail cap; multiple matches for `fetch` or >10 for `tail` open the picker pre-filtered (TTY) or list candidates to stderr and exit 1 (non-TTY/`--json`)
-1. `tail-cw groups [pattern]` subcommand
-    - `DescribeLogGroups` metadata table: name, last-event time, stored bytes, retention, log class; `--json` NDJSON for agents and for piping into fzf
-    - sorted by last-event time descending by default so active groups surface first
-1. Recents and presets
-    - record each resolved group selection in local state (XDG data dir, not config); picker and `groups` sort recents first, mirroring the console's recently-accessed behavior
-    - named presets in config (`[presets] api = ["/aws/lambda/api-a", "/ecs/api-b"]`), usable as `tail-cw tail @api`
-1. Interactive group browser as the TUI home screen
-    - bare `tail-cw` (TTY) opens the browser instead of exiting 2: fuzzy find over the metadata table, space multi-selects up to 10, Enter starts live tail, `f` fetches a recent window (supersedes the M0 bare-command behavior; non-TTY keeps help + exit 2)
-    - preview pane for the highlighted group: last N events via a small `FilterLogEvents` call plus inferred JSON field schema from the existing JSONL detection, so groups are identifiable by content, not just name
-
-### M3 (Avenue C): investigation tools
+## Next: M3 investigation tools
 
 Rescoped on 2026-07-25 by [ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md). The rule is now: build what only a CloudWatch-native terminal tool can build, and send the rest to Logs Insights, which grew roughly fifty new commands across June and July 2026 and got GA PPL, SQL, JOIN, and sub-queries.
 
@@ -98,7 +25,9 @@ Rescoped on 2026-07-25 by [ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-n
 - **dropped:** reimplementing LogsQL (`stream_context before N after N`, `unpack_json`) in the local engine. Logs Insights does this server-side now, and maintaining a second query language is the kind of cost ADR 0010 exists to avoid
 - later: matcher hooks to auto-link events to Sentry/PostHog issues
 
-#### Prerequisite: trace context does not cross the Hatchet boundary yet (measured 2026-07-25)
+New AWS calls here are async and take an open client from the pool, per [ADR 0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md). `StartQuery` is a poll loop, so it wants an async wait rather than a thread.
+
+### Prerequisite: trace context does not cross the Hatchet boundary yet (measured 2026-07-25)
 
 The correlation pivot can only join on a key present in both places, and today there is none. Measured against `read-prod` over a three-hour window:
 
@@ -117,77 +46,23 @@ The good news is that both sides already log structured JSON carrying `trace_id`
 
 Until one of those lands, build and test the pivot against a single service's log groups, where trace IDs do correlate.
 
-### Resolved: the custom stack stays, with a narrower scope (2026-07-25)
+## Landscape (why build this at all)
 
-The open question from 2026-07-24 is answered in [ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md), which supersedes ADR 0007. tail-cw is not replaced by VictoriaLogs, VictoriaTraces, and Grafana. Three things drove that.
+Dedicated CloudWatch tailers (awslogs, saw, cw, utern) are abandoned or dormant since 2019-2023 and predate the Live Tail API and the newer Insights query languages. Gonzo is a strong log-analysis TUI with no native CloudWatch source. The official AWS CloudWatch MCP server covers Insights and pattern analysis for agents but has no live tail and no human surface. Grafana's CloudWatch data source is the honest answer for anyone who wants a web GUI.
 
-Tracing stopped being a reason to switch. X-Ray accepts OTLP natively and, with Transaction Search on, every span lands in an ordinary `aws/spans` log group in OTel format with W3C trace IDs. Hatchet's SDKs already propagate `traceparent` and expose `Context.workflow_run_id` inside task code. So spans are reachable with the query machinery we have, and the remaining gap is joining across log groups by a correlation ID, which is M3.
+What is still unclaimed, and so still worth our time: a real TUI over `StartLiveTail`, log group discovery with metadata in the terminal, one filter model shared across live and historical and cached data, and a correlation-ID pivot across log groups. The first three shipped; the fourth is M3.
 
-The candidate stack is not ready where we would have depended on it. VictoriaTraces is v0.10.0 and its own README warns that on-disk structures and APIs may break, and Grafana's trace-to-logs pivot accepts only Loki or Splunk, not VictoriaLogs.
+Explicitly not worth building: plain multi-group colored tailing (solved by `aws logs tail`, cw, utern), generic in-TUI AI summarization (Gonzo does this over piped input), and a second query language (ADR 0010).
 
-The custom stack's growth is the real risk, so the decision narrows scope rather than blessing more code. `tail_cw/` grew 82% in the nineteen days to 2026-07-25, and the ADR that weighed replacing it described it as "roughly 2000 lines" when it was already near 8,000.
+## Design principles
 
-The tracing gate is lifted and redirected. Tracing may be built, and it is built by reading `aws/spans`, not by standing up a span store.
-
-### M4: CloudWatch dashboards and metric exploration (prioritized next, added 2026-07-24)
-
-Goal: read the dashboards and metrics you already keep in the console from the terminal, reshape a chart with keyboard-driven inputs, and jump from any chart straight into the logs behind it.
-
-Built next, ahead of finishing M2 and M3, because bringing dashboard insight into the terminal is the current need. It depends only on the cache and query engine (both shipped in M0), not on discovery.
-
-Three features:
-
-- import and render: `tail-cw dashboards` lists dashboards via `ListDashboards`, `tail-cw dashboard <name>` pulls the exact console JSON via `GetDashboard` and lays its widget grid (x/y/w/h) onto a Textual `Grid`. Metric widgets render as charts, log widgets run their Logs Insights query through the existing engine, text widgets render markdown. A tail-cw-native TOML dashboard produces the same typed model, so saved explorations and console imports share one render path
-- metric panels: translate the console `metrics[]` shorthand (positional `.` ditto references, trailing option objects, and metric-math `expression` rows) into `GetMetricData` `MetricDataQueries`, one batched call per panel. Results cache to disk keyed by query hash and window, which cuts latency and API-request count on refresh (the dollar cost is already negligible, see the cost note below)
-- explore and dive: the focused chart takes keyboard inputs to change period, statistic, and time range (vim-style range motions, no mouse), re-rendering only that chart. From a chart or log widget, one key opens the existing log table filtered to the widget's time window and log group (or its Insights query), reusing the M3 pivot mechanism rather than inventing a new one
-
-Charts render natively with plotext (braille curves plus real text axes and legend), after an image-protocol approach (matplotlib over Kitty TGP) proved unstable in Textual; see [ADR 0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md). Verified against the account on 2026-07-24: `GetDashboard` on `irm-prod-main` returned 43 widgets (28 metric, 8 text, 6 log, 1 alarm) with metric-math and Logs Insights bodies intact, and a `GetMetricData` call with a metric-math availability expression returned in about 0.7s.
-
-Cost note: `GetMetricData` and `GetDashboard` bill at $0.01 per 1,000 requests, so a full 28-widget dashboard refresh costs well under a tenth of a cent. Caching metric results is for latency and request-quota headroom, not for saving money. Logs Insights (used by log widgets) stays the one paid path to watch at ~$0.005 per GB scanned, so log-widget queries show a scan estimate before running, same as the M3 rule.
-
-### M5: async AWS I/O over aiobotocore (added 2026-07-25)
-
-Goal: every CloudWatch call is a coroutine, the Textual thread workers become async workers, and a cancelled request stops sending bytes instead of running to completion in a thread we no longer read.
-
-**Delivered 2026-07-25.** All ten thread workers are async workers and the twenty-two `call_from_thread` hops are gone. `boto3` is dropped; `aiobotocore` and `botocore` are declared directly. Three deviations from the plan below, all deliberate.
-
-The sync prep steps (deliverables 1 and 2) were skipped, because full async supersedes both: the session-scoped client became the async client's lifetime owner, and async fan-out removed the executor cap outright.
-
-Blocking cache and query work moved to a dedicated bounded pool in `tail_cw/concurrency.py` rather than bare `asyncio.to_thread`. DuckDB and Polars both release the GIL, so a thread is a real offload (measured: four threads of DuckDB queries scale 3.09x where pure-Python CPU work scales 1.07x). Both also parallelize internally, so the pool stays at four workers: eight concurrent DuckDB queries through `to_thread` stalled the loop for 90ms against 1-2ms through a small pool. `polars.LazyFrame.collect_async()` is documented for this and does not work ([pola-rs/polars#18718](https://github.com/pola-rs/polars/issues/18718) is open since Sept 2024), so it is not used.
-
-Streaming an async fetch into the blocking Parquet writer needed a bridge, and cancelling it needed care in both directions. Cancelling an async task does not interrupt the thread it started, so a bridged consumer would hold its pool slot forever. `consume_in_thread` cancels the in-flight pull to wake a thread blocked on the network, and raises `BridgeCancelledError` inside the thread so `LogCache.write` aborts rather than committing a truncated Parquet file as a complete cache entry. That exception exists because `concurrent.futures.CancelledError` derives from `Exception`, not `BaseException`, so any `except Exception` in between would quietly absorb a cancellation.
-
-Two bugs surfaced during the work, both now covered by tests. A shared module-level `botocore.Config` is mutated by client creation (`max_attempts` is rewritten to `total_max_attempts`), so the retry config is built fresh per client. And `_live_services` takes a `ClientProvider` Protocol rather than the concrete pool, so tests wire a fake without credentials.
-
-Three problems in the shipped code motivated this, all visible once a dashboard has a few dozen widgets:
-
-- Textual thread workers run on asyncio's default executor (`run_in_executor(None, ...)`, `textual/worker.py:326`), which caps at `min(32, cpu_count + 4)`. On a 12-core machine that is 16 slots shared by every metric panel, log-volume sparkline, Parquet load, and the live tail worker, which holds one slot for the life of a three-hour session. The verified `irm-prod-main` dashboard has 28 metric widgets, so a refresh fetches in two waves
-- `exclusive=True` cancels the worker, not the HTTP request. A debounced dashboard reload or a time-range change abandons the thread mid-`GetMetricData`, so the old request still completes, still bills, and still burns a slot. Async workers cancel the coroutine and close the connection
-- Every AWS function builds its own client (`build_client`, `_create_logs_client`), which re-resolves SSO credentials and opens a fresh connection pool per call. One session-scoped client fixes this and is a prerequisite for the async version, where clients are context managers with real lifetimes
-
-Feasibility was checked before scheduling, and the two things that could have blocked it do not:
-
-- `StartLiveTail` needs an async event stream. `aiobotocore` provides `AioEventStream` with `__aiter__`/`__anext__`, and its `__iter__` raises `NotImplementedError('Use async-for instead')`, so `live_tail.py` becomes `async for chunk in response['responseStream']`
-- SSO with two profiles needs the async credential chain. `aiobotocore` ships `AioSSOProvider` over `AioSSOTokenProvider` and honours `profile_name`, so `sso-session` config resolves the same way
-
-Take `aiobotocore` directly, not `aioboto3`. The project only ever creates clients, so the `boto3`-shaped resource and file-transfer layer that `aioboto3` wraps is unused, and skipping it drops `aioboto3` plus `aiofiles` from the tree. `aiobotocore` 3.x removed its `boto3` extra anyway. Net dependency change: `boto3` and `s3transfer` out, `aiobotocore` and `aiohttp` (plus `aioitertools`, `multidict`, `yarl`, `frozenlist`, `aiosignal`, `propcache`, `aiohappyeyeballs`) in.
-
-The standing cost is the version pin. `aiobotocore` 3.8.0 requires `botocore>=1.43.3,<1.43.47`, a forty-four-patch window, and the lock sits at the 1.43.46 ceiling (down from 1.43.56). Every new AWS API or region update waits on an `aiobotocore` release, so this is a pin Renovate cannot bump alone.
-
-Deliverables, in order:
-
-1. Session-scoped client, still sync. Build one client per service per session at startup, thread it through `ShellServices`, and delete the per-call `build_client` hops. Land this alone first, because it is the only piece that carries a benefit without the async migration and it defines the seam the rest of the work moves through
-1. Fan-out fix, still sync. Drive the metric panels from one worker over an explicit `ThreadPoolExecutor` instead of 28 `run_worker(thread=True)` calls, so the wave behaviour goes away whether or not the async work lands
-1. Async producers in `tail_cw/aws/`. `fetch_log_events`, `describe_log_groups`, and `stream_live_tail` become `AsyncIterator[...]`; `fetch_metric_data`, `list_dashboards`, and `get_dashboard` become coroutines. The pure translation code (`build_metric_data_queries`, `resolve_group_pattern`, the dashboard parsers, `_live_event_to_log_event`) does not change, which is most of the line count in those modules
-1. Async consumers. The six `run_worker(..., thread=True)` sites become async workers and roughly twenty `call_from_thread` hops disappear, since an async worker already runs on the message loop. The CLI keeps its sync signature with one `asyncio.run` at the dispatch boundary so `--json` NDJSON streaming stays a plain pipe
-1. Tests. The five `tests/test_aws_*.py` modules fake boto clients with `get_paginator` stubs and need async equivalents, plus `anyio` or `pytest-asyncio` as a dev dependency. Annotate async generators as `AsyncIterator[X]` so beartype's exact-annotation checking passes
-
-Client lifetime is the trap to design around. An async client is an `async with` context manager, so an async generator that yields events has to hold the client open across its `yield` and every consumer has to exhaust it or call `aclose()`, or aiohttp logs unclosed-connector warnings. Deliverable 1 avoids most of this by owning the client at the session level instead of inside each generator.
+- Every feature lands CLI-first with NDJSON output under `tail-cw export`; the TUI is a view over the same functions, so agents and humans drive one code path
+- Frugal by default: cache everything fetched as Parquet, re-filter locally for free, keep default time ranges tight, and show a scan estimate before any paid Logs Insights query
+- Keep logic in pure functions with side effects at the edges (per AGENTS.md). The async migration reinforced this: `aws/` functions take an open client and the pure translation code stayed untouched
+- Each milestone ships with ruff, mypy, pyright, and pytest green before the next starts
 
 ## Sequencing rationale
 
-M1 before M2 because dev-loop tailing is the daily driver. M2 before M3 because pivot and pattern tools need group discovery to be usable. M4 (dashboards) jumped ahead of M2 and M3 on 2026-07-24 because terminal dashboard insight became the priority, and it needs only the M0 cache and query engine. Each milestone ships CLI + tests green (ruff, mypy, pyright, pytest) before the next starts.
+The remaining sequencing question is inside M3, not across milestones. Build the correlation pivot against a single service first, because the cross-service join is blocked on instrumentation in another repo and waiting on it would stall the whole milestone. X-Ray span reading is independent of that block, so it can proceed in parallel.
 
-M5 (async I/O) comes after M4 rather than before it, even though M4's 28-panel fan-out is the case that most wants async, because M4's render and interaction code is already built and migrating it now would mean rewriting worker plumbing that works. Its first two deliverables (session-scoped client, explicit executor for the fan-out) stay useful on their own, so they can land during M3 without committing to the dependency pin.
-
-M0 and M1 shipped 2026-07-05. M2 was then elevated from "a groups listing" to navigation-first UX: requiring exact group names is the single largest friction left (it is also the gap every fzf-wrapper workaround exists to paper over), and pattern resolution plus the browser make `tail` and `fetch` usable from a cold start. `DescribeLogGroups` is free, so none of this adds cost pressure.
+Scope growth is the standing risk ADR 0010 named: `tail_cw/` grew 82% in the nineteen days to 2026-07-25. Prefer wiring existing machinery over new subsystems, and prefer sending work to Logs Insights over reimplementing it.
