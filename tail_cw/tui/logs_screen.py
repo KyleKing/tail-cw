@@ -30,7 +30,7 @@ from tail_cw.aws.client import LogEvent
 from tail_cw.concurrency import closing_stream
 from tail_cw.config import TailCWConfig
 from tail_cw.query import parse_extended_filter, parse_filter_pattern, query_parquet_files_to_log_events
-from tail_cw.query.trace import extract_trace_id_from_event, query_traces_from_parquet
+from tail_cw.query.trace import TraceGroup, extract_trace_id_from_event, query_traces_from_parquet_files
 from tail_cw.tui.log_viewer import batch_format_log_events, get_column_definitions
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.record_detail import RecordDetailScreen
@@ -555,40 +555,14 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         )
 
     def action_toggle_trace_view(self) -> None:
-        """Open the trace view over every trace in the loaded data.
-
-        Trace queries read one file, so a multi-group view traces its first
-        group only.
-        """
+        """Open the trace view over every trace in the loaded data."""
         if not self._parquet_paths:
             self.notify('Trace view requires Parquet data source', severity='warning')
             return
-
-        try:
-            self._update_status('Loading traces...')
-            trace_groups = query_traces_from_parquet(
-                self._parquet_paths[0],
-                trace_id_fields=self._trace_id_fields,
-                limit=self._config.tui.trace_limit,
-            )
-        except Exception as err:
-            self.notify(f'Failed to load traces: {err}', severity='error')
-            self._update_status(f'Trace loading error: {err}')
-            return
-
-        if not trace_groups:
-            self.notify('No traces found in current data', severity='information')
-            self._update_status('No traces found')
-            return
-
-        self.app.push_screen(TraceViewerScreen(trace_groups))
+        self.run_worker(self._open_trace_view(None), name='traces', group='traces', exclusive=True)
 
     def action_show_trace_for_selected(self) -> None:
-        """Open the trace view for the selected event's trace.
-
-        Trace queries read one file, so a multi-group view traces its first
-        group only.
-        """
+        """Open the trace view for the selected event's trace."""
         if not self._parquet_paths:
             self.notify('Trace view requires Parquet data source', severity='warning')
             return
@@ -603,24 +577,49 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             self.notify('No trace ID found in selected event', severity='information')
             return
 
+        self.run_worker(self._open_trace_view(trace_id), name='traces', group='traces', exclusive=True)
+
+    async def _open_trace_view(self, trace_id: str | None) -> None:
+        """Group the loaded Parquet windows into traces, then show them.
+
+        Spans for one trace are spread across one file per log group, so every
+        selected group is read together. The grouping is blocking DuckDB and
+        Polars work, so it goes through the ``load_traces`` service onto the
+        blocking pool rather than running here on the message loop.
+        """
+        label = f'trace {trace_id[:8]}' if trace_id else 'traces'
+        self._update_status(f'Loading {label}...')
+
         try:
-            self._update_status(f'Loading trace {trace_id[:8]}...')
-            trace_groups = query_traces_from_parquet(
-                self._parquet_paths[0],
-                trace_id=trace_id,
-                trace_id_fields=self._trace_id_fields,
-            )
+            trace_groups = await self._load_traces(trace_id)
         except Exception as err:
-            self.notify(f'Failed to load trace: {err}', severity='error')
+            self.notify(f'Failed to load {label}: {err}', severity='error')
             self._update_status(f'Trace loading error: {err}')
             return
 
         if not trace_groups:
-            self.notify(f'Trace not found in current data: {trace_id}', severity='information')
-            self._update_status('Trace not found')
+            missing = f'Trace not found in current data: {trace_id}' if trace_id else 'No traces found in current data'
+            self.notify(missing, severity='information')
+            self._update_status('Trace not found' if trace_id else 'No traces found')
             return
 
-        self.app.push_screen(TraceViewerScreen(trace_groups, title=f'Trace: {trace_id[:16]}...'))
+        title = f'Trace: {trace_id[:16]}...' if trace_id else None
+        self._update_status(f'{len(trace_groups)} traces across {len(self._parquet_paths)} groups')
+        if title is None:
+            self.app.push_screen(TraceViewerScreen(trace_groups))
+        else:
+            self.app.push_screen(TraceViewerScreen(trace_groups, title=title))
+
+    async def _load_traces(self, trace_id: str | None) -> list[TraceGroup]:
+        limit = None if trace_id else self._config.tui.trace_limit
+        if (load_traces := self.shell.services.load_traces) is not None:
+            return await load_traces(self._parquet_paths, trace_id, self._trace_id_fields, limit)
+        return query_traces_from_parquet_files(
+            self._parquet_paths,
+            trace_id=trace_id,
+            trace_id_fields=self._trace_id_fields,
+            limit=limit,
+        )
 
     @on(Input.Changed, '#search_input')
     def on_search_input_changed(self, event: Input.Changed) -> None:

@@ -27,8 +27,9 @@ from tail_cw.concurrency import blocking_pool, run_blocking, take
 from tail_cw.config import TailCWConfig
 from tail_cw.demo import demo_dashboard, demo_fetch_metrics, demo_log_volume, demo_resolve_logs
 from tail_cw.preview import GroupPreview, bucket_event_counts, build_group_preview
+from tail_cw.query.trace import TraceGroup, query_traces_from_parquet_files
 from tail_cw.tui.navigation import NavTarget, ViewKind
-from tail_cw.tui.shell import CountEvents, LogVolume, ResolveLogs, ShellServices, TailCWApp
+from tail_cw.tui.shell import CountEvents, LoadTraces, LogVolume, ResolveLogs, ShellServices, TailCWApp
 from tail_cw.tui.views import build_screen
 
 T = TypeVar('T')
@@ -94,7 +95,7 @@ def _cache_services(
     session: Session,
     pool: ClientProvider,
     executor: ThreadPoolExecutor,
-) -> tuple[ResolveLogs, LogVolume, CountEvents]:
+) -> tuple[ResolveLogs, LogVolume, CountEvents, LoadTraces]:
     """Build the services that end in blocking Parquet work on ``executor``."""
 
     async def resolve_logs(
@@ -137,7 +138,23 @@ def _cache_services(
         events = await take(fetch_log_events(client, log_group, start, end), _COUNT_EVENTS_CAP)
         return len(events)
 
-    return resolve_logs, log_volume, count_events
+    async def load_traces(
+        paths: Sequence[Path],
+        trace_id: str | None,
+        trace_id_fields: Sequence[str],
+        limit: int | None,
+    ) -> list[TraceGroup]:
+        def group() -> list[TraceGroup]:
+            return query_traces_from_parquet_files(
+                paths,
+                trace_id=trace_id,
+                trace_id_fields=list(trace_id_fields),
+                limit=limit,
+            )
+
+        return await run_blocking(executor, group)
+
+    return resolve_logs, log_volume, count_events, load_traces
 
 
 def _live_services(
@@ -146,7 +163,7 @@ def _live_services(
     pool: ClientProvider,
     executor: ThreadPoolExecutor,
 ) -> ShellServices:
-    resolve_logs, log_volume, count_events = _cache_services(config, session, pool, executor)
+    resolve_logs, log_volume, count_events, load_traces = _cache_services(config, session, pool, executor)
 
     async def list_groups() -> list[LogGroupInfo]:
         logs = await pool.client('logs')
@@ -192,6 +209,7 @@ def _live_services(
         live_stream=live_stream,
         log_volume=log_volume,
         count_events=count_events,
+        load_traces=load_traces,
     )
 
 

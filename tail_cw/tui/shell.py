@@ -29,6 +29,7 @@ from tail_cw.aws.metrics import MetricSeries
 from tail_cw.cli import Session, expand_presets
 from tail_cw.config import TailCWConfig
 from tail_cw.preview import GroupPreview
+from tail_cw.query.trace import TraceGroup
 from tail_cw.recents import Recents, load_recents, profile_recents, record_selection, save_recents
 from tail_cw.tui.command_bar import CommandLine
 from tail_cw.tui.dive_screen import DiveConfirmScreen
@@ -57,6 +58,7 @@ ResolveLogs = Callable[[Sequence[str], datetime, datetime, str | None], Awaitabl
 LiveStream = Callable[[Sequence[str], str | None], AsyncIterator[LogEvent]]
 LogVolume = Callable[[str, datetime, datetime], Awaitable[list[float]]]
 CountEvents = Callable[[str, datetime, datetime], Awaitable[int]]
+LoadTraces = Callable[[Sequence[Path], str | None, Sequence[str], int | None], Awaitable[list[TraceGroup]]]
 ScreenFactory = Callable[[NavTarget], 'ShellScreen']
 
 MAX_SELECTED_GROUPS = 10
@@ -83,6 +85,7 @@ class ShellServices:
     live_stream: LiveStream | None = None
     log_volume: LogVolume | None = None
     count_events: CountEvents | None = None
+    load_traces: LoadTraces | None = None
 
 
 @dataclass(frozen=True)

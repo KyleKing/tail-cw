@@ -22,6 +22,7 @@ from tail_cw.query.trace import (
     is_error_event,
     log_event_to_trace_span,
     query_traces_from_parquet,
+    query_traces_from_parquet_files,
 )
 
 
@@ -374,6 +375,59 @@ def test_query_traces_from_parquet_limit(tmp_path: Path):
 
     trace_groups = query_traces_from_parquet(parquet_path, limit=5)
     assert len(trace_groups) <= 5
+
+
+def test_query_traces_across_files_merges_spans_of_one_trace(tmp_path: Path):
+    api = tmp_path / 'api.parquet'
+    worker = tmp_path / 'worker.parquet'
+    write_log_events_to_parquet([_make_test_event_with_trace('trace-1', service_name='api')], api)
+    write_log_events_to_parquet([_make_test_event_with_trace('trace-1', service_name='worker')], worker)
+
+    trace_groups = query_traces_from_parquet_files([api, worker])
+
+    assert len(trace_groups) == 1
+    assert trace_groups[0].span_count == 2
+    assert trace_groups[0].service_names == {'api', 'worker'}
+
+
+def test_query_traces_across_files_skips_an_unreadable_file(tmp_path: Path):
+    good = tmp_path / 'good.parquet'
+    write_log_events_to_parquet([_make_test_event_with_trace('trace-1')], good)
+    missing = tmp_path / 'missing.parquet'
+
+    assert len(query_traces_from_parquet_files([good, missing])) == 1
+
+
+def test_query_traces_across_files_filters_and_limits(tmp_path: Path):
+    first = tmp_path / 'first.parquet'
+    second = tmp_path / 'second.parquet'
+    write_log_events_to_parquet([_make_test_event_with_trace(f'trace-{i}') for i in range(4)], first)
+    write_log_events_to_parquet([_make_test_event_with_trace(f'trace-{i}') for i in range(4, 8)], second)
+
+    assert len(query_traces_from_parquet_files([first, second])) == 8
+    assert len(query_traces_from_parquet_files([first, second], limit=3)) == 3
+    assert [group.trace_id for group in query_traces_from_parquet_files([first, second], trace_id='trace-5')] == [
+        'trace-5',
+    ]
+
+
+def test_query_traces_across_no_files_is_empty():
+    assert query_traces_from_parquet_files([]) == []
+
+
+def test_a_bare_id_field_is_not_read_as_a_span_id():
+    event = LogEvent(
+        message=json.dumps({'trace_id': 'trace-1', 'id': 'customer-42'}),
+        timestamp=datetime.now(UTC),
+        ingestion_time=datetime.now(UTC),
+        log_stream='test-stream',
+        log_group='test-group',
+        event_id='test-event-id',
+    )
+
+    spans = group_events_by_trace([event])['trace-1']
+
+    assert spans[0].span_id is None
 
 
 def test_find_traces_with_errors(tmp_path: Path):

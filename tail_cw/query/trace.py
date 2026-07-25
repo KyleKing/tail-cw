@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -34,7 +34,13 @@ ERROR_LEVEL_FIELDS = {'level', 'severity', 'loglevel'}
 STATUS_FIELDS = {'status', 'status_code', 'statuscode'}
 MESSAGE_FIELDS = {'message', 'msg', 'error_message'}
 ERROR_STATUS_THRESHOLD = 500
-SPAN_ID_FIELDS = ['span_id', 'spanId', 'id']
+SPAN_ID_FIELDS = ['span_id', 'spanId']
+"""Fields read as a span identity.
+
+A bare ``id`` is deliberately absent: it is the most common name for an
+unrelated entity key, and accepting it makes arbitrary rows look like spans that
+other rows can then claim as parents.
+"""
 PARENT_SPAN_FIELDS = ['parent_span_id', 'parentSpanId', 'parent_id']
 DURATION_FIELDS = ['duration', 'duration_ms', 'elapsed_ms', 'durationMs']
 MILLISECONDS_PER_SECOND = 1000
@@ -497,20 +503,54 @@ def query_traces_from_parquet(
         # If query fails, return empty list
         return []
 
-    # Group events by trace
+    return _group_into_traces(events, trace_id_fields, trace_id=trace_id, limit=limit)
+
+
+def query_traces_from_parquet_files(
+    parquet_paths: Sequence[Path],
+    trace_id: str | None = None,
+    trace_id_fields: list[str] = DEFAULT_TRACE_ID_FIELDS,
+    limit: int | None = None,
+) -> list[TraceGroup]:
+    """Query several Parquet files for traces, merging spans across all of them.
+
+    One file holds one log group, so a trace that crosses services is only whole
+    when every group it touched is read together. This is the multi-group form of
+    :func:`query_traces_from_parquet`; a file that fails to read is skipped so one
+    bad group does not lose the rest of the trace.
+
+    Args:
+        parquet_paths: Paths to the Parquet files to read.
+        trace_id: Return only this trace when given.
+        trace_id_fields: Field names searched for a trace ID.
+        limit: Cap on the number of traces returned.
+
+    Returns:
+        Trace groups sorted most recent first.
+    """
+    events: list[LogEvent] = []
+    for path in parquet_paths:
+        try:
+            events.extend(query_parquet_file_to_log_events(path, None))
+        except Exception:  # ruff: ignore[try-except-continue]
+            continue
+
+    return _group_into_traces(events, trace_id_fields, trace_id=trace_id, limit=limit)
+
+
+def _group_into_traces(
+    events: list[LogEvent],
+    trace_id_fields: list[str],
+    *,
+    trace_id: str | None,
+    limit: int | None,
+) -> list[TraceGroup]:
     grouped_spans = group_events_by_trace(events, trace_id_fields)
-
-    # Create trace groups
     trace_groups = create_trace_groups(grouped_spans)
-
-    # Filter by specific trace_id if requested
     if trace_id:
-        trace_groups = [tg for tg in trace_groups if tg.trace_id == trace_id]
-
-    # Apply limit to trace groups after filtering
+        trace_groups = [group for group in trace_groups if group.trace_id == trace_id]
     if limit:
         trace_groups = trace_groups[:limit]
-
     return trace_groups
 
 
