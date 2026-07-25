@@ -62,7 +62,7 @@ class StubScreen(ShellScreen):
 class StubDashboardScreen(StubScreen):
     """A view that owns a command and cycles the session's dashboards."""
 
-    def commands(self) -> dict[str, ShellCommand]:  # noqa: PLR6301
+    def commands(self) -> dict[str, ShellCommand]:  # ruff: ignore[no-self-use]
         """Add one view-specific command."""
         return {'panels': ShellCommand('Filter panels')}
 
@@ -521,7 +521,7 @@ async def test_services_default_to_empty():
 class PlainApp(App[None]):
     """A host that is not a TailCWApp, to prove the shell property complains."""
 
-    def get_default_screen(self) -> ShellScreen:  # noqa: PLR6301
+    def get_default_screen(self) -> ShellScreen:  # ruff: ignore[no-self-use]
         """Mount a ShellScreen under the wrong kind of app."""
         return StubScreen(NavTarget(kind=ViewKind.GROUPS, label='groups'))
 

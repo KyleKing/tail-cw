@@ -164,20 +164,20 @@ class ShellScreen(Screen[None]):
         yield CommandLine(completer=self.complete_command)
         yield Footer()
 
-    def compose_content(self) -> ComposeResult:  # noqa: PLR6301
+    def compose_content(self) -> ComposeResult:  # ruff: ignore[no-self-use]
         """Yield the widgets unique to this view."""
         return iter(())
 
-    def commands(self) -> dict[str, ShellCommand]:  # noqa: PLR6301
+    def commands(self) -> dict[str, ShellCommand]:  # ruff: ignore[no-self-use]
         """Return the ``:`` commands this view adds to the global set."""
         return {}
 
-    def run_view_command(self, name: str, argument: str) -> bool:  # noqa: PLR6301
+    def run_view_command(self, name: str, argument: str) -> bool:  # ruff: ignore[no-self-use]
         """Run a view-specific command, returning False when it is unknown."""
         del name, argument
         return False
 
-    def nav_siblings(self) -> list[NavTarget]:  # noqa: PLR6301
+    def nav_siblings(self) -> list[NavTarget]:  # ruff: ignore[no-self-use]
         """Return the targets ``[`` and ``]`` cycle at this level."""
         return []
 
@@ -296,7 +296,7 @@ class TailCWApp(App[None]):
         self._nav = initial(self._opening)
         self._commands = _global_commands()
 
-    def get_default_screen(self) -> Screen[None]:  # noqa: PLR6301
+    def get_default_screen(self) -> Screen[None]:  # ruff: ignore[no-self-use]
         """Return an empty base screen that the opening view is pushed over.
 
         The real root sits one level above Textual's default screen so the

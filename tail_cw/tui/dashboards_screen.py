@@ -103,7 +103,7 @@ class DashboardsScreen(ShellScreen):
         self._bodies: dict[str, Dashboard] = {}
         self._detail_debounce: Debounce | None = None
 
-    def compose_content(self) -> ComposeResult:  # noqa: PLR6301
+    def compose_content(self) -> ComposeResult:  # ruff: ignore[no-self-use]
         """Yield the list-and-detail picker.
 
         Yields:
@@ -118,7 +118,7 @@ class DashboardsScreen(ShellScreen):
         self.restore_focus()
         self._load_dashboards()
 
-    def commands(self) -> dict[str, ShellCommand]:  # noqa: PLR6301
+    def commands(self) -> dict[str, ShellCommand]:  # ruff: ignore[no-self-use]
         """Add the dashboard-browser commands to the shared set."""
         return {'reload': ShellCommand('Re-read the dashboard list')}
 

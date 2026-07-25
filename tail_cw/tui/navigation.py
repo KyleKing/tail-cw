@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
-BREADCRUMB_SEPARATOR = ' › '  # noqa: RUF001
+BREADCRUMB_SEPARATOR = ' › '  # ruff: ignore[ambiguous-unicode-character-string]
 """Separator joining stack labels in the header breadcrumb."""
 
 

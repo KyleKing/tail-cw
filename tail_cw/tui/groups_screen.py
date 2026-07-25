@@ -99,7 +99,7 @@ class GroupsScreen(ShellScreen):
         self._previews: dict[str, GroupPreview] = {}
         self._preview_debounce: Debounce | None = None
 
-    def compose_content(self) -> ComposeResult:  # noqa: PLR6301
+    def compose_content(self) -> ComposeResult:  # ruff: ignore[no-self-use]
         """Yield the list-and-preview picker.
 
         Yields:
@@ -117,7 +117,7 @@ class GroupsScreen(ShellScreen):
         self.restore_focus()
         self._load_groups()
 
-    def commands(self) -> dict[str, ShellCommand]:  # noqa: PLR6301
+    def commands(self) -> dict[str, ShellCommand]:  # ruff: ignore[no-self-use]
         """Add the group-browser commands to the shared set."""
         return {
             'clear': ShellCommand('Clear the log group selection'),
@@ -138,7 +138,7 @@ class GroupsScreen(ShellScreen):
                 return False
         return True
 
-    def nav_siblings(self) -> list[NavTarget]:  # noqa: PLR6301
+    def nav_siblings(self) -> list[NavTarget]:  # ruff: ignore[no-self-use]
         """The group browser has no level to cycle through."""
         return []
 

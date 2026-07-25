@@ -129,7 +129,7 @@ def test_sibling_returns_none_for_an_empty_target_list() -> None:
 
 def test_breadcrumb_joins_stack_labels() -> None:
     state = push(push(initial(_DASHBOARDS), _DASHBOARD), _LOGS)
-    assert breadcrumb(state) == 'dashboards › prod-overview › /aws/lambda/api'  # noqa: RUF001
+    assert breadcrumb(state) == 'dashboards › prod-overview › /aws/lambda/api'  # ruff: ignore[ambiguous-unicode-character-string]
 
 
 def test_breadcrumb_of_the_root_is_one_label() -> None:

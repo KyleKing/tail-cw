@@ -56,7 +56,7 @@ _PERIOD_CYCLE = (60, 300, 900, 3600, 21600)
 def _grid_dimensions(count: int) -> tuple[int, int]:
     if count <= 1:
         return 1, 1
-    columns = 3 if count <= 9 else 4  # noqa: PLR2004
+    columns = 3 if count <= 9 else 4  # ruff: ignore[magic-value-comparison]
     return columns, math.ceil(count / columns)
 
 

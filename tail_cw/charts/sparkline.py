@@ -98,7 +98,7 @@ def reduce_rows(
     """Reduce visible series to the small set of rows shown in a compact cell."""
     if not series:
         return []
-    if len(series) <= 2 or mode == ReduceMode.EACH:  # noqa: PLR2004
+    if len(series) <= 2 or mode == ReduceMode.EACH:  # ruff: ignore[magic-value-comparison]
         return [SparkRow(item.label, item.values, series_color(index)) for index, item in enumerate(series)]
     if mode == ReduceMode.SINGLE:
         return [SparkRow(f'p{percentile:g}', _percentile_series(series, percentile), accent)]

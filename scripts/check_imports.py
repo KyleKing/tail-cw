@@ -4,4 +4,4 @@ from pprint import pprint
 
 from tail_cw import replace_me
 
-pprint(locals())  # noqa: T203
+pprint(locals())  # ruff: ignore[p-print]

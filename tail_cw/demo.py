@@ -197,7 +197,7 @@ def _demo_log_events(start: datetime, end: datetime) -> list[LogEvent]:
     events: list[LogEvent] = []
     for index, moment in enumerate(timestamps):
         fraction = index / max(1, len(timestamps) - 1)
-        is_error = _incident_factor(fraction) > 0.5  # noqa: PLR2004
+        is_error = _incident_factor(fraction) > 0.5  # ruff: ignore[magic-value-comparison]
         level = 'ERROR' if is_error else 'INFO'
         trace_id = f'trace-{1000 + index}'
         status = 503 if is_error else 200

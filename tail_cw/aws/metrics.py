@@ -141,7 +141,7 @@ def build_metric_data_queries(
 
         positional = _positional_elements(row)
         resolved = _resolve_ditto(positional, previous_positional)
-        if len(resolved) < 2:  # noqa: PLR2004
+        if len(resolved) < 2:  # ruff: ignore[magic-value-comparison]
             continue
         previous_positional = resolved
 

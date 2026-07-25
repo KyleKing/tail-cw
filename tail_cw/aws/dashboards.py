@@ -182,7 +182,7 @@ def parse_dashboard_body(name: str, body: str) -> Dashboard:
     widgets_raw = data.get('widgets')
     if not isinstance(widgets_raw, list):
         msg = f'Dashboard {name!r} body has no widgets array'
-        raise ValueError(msg)  # noqa: TRY004
+        raise ValueError(msg)  # ruff: ignore[type-check-without-type-error]
     return Dashboard(name=name, widgets=[_parse_widget(widget) for widget in widgets_raw])
 
 

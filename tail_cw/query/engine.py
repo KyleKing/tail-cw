@@ -441,17 +441,17 @@ def _polars_expr_regex(node: FilterNode) -> pl.Expr:
 
 def _polars_expr_json_equals(node: FilterNode) -> pl.Expr:
     field_expr = _build_polars_field_reference(node.field_path or [])
-    return pl.when(pl.col('parsed').is_not_null()).then(field_expr == node.value).otherwise(pl.lit(False))  # noqa: FBT003
+    return pl.when(pl.col('parsed').is_not_null()).then(field_expr == node.value).otherwise(pl.lit(False))  # ruff: ignore[boolean-positional-value-in-call]
 
 
 def _polars_expr_json_not_equals(node: FilterNode) -> pl.Expr:
     field_expr = _build_polars_field_reference(node.field_path or [])
-    return pl.when(pl.col('parsed').is_not_null()).then(field_expr != node.value).otherwise(pl.lit(False))  # noqa: FBT003
+    return pl.when(pl.col('parsed').is_not_null()).then(field_expr != node.value).otherwise(pl.lit(False))  # ruff: ignore[boolean-positional-value-in-call]
 
 
 def _polars_expr_json_exists(node: FilterNode) -> pl.Expr:
     field_expr = _build_polars_field_reference(node.field_path or [])
-    return pl.when(pl.col('parsed').is_not_null()).then(field_expr.is_not_null()).otherwise(pl.lit(False))  # noqa: FBT003
+    return pl.when(pl.col('parsed').is_not_null()).then(field_expr.is_not_null()).otherwise(pl.lit(False))  # ruff: ignore[boolean-positional-value-in-call]
 
 
 def _polars_expr_json_numeric(node: FilterNode) -> pl.Expr:
@@ -476,13 +476,13 @@ def _polars_expr_json_numeric(node: FilterNode) -> pl.Expr:
         msg = f'Unsupported numeric operator: {operator}'
         raise ValueError(msg)
 
-    return pl.when(pl.col('parsed').is_not_null()).then(comparison).otherwise(pl.lit(False))  # noqa: FBT003
+    return pl.when(pl.col('parsed').is_not_null()).then(comparison).otherwise(pl.lit(False))  # ruff: ignore[boolean-positional-value-in-call]
 
 
 def _polars_expr_json_regex(node: FilterNode) -> pl.Expr:
     field_expr = _build_polars_field_reference(node.field_path or [])
     regex_match = field_expr.cast(pl.Utf8).str.contains(node.value or '', literal=False)
-    return pl.when(pl.col('parsed').is_not_null()).then(regex_match).otherwise(pl.lit(False))  # noqa: FBT003
+    return pl.when(pl.col('parsed').is_not_null()).then(regex_match).otherwise(pl.lit(False))  # ruff: ignore[boolean-positional-value-in-call]
 
 
 def _polars_expr_and(node: FilterNode) -> pl.Expr:

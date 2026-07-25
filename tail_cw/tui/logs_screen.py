@@ -63,7 +63,7 @@ class ProgressUpdate(Message):
         Message.__init__(self)
 
 
-class LogsScreen(ShellScreen):  # noqa: PLR0904
+class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
     """Browse log events for the selected groups, historical or live.
 
     Keyboard shortcuts:
@@ -152,7 +152,7 @@ class LogsScreen(ShellScreen):  # noqa: PLR0904
         """Whether the view is streaming rather than reading a window."""
         return self._live_mode
 
-    def compose_content(self) -> ComposeResult:  # noqa: PLR6301
+    def compose_content(self) -> ComposeResult:  # ruff: ignore[no-self-use]
         """Build the view's own widgets.
 
         Yields:
@@ -188,7 +188,7 @@ class LogsScreen(ShellScreen):  # noqa: PLR0904
 
         self._table.focus()
 
-    def commands(self) -> dict[str, ShellCommand]:  # noqa: PLR6301
+    def commands(self) -> dict[str, ShellCommand]:  # ruff: ignore[no-self-use]
         """Add the log-specific ``:`` commands."""
         return {
             'live': ShellCommand('Toggle between the historical window and a live stream'),
@@ -500,7 +500,7 @@ class LogsScreen(ShellScreen):  # noqa: PLR0904
         self.notify(message, severity='warning')
         self._update_live_status()
 
-    def note_live_sampled(self, sampled: bool) -> None:  # noqa: FBT001
+    def note_live_sampled(self, sampled: bool) -> None:  # ruff: ignore[boolean-type-hint-positional-argument]
         """Record whether the server is sampling the live stream (thread-safe)."""
         self._live_sampled = sampled
 

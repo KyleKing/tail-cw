@@ -562,7 +562,7 @@ def find_traces_with_errors(
     return error_traces
 
 
-def format_trace_duration(duration_ms: float | int) -> str:  # noqa: PYI041
+def format_trace_duration(duration_ms: float | int) -> str:  # ruff: ignore[redundant-numeric-union]
     """Format duration for display.
 
     Args:
