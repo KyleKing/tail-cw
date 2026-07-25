@@ -102,7 +102,7 @@ A parallel exploration weighed replacing tail-cw with VictoriaLogs, VictoriaTrac
 - Distributed tracing is a real gap. The founding use case (build a timeline across an API and its Kafka workers, explain a congestion root cause) is a span-based tracing problem, and tail-cw has none. The correlation-ID pivot at M3 is the closest we get. True tracing would be a large new subsystem
 - ADR 0007 sets a gate: do not build tracing into tail-cw until the replacement question resolves, because tracing is the largest piece of net-new code and the piece the candidate stack (VictoriaTraces over OTLP, Jaeger-compatible) most clearly already solves
 
-So no M5 tracing milestone is scheduled yet. If the evaluation keeps tail-cw (ADR 0007 options 1 or 3), tracing becomes its own milestone then.
+So no tracing milestone is scheduled yet. If the evaluation keeps tail-cw (ADR 0007 options 1 or 3), tracing becomes its own milestone then.
 
 ### M4: CloudWatch dashboards and metric exploration (prioritized next, added 2026-07-24)
 
@@ -120,8 +120,39 @@ Charts render natively with plotext (braille curves plus real text axes and lege
 
 Cost note: `GetMetricData` and `GetDashboard` bill at $0.01 per 1,000 requests, so a full 28-widget dashboard refresh costs well under a tenth of a cent. Caching metric results is for latency and request-quota headroom, not for saving money. Logs Insights (used by log widgets) stays the one paid path to watch at ~$0.005 per GB scanned, so log-widget queries show a scan estimate before running, same as the M3 rule.
 
+### M5: async AWS I/O over aiobotocore (added 2026-07-25)
+
+Goal: every CloudWatch call is a coroutine, the Textual thread workers become async workers, and a cancelled request stops sending bytes instead of running to completion in a thread we no longer read.
+
+Three problems in the shipped code motivate this, all visible once a dashboard has a few dozen widgets:
+
+- Textual thread workers run on asyncio's default executor (`run_in_executor(None, ...)`, `textual/worker.py:326`), which caps at `min(32, cpu_count + 4)`. On a 12-core machine that is 16 slots shared by every metric panel, log-volume sparkline, Parquet load, and the live tail worker, which holds one slot for the life of a three-hour session. The verified `irm-prod-main` dashboard has 28 metric widgets, so a refresh fetches in two waves
+- `exclusive=True` cancels the worker, not the HTTP request. A debounced dashboard reload or a time-range change abandons the thread mid-`GetMetricData`, so the old request still completes, still bills, and still burns a slot. Async workers cancel the coroutine and close the connection
+- Every AWS function builds its own client (`build_client`, `_create_logs_client`), which re-resolves SSO credentials and opens a fresh connection pool per call. One session-scoped client fixes this and is a prerequisite for the async version, where clients are context managers with real lifetimes
+
+Feasibility was checked before scheduling, and the two things that could have blocked it do not:
+
+- `StartLiveTail` needs an async event stream. `aiobotocore` provides `AioEventStream` with `__aiter__`/`__anext__`, and its `__iter__` raises `NotImplementedError('Use async-for instead')`, so `live_tail.py` becomes `async for chunk in response['responseStream']`
+- SSO with two profiles needs the async credential chain. `aiobotocore` ships `AioSSOProvider` over `AioSSOTokenProvider` and honours `profile_name`, so `sso-session` config resolves the same way
+
+Take `aiobotocore` directly, not `aioboto3`. The project only ever creates clients, so the `boto3`-shaped resource and file-transfer layer that `aioboto3` wraps is unused, and skipping it drops `aioboto3` plus `aiofiles` from the tree. That still adds `aiohttp`, `aioitertools`, `multidict`, and `wrapt`, which is the dependency cost to accept under the AGENTS.md "fewest dependencies" rule.
+
+The standing cost is the version pin. `aiobotocore` 2.25.1 requires `botocore>=1.40.46,<1.40.62`, a sixteen-patch window, and the lock currently sits at 1.40.61. Every new AWS API or region update waits on an `aiobotocore` release, so `boto3>=1.35.0` in the `aws` dependency group gets replaced by a pin that Renovate cannot bump alone.
+
+Deliverables, in order:
+
+1. Session-scoped client, still sync. Build one client per service per session at startup, thread it through `ShellServices`, and delete the per-call `build_client` hops. Land this alone first, because it is the only piece that carries a benefit without the async migration and it defines the seam the rest of the work moves through
+1. Fan-out fix, still sync. Drive the metric panels from one worker over an explicit `ThreadPoolExecutor` instead of 28 `run_worker(thread=True)` calls, so the wave behaviour goes away whether or not the async work lands
+1. Async producers in `tail_cw/aws/`. `fetch_log_events`, `describe_log_groups`, and `stream_live_tail` become `AsyncIterator[...]`; `fetch_metric_data`, `list_dashboards`, and `get_dashboard` become coroutines. The pure translation code (`build_metric_data_queries`, `resolve_group_pattern`, the dashboard parsers, `_live_event_to_log_event`) does not change, which is most of the line count in those modules
+1. Async consumers. The six `run_worker(..., thread=True)` sites become async workers and roughly twenty `call_from_thread` hops disappear, since an async worker already runs on the message loop. The CLI keeps its sync signature with one `asyncio.run` at the dispatch boundary so `--json` NDJSON streaming stays a plain pipe
+1. Tests. The five `tests/test_aws_*.py` modules fake boto clients with `get_paginator` stubs and need async equivalents, plus `anyio` or `pytest-asyncio` as a dev dependency. Annotate async generators as `AsyncIterator[X]` so beartype's exact-annotation checking passes
+
+Client lifetime is the trap to design around. An async client is an `async with` context manager, so an async generator that yields events has to hold the client open across its `yield` and every consumer has to exhaust it or call `aclose()`, or aiohttp logs unclosed-connector warnings. Deliverable 1 avoids most of this by owning the client at the session level instead of inside each generator.
+
 ## Sequencing rationale
 
 M1 before M2 because dev-loop tailing is the daily driver. M2 before M3 because pivot and pattern tools need group discovery to be usable. M4 (dashboards) jumped ahead of M2 and M3 on 2026-07-24 because terminal dashboard insight became the priority, and it needs only the M0 cache and query engine. Each milestone ships CLI + tests green (ruff, mypy, pyright, pytest) before the next starts.
+
+M5 (async I/O) comes after M4 rather than before it, even though M4's 28-panel fan-out is the case that most wants async, because M4's render and interaction code is already built and migrating it now would mean rewriting worker plumbing that works. Its first two deliverables (session-scoped client, explicit executor for the fan-out) stay useful on their own, so they can land during M3 without committing to the dependency pin.
 
 M0 and M1 shipped 2026-07-05. M2 was then elevated from "a groups listing" to navigation-first UX: requiring exact group names is the single largest friction left (it is also the gap every fzf-wrapper workaround exists to paper over), and pattern resolution plus the browser make `tail` and `fetch` usable from a cold start. `DescribeLogGroups` is free, so none of this adds cost pressure.
