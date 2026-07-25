@@ -2,146 +2,198 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://tail-cw.kyleking.me/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/CHANGELOG/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/CODE_TAG_SUMMARY/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/CONFIGURATION/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/DEVELOPER_GUIDE/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/STYLE_GUIDE/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/adr/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/adr/0001-product-scope-and-milestone-sequencing/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/adr/0002-cli-first-layered-architecture/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/adr/0003-parquet-cache-and-local-query-engine/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/adr/0004-live-tail-via-startlivetail/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/adr/0005-dashboards-metrics-and-terminal-charts/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/adr/0006-dashboard-rendering-and-interaction/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/docs/adr/0007-victorialogs-grafana-replacement-evaluation/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/docs/adr/0008-single-interactive-tui/</loc>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/docs/adr/0009-no-in-app-profile-switching/</loc>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/cli/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/demo/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/preview/</loc>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/recents/</loc>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/aws/client/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/aws/dashboards/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/aws/live_tail/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/aws/log_groups/</loc>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/aws/metrics/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/cache/storage/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/charts/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/charts/palette/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/charts/sparkline/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/config/config/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/query/engine/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/query/parser/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/query/patterns/</loc>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/query/trace/</loc>
-         <lastmod>2026-07-24</lastmod>
-    </url>
-    <url>
-         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/app/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/command_bar/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
-         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/dashboard_app/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/dashboard_screen/</loc>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
-         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/log_results/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/dashboards_screen/</loc>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/dive_screen/</loc>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/groups_screen/</loc>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/log_viewer/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/logs_screen/</loc>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/navigation/</loc>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/picker/</loc>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/plot_widget/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/record_detail/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/shell/</loc>
+         <lastmod>2026-07-25</lastmod>
     </url>
     <url>
          <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/trace_viewer/</loc>
-         <lastmod>2026-07-24</lastmod>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/views/</loc>
+         <lastmod>2026-07-25</lastmod>
+    </url>
+    <url>
+         <loc>https://tail-cw.kyleking.me/reference/tail_cw/tui/which_key/</loc>
+         <lastmod>2026-07-25</lastmod>
     </url>
 </urlset>

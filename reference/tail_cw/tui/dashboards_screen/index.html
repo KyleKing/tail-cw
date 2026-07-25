@@ -1,0 +1,3744 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="tail_cw project documentation">
+      
+      
+        <meta name="author" content="Kyle King">
+      
+      
+        <link rel="canonical" href="https://tail-cw.kyleking.me/reference/tail_cw/tui/dashboards_screen/">
+      
+      
+        <link rel="prev" href="../dashboard_screen/">
+      
+      
+        <link rel="next" href="../dive_screen/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Dashboards screen - tail_cw</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../../../_styles/mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="green">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#tail_cw.tui.dashboards_screen" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../../.." title="tail_cw" class="md-header__button md-logo" aria-label="tail_cw" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            tail_cw
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Dashboards screen
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="green"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/kyleking/tail-cw" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    kyleking/tail-cw
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../../.." title="tail_cw" class="md-nav__button md-logo" aria-label="tail_cw" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    tail_cw
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/kyleking/tail-cw" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    kyleking/tail-cw
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    tail-cw
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/CHANGELOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CHANGELOG
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/CODE_TAG_SUMMARY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Collected Code Tags
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/CONFIGURATION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/DEVELOPER_GUIDE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Developer Notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/STYLE_GUIDE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Personal Style Guides
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_6" id="__nav_2_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adr
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Adr
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/adr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Decision Records
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/adr/0001-product-scope-and-milestone-sequencing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0001: Product scope and milestone sequencing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/adr/0002-cli-first-layered-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0002: CLI-first layered architecture with an injected TUI runner
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/adr/0003-parquet-cache-and-local-query-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0003: Local Parquet cache with a dual DuckDB/Polars query engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/adr/0004-live-tail-via-startlivetail/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0004: Live tail via StartLiveTail with a ring-buffered TUI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/adr/0005-dashboards-metrics-and-terminal-charts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0005: Dashboards, metrics, and terminal charts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/adr/0006-dashboard-rendering-and-interaction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0006: Dashboard rendering and interaction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/adr/0007-victorialogs-grafana-replacement-evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0007: VictoriaLogs and Grafana as a replacement candidate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/adr/0008-single-interactive-tui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0008: One interactive TUI instead of four subcommands
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../docs/adr/0009-no-in-app-profile-switching/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0009: No in-app profile switching
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tail cw
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tail cw
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cli
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Demo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../preview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Preview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../recents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Recents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1_5" id="__nav_3_1_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aws
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Aws
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws/client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws/dashboards/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dashboards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws/live_tail/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Live tail
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws/log_groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Log groups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws/metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1_6" id="__nav_3_1_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cache
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Cache
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cache/storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1_7" id="__nav_3_1_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Charts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Charts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../charts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Index
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../charts/palette/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Palette
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../charts/sparkline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sparkline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1_8" id="__nav_3_1_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Config
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1_9" id="__nav_3_1_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Query
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Query
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../query/engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../query/parser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parser
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../query/patterns/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Patterns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../query/trace/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_1_10" id="__nav_3_1_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tui
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_1_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tui
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../command_bar/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command bar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dashboard_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dashboard screen
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dashboards screen
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dashboards screen
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dashboards_screen
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.NO_DETAIL_SERVICE" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NO_DETAIL_SERVICE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.NO_LIST_SERVICE" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NO_LIST_SERVICE
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Classes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Classes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DashboardsScreen
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DashboardsScreen">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.visible_dashboards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        visible_dashboards
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.action_open_dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        action_open_dashboard
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.action_open_filter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        action_open_filter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.action_reload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        action_reload
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.compose_content" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compose_content
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.highlighted_dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        highlighted_dashboard
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.nav_siblings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nav_siblings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.on_mount" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_mount
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.refresh_view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        refresh_view
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.restore_focus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        restore_focus
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.run_view_command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_view_command
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.render_dashboard_detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        render_dashboard_detail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.widget_label" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        widget_label
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dive_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dive screen
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../groups_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Groups screen
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../log_viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Log viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../logs_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logs screen
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Navigation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../picker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Picker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plot_widget/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plot widget
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../record_detail/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Record detail
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shell/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shell
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../trace_viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Views
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../which_key/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Which key
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dashboards_screen
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.NO_DETAIL_SERVICE" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NO_DETAIL_SERVICE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.NO_LIST_SERVICE" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NO_LIST_SERVICE
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Classes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Classes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DashboardsScreen
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DashboardsScreen">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.visible_dashboards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        visible_dashboards
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.action_open_dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        action_open_dashboard
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.action_open_filter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        action_open_filter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.action_reload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        action_reload
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.compose_content" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compose_content
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.highlighted_dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        highlighted_dashboard
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.nav_siblings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nav_siblings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.on_mount" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_mount
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.refresh_view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        refresh_view
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.restore_focus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        restore_focus
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.run_view_command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_view_command
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.render_dashboard_detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        render_dashboard_detail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.tui.dashboards_screen.widget_label" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        widget_label
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+  <h1>Dashboards screen</h1>
+
+<div class="doc doc-object doc-module">
+
+
+
+<a id="tail_cw.tui.dashboards_screen"></a>
+    <div class="doc doc-contents first">
+
+        <p>The dashboard browser: pick a dashboard by what is on it, not by its name.</p>
+<p>Same list-and-detail shape as the group browser. The pane on the right lists the
+highlighted dashboard&rsquo;s widget titles so the choice is made before a full fetch
+and render.</p>
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+<h2 id="tail_cw.tui.dashboards_screen-attributes">Attributes<a href="#tail_cw.tui.dashboards_screen-attributes" class="headerlink" title="Permanent link">⚓︎</a></h2>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="tail_cw.tui.dashboards_screen.NO_DETAIL_SERVICE" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">NO_DETAIL_SERVICE</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#tail_cw.tui.dashboards_screen.NO_DETAIL_SERVICE" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">NO_DETAIL_SERVICE</span> <span class="o">=</span> <span class="s1">&#39;No dashboard body available. Start tail-cw with AWS credentials to preview widgets.&#39;</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Shown in place of the detail pane when no loading service is wired.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="tail_cw.tui.dashboards_screen.NO_LIST_SERVICE" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">NO_LIST_SERVICE</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#tail_cw.tui.dashboards_screen.NO_LIST_SERVICE" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">NO_LIST_SERVICE</span> <span class="o">=</span> <span class="s1">&#39;No dashboard listing available. Start tail-cw with AWS credentials to browse dashboards.&#39;</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Shown in place of the list when no listing service is wired.</p>
+
+    </div>
+
+</div>
+
+<h2 id="tail_cw.tui.dashboards_screen-classes">Classes<a href="#tail_cw.tui.dashboards_screen-classes" class="headerlink" title="Permanent link">⚓︎</a></h2>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="tail_cw.tui.dashboards_screen.DashboardsScreen" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">DashboardsScreen</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen" class="headerlink" title="Permanent link">⚓︎</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="ShellScreen (tail_cw.tui.shell.ShellScreen)" href="../shell/#tail_cw.tui.shell.ShellScreen">ShellScreen</a></code></p>
+
+
+        <p>Browse the account&rsquo;s dashboards and open one.</p>
+
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos=" 84 "></span><span class="k">class</span><span class="w"> </span><span class="nc">DashboardsScreen</span><span class="p">(</span><span class="n">ShellScreen</span><span class="p">):</span>
+<span class="linenos" data-linenos=" 85 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Browse the account&#39;s dashboards and open one.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos=" 86 "></span>
+<span class="linenos" data-linenos=" 87 "></span>    <span class="n">BINDINGS</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">Binding</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[</span>
+<span class="linenos" data-linenos=" 88 "></span>        <span class="n">Binding</span><span class="p">(</span><span class="s1">&#39;slash&#39;</span><span class="p">,</span> <span class="s1">&#39;open_filter&#39;</span><span class="p">,</span> <span class="s1">&#39;Filter&#39;</span><span class="p">,</span> <span class="n">key_display</span><span class="o">=</span><span class="s1">&#39;/&#39;</span><span class="p">),</span>
+<span class="linenos" data-linenos=" 89 "></span>        <span class="n">Binding</span><span class="p">(</span><span class="s1">&#39;enter&#39;</span><span class="p">,</span> <span class="s1">&#39;open_dashboard&#39;</span><span class="p">,</span> <span class="s1">&#39;Open dashboard&#39;</span><span class="p">),</span>
+<span class="linenos" data-linenos=" 90 "></span>        <span class="n">Binding</span><span class="p">(</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="s1">&#39;reload&#39;</span><span class="p">,</span> <span class="s1">&#39;Reload&#39;</span><span class="p">),</span>
+<span class="linenos" data-linenos=" 91 "></span>    <span class="p">]</span>
+<span class="linenos" data-linenos=" 92 "></span>
+<span class="linenos" data-linenos=" 93 "></span>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">debounce_seconds</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEBOUNCE_SECONDS</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos=" 94 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Start empty; everything comes off the shell once mounted.</span>
+<span class="linenos" data-linenos=" 95 "></span>
+<span class="linenos" data-linenos=" 96 "></span><span class="sd">        ``debounce_seconds`` exists so tests can make the detail timer</span>
+<span class="linenos" data-linenos=" 97 "></span><span class="sd">        deterministic; the shell always takes the default.</span>
+<span class="linenos" data-linenos=" 98 "></span><span class="sd">        &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos=" 99 "></span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<span class="linenos" data-linenos="100 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_debounce_seconds</span> <span class="o">=</span> <span class="n">debounce_seconds</span>
+<span class="linenos" data-linenos="101 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">DashboardSummary</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="102 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_visible</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">DashboardSummary</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="103 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_bodies</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dashboard</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="linenos" data-linenos="104 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_detail_debounce</span><span class="p">:</span> <span class="n">Debounce</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="105 "></span>
+<span class="linenos" data-linenos="106 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">compose_content</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposeResult</span><span class="p">:</span>  <span class="c1"># noqa: PLR6301</span>
+<span class="linenos" data-linenos="107 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield the list-and-detail picker.</span>
+<span class="linenos" data-linenos="108 "></span>
+<span class="linenos" data-linenos="109 "></span><span class="sd">        Yields:</span>
+<span class="linenos" data-linenos="110 "></span><span class="sd">            One Picker over the dashboard columns.</span>
+<span class="linenos" data-linenos="111 "></span><span class="sd">        &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="112 "></span>        <span class="k">yield</span> <span class="n">Picker</span><span class="p">(</span><span class="n">_COLUMNS</span><span class="p">,</span> <span class="n">placeholder</span><span class="o">=</span><span class="s1">&#39;/ filter dashboards (Enter keeps, Esc clears)&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="113 "></span>
+<span class="linenos" data-linenos="114 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">on_mount</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="115 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Draw the breadcrumb, focus the table, and load the list.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="116 "></span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_mount</span><span class="p">()</span>
+<span class="linenos" data-linenos="117 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_detail_debounce</span> <span class="o">=</span> <span class="n">Debounce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_debounce_seconds</span><span class="p">)</span>
+<span class="linenos" data-linenos="118 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">restore_focus</span><span class="p">()</span>
+<span class="linenos" data-linenos="119 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_load_dashboards</span><span class="p">()</span>
+<span class="linenos" data-linenos="120 "></span>
+<span class="linenos" data-linenos="121 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">commands</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ShellCommand</span><span class="p">]:</span>  <span class="c1"># noqa: PLR6301</span>
+<span class="linenos" data-linenos="122 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Add the dashboard-browser commands to the shared set.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="123 "></span>        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;reload&#39;</span><span class="p">:</span> <span class="n">ShellCommand</span><span class="p">(</span><span class="s1">&#39;Re-read the dashboard list&#39;</span><span class="p">)}</span>
+<span class="linenos" data-linenos="124 "></span>
+<span class="linenos" data-linenos="125 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">run_view_command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="linenos" data-linenos="126 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Handle the dashboard-browser commands, reporting whether one matched.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="127 "></span>        <span class="k">del</span> <span class="n">argument</span>
+<span class="linenos" data-linenos="128 "></span>        <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s1">&#39;reload&#39;</span><span class="p">:</span>
+<span class="linenos" data-linenos="129 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">action_reload</span><span class="p">()</span>
+<span class="linenos" data-linenos="130 "></span>            <span class="k">return</span> <span class="kc">True</span>
+<span class="linenos" data-linenos="131 "></span>        <span class="k">return</span> <span class="kc">False</span>
+<span class="linenos" data-linenos="132 "></span>
+<span class="linenos" data-linenos="133 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">nav_siblings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NavTarget</span><span class="p">]:</span>
+<span class="linenos" data-linenos="134 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Cycle the dashboards this view knows about.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="135 "></span>        <span class="k">return</span> <span class="p">[</span>
+<span class="linenos" data-linenos="136 "></span>            <span class="n">NavTarget</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="n">ViewKind</span><span class="o">.</span><span class="n">DASHBOARD</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">summary</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">payload</span><span class="o">=</span><span class="p">(</span><span class="n">summary</span><span class="o">.</span><span class="n">name</span><span class="p">,))</span>
+<span class="linenos" data-linenos="137 "></span>            <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span>
+<span class="linenos" data-linenos="138 "></span>        <span class="p">]</span>
+<span class="linenos" data-linenos="139 "></span>
+<span class="linenos" data-linenos="140 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">refresh_view</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="141 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Nothing here follows the window, so only the detail pane is redrawn.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="142 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_request_detail</span><span class="p">()</span>
+<span class="linenos" data-linenos="143 "></span>
+<span class="linenos" data-linenos="144 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">restore_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="145 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Put the cursor back on the table so the view&#39;s keys work.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="146 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">focus</span><span class="p">()</span>
+<span class="linenos" data-linenos="147 "></span>
+<span class="linenos" data-linenos="148 "></span>    <span class="nd">@property</span>
+<span class="linenos" data-linenos="149 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_picker</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Picker</span><span class="p">:</span>
+<span class="linenos" data-linenos="150 "></span>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_one</span><span class="p">(</span><span class="n">Picker</span><span class="p">)</span>
+<span class="linenos" data-linenos="151 "></span>
+<span class="linenos" data-linenos="152 "></span>    <span class="nd">@property</span>
+<span class="linenos" data-linenos="153 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">visible_dashboards</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="linenos" data-linenos="154 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;The dashboard names the current filter leaves visible.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="155 "></span>        <span class="k">return</span> <span class="p">[</span><span class="n">summary</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_visible</span><span class="p">]</span>
+<span class="linenos" data-linenos="156 "></span>
+<span class="linenos" data-linenos="157 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">highlighted_dashboard</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="158 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;The dashboard under the cursor, or None when the list is empty.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="159 "></span>        <span class="n">row</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">cursor_row</span>
+<span class="linenos" data-linenos="160 "></span>        <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">row</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_visible</span><span class="p">):</span>
+<span class="linenos" data-linenos="161 "></span>            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_visible</span><span class="p">[</span><span class="n">row</span><span class="p">]</span><span class="o">.</span><span class="n">name</span>
+<span class="linenos" data-linenos="162 "></span>        <span class="k">return</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="163 "></span>
+<span class="linenos" data-linenos="164 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">action_open_filter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="165 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Open the ``/`` filter box.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="166 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">open_filter</span><span class="p">()</span>
+<span class="linenos" data-linenos="167 "></span>
+<span class="linenos" data-linenos="168 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">action_open_dashboard</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="169 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Open the highlighted dashboard.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="170 "></span>        <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">highlighted_dashboard</span><span class="p">()</span>
+<span class="linenos" data-linenos="171 "></span>        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="172 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">notify</span><span class="p">(</span><span class="s1">&#39;No dashboard to open&#39;</span><span class="p">,</span> <span class="n">severity</span><span class="o">=</span><span class="s1">&#39;warning&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="173 "></span>            <span class="k">return</span>
+<span class="linenos" data-linenos="174 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">goto</span><span class="p">(</span><span class="n">NavTarget</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="n">ViewKind</span><span class="o">.</span><span class="n">DASHBOARD</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">payload</span><span class="o">=</span><span class="p">(</span><span class="n">name</span><span class="p">,)))</span>
+<span class="linenos" data-linenos="175 "></span>
+<span class="linenos" data-linenos="176 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">action_reload</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="177 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Re-read the dashboard list from AWS.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="178 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="179 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_load_dashboards</span><span class="p">()</span>
+<span class="linenos" data-linenos="180 "></span>
+<span class="linenos" data-linenos="181 "></span>    <span class="nd">@on</span><span class="p">(</span><span class="n">DataTable</span><span class="o">.</span><span class="n">RowHighlighted</span><span class="p">,</span> <span class="s1">&#39;#picker_table&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="182 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_on_row_highlighted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">DataTable</span><span class="o">.</span><span class="n">RowHighlighted</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="183 "></span>        <span class="n">event</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="linenos" data-linenos="184 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_request_detail</span><span class="p">()</span>
+<span class="linenos" data-linenos="185 "></span>
+<span class="linenos" data-linenos="186 "></span>    <span class="nd">@on</span><span class="p">(</span><span class="n">DataTable</span><span class="o">.</span><span class="n">RowSelected</span><span class="p">,</span> <span class="s1">&#39;#picker_table&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="187 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_on_row_selected</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">DataTable</span><span class="o">.</span><span class="n">RowSelected</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="188 "></span>        <span class="n">event</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="linenos" data-linenos="189 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">action_open_dashboard</span><span class="p">()</span>
+<span class="linenos" data-linenos="190 "></span>
+<span class="linenos" data-linenos="191 "></span>    <span class="nd">@on</span><span class="p">(</span><span class="n">Input</span><span class="o">.</span><span class="n">Changed</span><span class="p">,</span> <span class="s1">&#39;#picker_filter&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="192 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_on_filter_changed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">Input</span><span class="o">.</span><span class="n">Changed</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="193 "></span>        <span class="n">event</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="linenos" data-linenos="194 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_filter</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+<span class="linenos" data-linenos="195 "></span>
+<span class="linenos" data-linenos="196 "></span>    <span class="nd">@on</span><span class="p">(</span><span class="n">Input</span><span class="o">.</span><span class="n">Submitted</span><span class="p">,</span> <span class="s1">&#39;#picker_filter&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="197 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_on_filter_submitted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">Input</span><span class="o">.</span><span class="n">Submitted</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="198 "></span>        <span class="n">event</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="linenos" data-linenos="199 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">filter_input</span><span class="o">.</span><span class="n">display</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="linenos" data-linenos="200 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">restore_focus</span><span class="p">()</span>
+<span class="linenos" data-linenos="201 "></span>
+<span class="linenos" data-linenos="202 "></span>    <span class="nd">@on</span><span class="p">(</span><span class="n">FilterInput</span><span class="o">.</span><span class="n">Cancelled</span><span class="p">)</span>
+<span class="linenos" data-linenos="203 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_on_filter_cancelled</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">FilterInput</span><span class="o">.</span><span class="n">Cancelled</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="204 "></span>        <span class="n">event</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="linenos" data-linenos="205 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">filter_input</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+<span class="linenos" data-linenos="206 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">close_filter</span><span class="p">()</span>
+<span class="linenos" data-linenos="207 "></span>
+<span class="linenos" data-linenos="208 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_load_dashboards</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="209 "></span>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">services</span><span class="o">.</span><span class="n">list_dashboards</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="210 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">show_detail</span><span class="p">(</span><span class="n">NO_LIST_SERVICE</span><span class="p">)</span>
+<span class="linenos" data-linenos="211 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">set_status</span><span class="p">(</span><span class="n">NO_LIST_SERVICE</span><span class="p">)</span>
+<span class="linenos" data-linenos="212 "></span>            <span class="k">return</span>
+<span class="linenos" data-linenos="213 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">run_worker</span><span class="p">(</span>
+<span class="linenos" data-linenos="214 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_dashboards</span><span class="p">,</span>
+<span class="linenos" data-linenos="215 "></span>            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;list_dashboards&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="216 "></span>            <span class="n">group</span><span class="o">=</span><span class="s1">&#39;list_dashboards&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="217 "></span>            <span class="n">exclusive</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="linenos" data-linenos="218 "></span>            <span class="n">thread</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="linenos" data-linenos="219 "></span>        <span class="p">)</span>
+<span class="linenos" data-linenos="220 "></span>
+<span class="linenos" data-linenos="221 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_fetch_dashboards</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="222 "></span>        <span class="n">list_dashboards</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">services</span><span class="o">.</span><span class="n">list_dashboards</span>
+<span class="linenos" data-linenos="223 "></span>        <span class="k">if</span> <span class="n">list_dashboards</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># pragma: no cover - guarded by the caller</span>
+<span class="linenos" data-linenos="224 "></span>            <span class="k">return</span>
+<span class="linenos" data-linenos="225 "></span>        <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="226 "></span>            <span class="n">summaries</span> <span class="o">=</span> <span class="n">list_dashboards</span><span class="p">()</span>
+<span class="linenos" data-linenos="227 "></span>        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+<span class="linenos" data-linenos="228 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">call_from_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">notify</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;Listing dashboards failed: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">severity</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="229 "></span>            <span class="k">return</span>
+<span class="linenos" data-linenos="230 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">call_from_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_apply_dashboards</span><span class="p">,</span> <span class="n">summaries</span><span class="p">)</span>
+<span class="linenos" data-linenos="231 "></span>
+<span class="linenos" data-linenos="232 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_dashboards</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">summaries</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">DashboardSummary</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="233 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span> <span class="o">=</span> <span class="n">summaries</span>
+<span class="linenos" data-linenos="234 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">dashboard_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">summary</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="n">summaries</span><span class="p">]</span>
+<span class="linenos" data-linenos="235 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_filter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">filter_value</span><span class="p">)</span>
+<span class="linenos" data-linenos="236 "></span>
+<span class="linenos" data-linenos="237 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_filter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pattern</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="238 "></span>        <span class="n">kept</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">resolve_name_pattern</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="p">[</span><span class="n">summary</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span><span class="p">]))</span>
+<span class="linenos" data-linenos="239 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_visible</span> <span class="o">=</span> <span class="p">[</span><span class="n">summary</span> <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span> <span class="k">if</span> <span class="n">summary</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="n">kept</span><span class="p">]</span>
+<span class="linenos" data-linenos="240 "></span>        <span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">table</span>
+<span class="linenos" data-linenos="241 "></span>        <span class="n">table</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+<span class="linenos" data-linenos="242 "></span>        <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_visible</span><span class="p">:</span>
+<span class="linenos" data-linenos="243 "></span>            <span class="n">table</span><span class="o">.</span><span class="n">add_row</span><span class="p">(</span><span class="n">summary</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">humanize_bytes</span><span class="p">(</span><span class="n">summary</span><span class="o">.</span><span class="n">size</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="n">summary</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+<span class="linenos" data-linenos="244 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">set_status</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_visible</span><span class="p">)</span><span class="si">}</span><span class="s1"> of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span><span class="p">)</span><span class="si">}</span><span class="s1"> dashboards&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="245 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_request_detail</span><span class="p">()</span>
+<span class="linenos" data-linenos="246 "></span>
+<span class="linenos" data-linenos="247 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_request_detail</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="248 "></span>        <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">highlighted_dashboard</span><span class="p">()</span>
+<span class="linenos" data-linenos="249 "></span>        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="250 "></span>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span><span class="p">:</span>
+<span class="linenos" data-linenos="251 "></span>                <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">show_detail</span><span class="p">(</span><span class="s1">&#39;No dashboard matches this filter&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="252 "></span>            <span class="k">return</span>
+<span class="linenos" data-linenos="253 "></span>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">services</span><span class="o">.</span><span class="n">load_dashboard</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="254 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">show_detail</span><span class="p">(</span><span class="n">NO_DETAIL_SERVICE</span><span class="p">)</span>
+<span class="linenos" data-linenos="255 "></span>            <span class="k">return</span>
+<span class="linenos" data-linenos="256 "></span>        <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bodies</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+<span class="linenos" data-linenos="257 "></span>        <span class="k">if</span> <span class="n">cached</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="258 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">show_detail</span><span class="p">(</span><span class="n">render_dashboard_detail</span><span class="p">(</span><span class="n">cached</span><span class="p">))</span>
+<span class="linenos" data-linenos="259 "></span>            <span class="k">return</span>
+<span class="linenos" data-linenos="260 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">show_detail</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Loading </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1">...&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="261 "></span>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_detail_debounce</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="262 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">_detail_debounce</span><span class="o">.</span><span class="n">schedule</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start_detail</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+<span class="linenos" data-linenos="263 "></span>
+<span class="linenos" data-linenos="264 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_start_detail</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="265 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">run_worker</span><span class="p">(</span>
+<span class="linenos" data-linenos="266 "></span>            <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_detail</span><span class="p">(</span><span class="n">name</span><span class="p">),</span>
+<span class="linenos" data-linenos="267 "></span>            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;load_dashboard&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="268 "></span>            <span class="n">group</span><span class="o">=</span><span class="s1">&#39;load_dashboard&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="269 "></span>            <span class="n">exclusive</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="linenos" data-linenos="270 "></span>            <span class="n">thread</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="linenos" data-linenos="271 "></span>        <span class="p">)</span>
+<span class="linenos" data-linenos="272 "></span>
+<span class="linenos" data-linenos="273 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_fetch_detail</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="274 "></span>        <span class="n">load_dashboard</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">services</span><span class="o">.</span><span class="n">load_dashboard</span>
+<span class="linenos" data-linenos="275 "></span>        <span class="k">if</span> <span class="n">load_dashboard</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># pragma: no cover - guarded by the caller</span>
+<span class="linenos" data-linenos="276 "></span>            <span class="k">return</span>
+<span class="linenos" data-linenos="277 "></span>        <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="278 "></span>            <span class="n">dashboard</span> <span class="o">=</span> <span class="n">load_dashboard</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+<span class="linenos" data-linenos="279 "></span>        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+<span class="linenos" data-linenos="280 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">call_from_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">notify</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;Loading </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1"> failed: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">severity</span><span class="o">=</span><span class="s1">&#39;warning&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="281 "></span>            <span class="k">return</span>
+<span class="linenos" data-linenos="282 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">call_from_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_apply_detail</span><span class="p">,</span> <span class="n">dashboard</span><span class="p">)</span>
+<span class="linenos" data-linenos="283 "></span>
+<span class="linenos" data-linenos="284 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_detail</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dashboard</span><span class="p">:</span> <span class="n">Dashboard</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="285 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">_bodies</span><span class="p">[</span><span class="n">dashboard</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">dashboard</span>
+<span class="linenos" data-linenos="286 "></span>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">highlighted_dashboard</span><span class="p">()</span> <span class="o">==</span> <span class="n">dashboard</span><span class="o">.</span><span class="n">name</span><span class="p">:</span>
+<span class="linenos" data-linenos="287 "></span>            <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">show_detail</span><span class="p">(</span><span class="n">render_dashboard_detail</span><span class="p">(</span><span class="n">dashboard</span><span class="p">))</span>
+</code></pre></div>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+<h4 id="tail_cw.tui.dashboards_screen.DashboardsScreen-attributes">Attributes<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen-attributes" class="headerlink" title="Permanent link">⚓︎</a></h4>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.visible_dashboards" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">visible_dashboards</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.visible_dashboards" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">visible_dashboards</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The dashboard names the current filter leaves visible.</p>
+
+    </div>
+
+</div>
+
+
+<h4 id="tail_cw.tui.dashboards_screen.DashboardsScreen-functions">Functions<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen-functions" class="headerlink" title="Permanent link">⚓︎</a></h4>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.__init__" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">__init__</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.__init__" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">__init__</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">debounce_seconds</span><span class="o">=</span><span class="n">DEBOUNCE_SECONDS</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Start empty; everything comes off the shell once mounted.</p>
+<p><code>debounce_seconds</code> exists so tests can make the detail timer
+deterministic; the shell always takes the default.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos=" 93 "></span><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">debounce_seconds</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEBOUNCE_SECONDS</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos=" 94 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Start empty; everything comes off the shell once mounted.</span>
+<span class="linenos" data-linenos=" 95 "></span>
+<span class="linenos" data-linenos=" 96 "></span><span class="sd">    ``debounce_seconds`` exists so tests can make the detail timer</span>
+<span class="linenos" data-linenos=" 97 "></span><span class="sd">    deterministic; the shell always takes the default.</span>
+<span class="linenos" data-linenos=" 98 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos=" 99 "></span>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<span class="linenos" data-linenos="100 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_debounce_seconds</span> <span class="o">=</span> <span class="n">debounce_seconds</span>
+<span class="linenos" data-linenos="101 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">DashboardSummary</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="102 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_visible</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">DashboardSummary</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="103 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_bodies</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dashboard</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="linenos" data-linenos="104 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_detail_debounce</span><span class="p">:</span> <span class="n">Debounce</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.action_open_dashboard" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">action_open_dashboard</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.action_open_dashboard" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">action_open_dashboard</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Open the highlighted dashboard.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="168 "></span><span class="k">def</span><span class="w"> </span><span class="nf">action_open_dashboard</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="169 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Open the highlighted dashboard.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="170 "></span>    <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">highlighted_dashboard</span><span class="p">()</span>
+<span class="linenos" data-linenos="171 "></span>    <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="172 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">notify</span><span class="p">(</span><span class="s1">&#39;No dashboard to open&#39;</span><span class="p">,</span> <span class="n">severity</span><span class="o">=</span><span class="s1">&#39;warning&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="173 "></span>        <span class="k">return</span>
+<span class="linenos" data-linenos="174 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">shell</span><span class="o">.</span><span class="n">goto</span><span class="p">(</span><span class="n">NavTarget</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="n">ViewKind</span><span class="o">.</span><span class="n">DASHBOARD</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">payload</span><span class="o">=</span><span class="p">(</span><span class="n">name</span><span class="p">,)))</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.action_open_filter" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">action_open_filter</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.action_open_filter" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">action_open_filter</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Open the <code>/</code> filter box.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="164 "></span><span class="k">def</span><span class="w"> </span><span class="nf">action_open_filter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="165 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Open the ``/`` filter box.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="166 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">open_filter</span><span class="p">()</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.action_reload" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">action_reload</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.action_reload" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">action_reload</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Re-read the dashboard list from AWS.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="176 "></span><span class="k">def</span><span class="w"> </span><span class="nf">action_reload</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="177 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Re-read the dashboard list from AWS.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="178 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="179 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_load_dashboards</span><span class="p">()</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.commands" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">commands</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.commands" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">commands</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Add the dashboard-browser commands to the shared set.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="121 "></span><span class="k">def</span><span class="w"> </span><span class="nf">commands</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ShellCommand</span><span class="p">]:</span>  <span class="c1"># noqa: PLR6301</span>
+<span class="linenos" data-linenos="122 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Add the dashboard-browser commands to the shared set.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="123 "></span>    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;reload&#39;</span><span class="p">:</span> <span class="n">ShellCommand</span><span class="p">(</span><span class="s1">&#39;Re-read the dashboard list&#39;</span><span class="p">)}</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.compose_content" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">compose_content</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.compose_content" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">compose_content</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Yield the list-and-detail picker.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">YIELDS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-yields-annotation">
+                    <code><span title="textual.app.ComposeResult">ComposeResult</span></code>
+                </span>
+            </td>
+            <td class="doc-yields-details">
+              <div class="doc-md-description">
+                <p>One Picker over the dashboard columns.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="106 "></span><span class="k">def</span><span class="w"> </span><span class="nf">compose_content</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposeResult</span><span class="p">:</span>  <span class="c1"># noqa: PLR6301</span>
+<span class="linenos" data-linenos="107 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Yield the list-and-detail picker.</span>
+<span class="linenos" data-linenos="108 "></span>
+<span class="linenos" data-linenos="109 "></span><span class="sd">    Yields:</span>
+<span class="linenos" data-linenos="110 "></span><span class="sd">        One Picker over the dashboard columns.</span>
+<span class="linenos" data-linenos="111 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="112 "></span>    <span class="k">yield</span> <span class="n">Picker</span><span class="p">(</span><span class="n">_COLUMNS</span><span class="p">,</span> <span class="n">placeholder</span><span class="o">=</span><span class="s1">&#39;/ filter dashboards (Enter keeps, Esc clears)&#39;</span><span class="p">)</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.highlighted_dashboard" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">highlighted_dashboard</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.highlighted_dashboard" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">highlighted_dashboard</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The dashboard under the cursor, or None when the list is empty.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="157 "></span><span class="k">def</span><span class="w"> </span><span class="nf">highlighted_dashboard</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="158 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;The dashboard under the cursor, or None when the list is empty.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="159 "></span>    <span class="n">row</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">cursor_row</span>
+<span class="linenos" data-linenos="160 "></span>    <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">row</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_visible</span><span class="p">):</span>
+<span class="linenos" data-linenos="161 "></span>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_visible</span><span class="p">[</span><span class="n">row</span><span class="p">]</span><span class="o">.</span><span class="n">name</span>
+<span class="linenos" data-linenos="162 "></span>    <span class="k">return</span> <span class="kc">None</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.nav_siblings" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">nav_siblings</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.nav_siblings" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">nav_siblings</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Cycle the dashboards this view knows about.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="133 "></span><span class="k">def</span><span class="w"> </span><span class="nf">nav_siblings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NavTarget</span><span class="p">]:</span>
+<span class="linenos" data-linenos="134 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Cycle the dashboards this view knows about.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="135 "></span>    <span class="k">return</span> <span class="p">[</span>
+<span class="linenos" data-linenos="136 "></span>        <span class="n">NavTarget</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="n">ViewKind</span><span class="o">.</span><span class="n">DASHBOARD</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">summary</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">payload</span><span class="o">=</span><span class="p">(</span><span class="n">summary</span><span class="o">.</span><span class="n">name</span><span class="p">,))</span>
+<span class="linenos" data-linenos="137 "></span>        <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summaries</span>
+<span class="linenos" data-linenos="138 "></span>    <span class="p">]</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.on_mount" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">on_mount</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.on_mount" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">on_mount</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Draw the breadcrumb, focus the table, and load the list.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="114 "></span><span class="k">def</span><span class="w"> </span><span class="nf">on_mount</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="115 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Draw the breadcrumb, focus the table, and load the list.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="116 "></span>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_mount</span><span class="p">()</span>
+<span class="linenos" data-linenos="117 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_detail_debounce</span> <span class="o">=</span> <span class="n">Debounce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_debounce_seconds</span><span class="p">)</span>
+<span class="linenos" data-linenos="118 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">restore_focus</span><span class="p">()</span>
+<span class="linenos" data-linenos="119 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_load_dashboards</span><span class="p">()</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.refresh_view" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">refresh_view</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.refresh_view" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">refresh_view</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Nothing here follows the window, so only the detail pane is redrawn.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="140 "></span><span class="k">def</span><span class="w"> </span><span class="nf">refresh_view</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="141 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Nothing here follows the window, so only the detail pane is redrawn.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="142 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_request_detail</span><span class="p">()</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.restore_focus" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">restore_focus</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.restore_focus" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">restore_focus</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Put the cursor back on the table so the view&rsquo;s keys work.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="144 "></span><span class="k">def</span><span class="w"> </span><span class="nf">restore_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="145 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Put the cursor back on the table so the view&#39;s keys work.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="146 "></span>    <span class="bp">self</span><span class="o">.</span><span class="n">_picker</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">focus</span><span class="p">()</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.tui.dashboards_screen.DashboardsScreen.run_view_command" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_view_command</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.DashboardsScreen.run_view_command" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_view_command</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">argument</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Handle the dashboard-browser commands, reporting whether one matched.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="125 "></span><span class="k">def</span><span class="w"> </span><span class="nf">run_view_command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="linenos" data-linenos="126 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Handle the dashboard-browser commands, reporting whether one matched.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="127 "></span>    <span class="k">del</span> <span class="n">argument</span>
+<span class="linenos" data-linenos="128 "></span>    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s1">&#39;reload&#39;</span><span class="p">:</span>
+<span class="linenos" data-linenos="129 "></span>        <span class="bp">self</span><span class="o">.</span><span class="n">action_reload</span><span class="p">()</span>
+<span class="linenos" data-linenos="130 "></span>        <span class="k">return</span> <span class="kc">True</span>
+<span class="linenos" data-linenos="131 "></span>    <span class="k">return</span> <span class="kc">False</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+<h2 id="tail_cw.tui.dashboards_screen-functions">Functions<a href="#tail_cw.tui.dashboards_screen-functions" class="headerlink" title="Permanent link">⚓︎</a></h2>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.tui.dashboards_screen.render_dashboard_detail" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">render_dashboard_detail</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.render_dashboard_detail" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">render_dashboard_detail</span><span class="p">(</span><span class="n">dashboard</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Render a dashboard as its name, widget count, and one line per widget.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="69 "></span><span class="k">def</span><span class="w"> </span><span class="nf">render_dashboard_detail</span><span class="p">(</span><span class="n">dashboard</span><span class="p">:</span> <span class="n">Dashboard</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Text</span><span class="p">:</span>
+<span class="linenos" data-linenos="70 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Render a dashboard as its name, widget count, and one line per widget.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="71 "></span>    <span class="n">body</span> <span class="o">=</span> <span class="n">Text</span><span class="p">()</span>
+<span class="linenos" data-linenos="72 "></span>    <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dashboard</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="73 "></span>    <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="se">\n</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">dashboard</span><span class="o">.</span><span class="n">widgets</span><span class="p">)</span><span class="si">}</span><span class="s1"> widgets</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s1">&#39;dim&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="74 "></span>    <span class="k">if</span> <span class="ow">not</span> <span class="n">dashboard</span><span class="o">.</span><span class="n">widgets</span><span class="p">:</span>
+<span class="linenos" data-linenos="75 "></span>        <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">This dashboard has no widgets&#39;</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s1">&#39;dim italic&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="76 "></span>        <span class="k">return</span> <span class="n">body</span>
+<span class="linenos" data-linenos="77 "></span>    <span class="k">for</span> <span class="n">widget</span> <span class="ow">in</span> <span class="n">dashboard</span><span class="o">.</span><span class="n">widgets</span><span class="p">:</span>
+<span class="linenos" data-linenos="78 "></span>        <span class="n">kind</span><span class="p">,</span> <span class="n">title</span> <span class="o">=</span> <span class="n">widget_label</span><span class="p">(</span><span class="n">widget</span><span class="p">)</span>
+<span class="linenos" data-linenos="79 "></span>        <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="se">\n</span><span class="si">{</span><span class="n">kind</span><span class="si">:</span><span class="s1">&gt;12</span><span class="si">}</span><span class="s1">  &#39;</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="s1">&#39;dim&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="80 "></span>        <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">title</span><span class="p">)</span>
+<span class="linenos" data-linenos="81 "></span>    <span class="k">return</span> <span class="n">body</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.tui.dashboards_screen.widget_label" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">widget_label</span>
+
+
+<a href="#tail_cw.tui.dashboards_screen.widget_label" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">widget_label</span><span class="p">(</span><span class="n">widget</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Describe a widget as a <code>(kind, title)</code> pair for the detail pane.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/tui/dashboards_screen.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="53 "></span><span class="k">def</span><span class="w"> </span><span class="nf">widget_label</span><span class="p">(</span><span class="n">widget</span><span class="p">:</span> <span class="n">Widget</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="linenos" data-linenos="54 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Describe a widget as a ``(kind, title)`` pair for the detail pane.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="55 "></span>    <span class="k">match</span> <span class="n">widget</span><span class="p">:</span>
+<span class="linenos" data-linenos="56 "></span>        <span class="k">case</span> <span class="n">MetricWidget</span><span class="p">():</span>
+<span class="linenos" data-linenos="57 "></span>            <span class="k">return</span> <span class="p">(</span><span class="n">widget</span><span class="o">.</span><span class="n">view</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">title</span> <span class="ow">or</span> <span class="s1">&#39;untitled metric&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="58 "></span>        <span class="k">case</span> <span class="n">LogWidget</span><span class="p">():</span>
+<span class="linenos" data-linenos="59 "></span>            <span class="k">return</span> <span class="p">(</span><span class="s1">&#39;logs&#39;</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">title</span> <span class="ow">or</span> <span class="s1">&#39;untitled query&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="60 "></span>        <span class="k">case</span> <span class="n">AlarmWidget</span><span class="p">():</span>
+<span class="linenos" data-linenos="61 "></span>            <span class="k">return</span> <span class="p">(</span><span class="s1">&#39;alarm&#39;</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">title</span> <span class="ow">or</span> <span class="s1">&#39;untitled alarm&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="62 "></span>        <span class="k">case</span> <span class="n">TextWidget</span><span class="p">():</span>
+<span class="linenos" data-linenos="63 "></span>            <span class="n">first</span> <span class="o">=</span> <span class="nb">next</span><span class="p">((</span><span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s1">&#39; #&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">widget</span><span class="o">.</span><span class="n">markdown</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span> <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()),</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="64 "></span>            <span class="k">return</span> <span class="p">(</span><span class="s1">&#39;text&#39;</span><span class="p">,</span> <span class="n">first</span> <span class="ow">or</span> <span class="s1">&#39;empty text&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="65 "></span>        <span class="k">case</span> <span class="n">UnknownWidget</span><span class="p">():</span>
+<span class="linenos" data-linenos="66 "></span>            <span class="k">return</span> <span class="p">(</span><span class="n">widget</span><span class="o">.</span><span class="n">widget_type</span><span class="p">,</span> <span class="s1">&#39;unsupported widget&#39;</span><span class="p">)</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["toc.autohide"], "search": "../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/tablesort/5.6.0/tablesort.min.js"></script>
+      
+        <script src="../../../../_javascript/tables.js"></script>
+      
+    
+  </body>
+</html>

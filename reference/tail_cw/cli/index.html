@@ -15,7 +15,7 @@
         <link rel="canonical" href="https://tail-cw.kyleking.me/reference/tail_cw/cli/">
       
       
-        <link rel="prev" href="../../../docs/adr/0007-victorialogs-grafana-replacement-evaluation/">
+        <link rel="prev" href="../../../docs/adr/0009-no-in-app-profile-switching/">
       
       
         <link rel="next" href="../demo/">
@@ -730,6 +730,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../docs/adr/0008-single-interactive-tui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0008: One interactive TUI instead of four subcommands
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../docs/adr/0009-no-in-app-profile-switching/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR 0009: No in-app profile switching
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -962,6 +1018,62 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tail_cw.cli.Session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.Session-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.Session.window_label" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        window_label
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.ShellSeed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ShellSeed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tail_cw.cli.SupportsWriteFlushStr" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1091,10 +1203,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tail_cw.cli.expand_presets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        expand_presets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tail_cw.cli.iter_tail_events" class="md-nav__link">
     <span class="md-ellipsis">
       
         iter_tail_events
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.open_log_cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        open_log_cache
       
     </span>
   </a>
@@ -1135,10 +1269,43 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tail_cw.cli.resolve_parquet_paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        resolve_parquet_paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tail_cw.cli.run_cli" class="md-nav__link">
     <span class="md-ellipsis">
       
         run_cli
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.seed_from_args" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        seed_from_args
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.session_from_args" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        session_from_args
       
     </span>
   </a>
@@ -1215,6 +1382,62 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../preview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Preview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Recents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -1224,10 +1447,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_5" >
         
           
-          <label class="md-nav__link" for="__nav_3_1_3" id="__nav_3_1_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_1_5" id="__nav_3_1_5_label" tabindex="0">
             
   
   
@@ -1245,8 +1468,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_1_3">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1347,6 +1570,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../aws/log_groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Log groups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../aws/metrics/" class="md-nav__link">
         
   
@@ -1391,10 +1642,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_6" >
         
           
-          <label class="md-nav__link" for="__nav_3_1_4" id="__nav_3_1_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_1_6" id="__nav_3_1_6_label" tabindex="0">
             
   
   
@@ -1412,8 +1663,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_1_4">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1474,10 +1725,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_7" >
         
           
-          <label class="md-nav__link" for="__nav_3_1_5" id="__nav_3_1_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_1_7" id="__nav_3_1_7_label" tabindex="0">
             
   
   
@@ -1495,8 +1746,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_1_5">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1613,10 +1864,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_8" >
         
           
-          <label class="md-nav__link" for="__nav_3_1_6" id="__nav_3_1_6_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_1_8" id="__nav_3_1_8_label" tabindex="0">
             
   
   
@@ -1634,8 +1885,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_1_6">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1696,10 +1947,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_9" >
         
           
-          <label class="md-nav__link" for="__nav_3_1_7" id="__nav_3_1_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_1_9" id="__nav_3_1_9_label" tabindex="0">
             
   
   
@@ -1717,8 +1968,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_1_7">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_9">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1791,6 +2042,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../query/patterns/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Patterns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../query/trace/" class="md-nav__link">
         
   
@@ -1835,10 +2114,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1_10" >
         
           
-          <label class="md-nav__link" for="__nav_3_1_8" id="__nav_3_1_8_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_1_10" id="__nav_3_1_10_label" tabindex="0">
             
   
   
@@ -1856,8 +2135,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_1_8">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_1_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1866,34 +2145,6 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../tui/app/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    App
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -1930,14 +2181,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../tui/dashboard_app/" class="md-nav__link">
+      <a href="../tui/dashboard_screen/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Dashboard app
+    Dashboard screen
   
 
     
@@ -1958,14 +2209,70 @@
   
   
     <li class="md-nav__item">
-      <a href="../tui/log_results/" class="md-nav__link">
+      <a href="../tui/dashboards_screen/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Log results
+    Dashboards screen
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tui/dive_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dive screen
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tui/groups_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Groups screen
   
 
     
@@ -1994,6 +2301,90 @@
     
   
     Log viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tui/logs_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logs screen
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tui/navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Navigation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tui/picker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Picker
   
 
     
@@ -2070,6 +2461,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../tui/shell/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shell
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../tui/trace_viewer/" class="md-nav__link">
         
   
@@ -2078,6 +2497,62 @@
     
   
     Trace viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tui/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Views
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tui/which_key/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Which key
   
 
     
@@ -2195,6 +2670,62 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tail_cw.cli.Session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.Session-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.Session.window_label" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        window_label
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.ShellSeed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ShellSeed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tail_cw.cli.SupportsWriteFlushStr" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2324,10 +2855,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tail_cw.cli.expand_presets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        expand_presets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tail_cw.cli.iter_tail_events" class="md-nav__link">
     <span class="md-ellipsis">
       
         iter_tail_events
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.open_log_cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        open_log_cache
       
     </span>
   </a>
@@ -2368,10 +2921,43 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tail_cw.cli.resolve_parquet_paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        resolve_parquet_paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tail_cw.cli.run_cli" class="md-nav__link">
     <span class="md-ellipsis">
       
         run_cli
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.seed_from_args" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        seed_from_args
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cli.session_from_args" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        session_from_args
       
     </span>
   </a>
@@ -2570,24 +3156,24 @@ not import Textual; the TUI runner is injected by <code>tail_cw.__main__</code>.
 
               <details class="quote">
                 <summary>Source code in <code>tail_cw/cli.py</code></summary>
-                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="101 "></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="linenos" data-linenos="102 "></span><span class="k">class</span><span class="w"> </span><span class="nc">DashboardRequest</span><span class="p">:</span>
-<span class="linenos" data-linenos="103 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolved parameters for opening a dashboard.</span>
-<span class="linenos" data-linenos="104 "></span>
-<span class="linenos" data-linenos="105 "></span><span class="sd">    Attributes:</span>
-<span class="linenos" data-linenos="106 "></span><span class="sd">        name: Dashboard name, or the local file stem when loaded from a file.</span>
-<span class="linenos" data-linenos="107 "></span><span class="sd">        start_time: Start of the metric window (timezone-aware).</span>
-<span class="linenos" data-linenos="108 "></span><span class="sd">        end_time: End of the metric window (timezone-aware).</span>
-<span class="linenos" data-linenos="109 "></span><span class="sd">        profile: Optional AWS profile name.</span>
-<span class="linenos" data-linenos="110 "></span><span class="sd">        region: Optional AWS region name.</span>
-<span class="linenos" data-linenos="111 "></span><span class="sd">    &quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="112 "></span>
-<span class="linenos" data-linenos="113 "></span>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-<span class="linenos" data-linenos="114 "></span>    <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span>
-<span class="linenos" data-linenos="115 "></span>    <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span>
-<span class="linenos" data-linenos="116 "></span>    <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="linenos" data-linenos="117 "></span>    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="linenos" data-linenos="118 "></span>    <span class="n">demo</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="108 "></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="linenos" data-linenos="109 "></span><span class="k">class</span><span class="w"> </span><span class="nc">DashboardRequest</span><span class="p">:</span>
+<span class="linenos" data-linenos="110 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolved parameters for opening a dashboard.</span>
+<span class="linenos" data-linenos="111 "></span>
+<span class="linenos" data-linenos="112 "></span><span class="sd">    Attributes:</span>
+<span class="linenos" data-linenos="113 "></span><span class="sd">        name: Dashboard name, or the local file stem when loaded from a file.</span>
+<span class="linenos" data-linenos="114 "></span><span class="sd">        start_time: Start of the metric window (timezone-aware).</span>
+<span class="linenos" data-linenos="115 "></span><span class="sd">        end_time: End of the metric window (timezone-aware).</span>
+<span class="linenos" data-linenos="116 "></span><span class="sd">        profile: Optional AWS profile name.</span>
+<span class="linenos" data-linenos="117 "></span><span class="sd">        region: Optional AWS region name.</span>
+<span class="linenos" data-linenos="118 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="119 "></span>
+<span class="linenos" data-linenos="120 "></span>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+<span class="linenos" data-linenos="121 "></span>    <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span>
+<span class="linenos" data-linenos="122 "></span>    <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span>
+<span class="linenos" data-linenos="123 "></span>    <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="124 "></span>    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="125 "></span>    <span class="n">demo</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 </code></pre></div>
               </details>
 
@@ -2737,25 +3323,197 @@ not import Textual; the TUI runner is injected by <code>tail_cw.__main__</code>.
 
               <details class="quote">
                 <summary>Source code in <code>tail_cw/cli.py</code></summary>
-                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="59 "></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="linenos" data-linenos="60 "></span><span class="k">class</span><span class="w"> </span><span class="nc">FetchRequest</span><span class="p">:</span>
-<span class="linenos" data-linenos="61 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolved parameters for a CloudWatch fetch.</span>
-<span class="linenos" data-linenos="62 "></span>
-<span class="linenos" data-linenos="63 "></span><span class="sd">    Attributes:</span>
-<span class="linenos" data-linenos="64 "></span><span class="sd">        log_group: CloudWatch log group name.</span>
-<span class="linenos" data-linenos="65 "></span><span class="sd">        start_time: Start of the time range (timezone-aware).</span>
-<span class="linenos" data-linenos="66 "></span><span class="sd">        end_time: End of the time range (timezone-aware).</span>
-<span class="linenos" data-linenos="67 "></span><span class="sd">        filter_pattern: Optional CloudWatch filter pattern.</span>
-<span class="linenos" data-linenos="68 "></span><span class="sd">        profile: Optional AWS profile name.</span>
-<span class="linenos" data-linenos="69 "></span><span class="sd">        region: Optional AWS region name.</span>
-<span class="linenos" data-linenos="70 "></span><span class="sd">    &quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="71 "></span>
-<span class="linenos" data-linenos="72 "></span>    <span class="n">log_group</span><span class="p">:</span> <span class="nb">str</span>
-<span class="linenos" data-linenos="73 "></span>    <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span>
-<span class="linenos" data-linenos="74 "></span>    <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span>
-<span class="linenos" data-linenos="75 "></span>    <span class="n">filter_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="linenos" data-linenos="76 "></span>    <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="linenos" data-linenos="77 "></span>    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="66 "></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="linenos" data-linenos="67 "></span><span class="k">class</span><span class="w"> </span><span class="nc">FetchRequest</span><span class="p">:</span>
+<span class="linenos" data-linenos="68 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolved parameters for a CloudWatch fetch.</span>
+<span class="linenos" data-linenos="69 "></span>
+<span class="linenos" data-linenos="70 "></span><span class="sd">    Attributes:</span>
+<span class="linenos" data-linenos="71 "></span><span class="sd">        log_group: CloudWatch log group name.</span>
+<span class="linenos" data-linenos="72 "></span><span class="sd">        start_time: Start of the time range (timezone-aware).</span>
+<span class="linenos" data-linenos="73 "></span><span class="sd">        end_time: End of the time range (timezone-aware).</span>
+<span class="linenos" data-linenos="74 "></span><span class="sd">        filter_pattern: Optional CloudWatch filter pattern.</span>
+<span class="linenos" data-linenos="75 "></span><span class="sd">        profile: Optional AWS profile name.</span>
+<span class="linenos" data-linenos="76 "></span><span class="sd">        region: Optional AWS region name.</span>
+<span class="linenos" data-linenos="77 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="78 "></span>
+<span class="linenos" data-linenos="79 "></span>    <span class="n">log_group</span><span class="p">:</span> <span class="nb">str</span>
+<span class="linenos" data-linenos="80 "></span>    <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span>
+<span class="linenos" data-linenos="81 "></span>    <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span>
+<span class="linenos" data-linenos="82 "></span>    <span class="n">filter_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="83 "></span>    <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="84 "></span>    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</code></pre></div>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="tail_cw.cli.Session" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Session</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#tail_cw.cli.Session" class="headerlink" title="Permanent link">⚓︎</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+        <p>State the interactive shell shares across every view.</p>
+<p>The window and filter follow the user between views on purpose: a range
+set on a dashboard is the range a dive inherits. Lives here rather than in
+the TUI so the CLI can build it without importing Textual.</p>
+
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>tail_cw/cli.py</code></summary>
+                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="128 "></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="linenos" data-linenos="129 "></span><span class="k">class</span><span class="w"> </span><span class="nc">Session</span><span class="p">:</span>
+<span class="linenos" data-linenos="130 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;State the interactive shell shares across every view.</span>
+<span class="linenos" data-linenos="131 "></span>
+<span class="linenos" data-linenos="132 "></span><span class="sd">    The window and filter follow the user between views on purpose: a range</span>
+<span class="linenos" data-linenos="133 "></span><span class="sd">    set on a dashboard is the range a dive inherits. Lives here rather than in</span>
+<span class="linenos" data-linenos="134 "></span><span class="sd">    the TUI so the CLI can build it without importing Textual.</span>
+<span class="linenos" data-linenos="135 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="136 "></span>
+<span class="linenos" data-linenos="137 "></span>    <span class="n">start</span><span class="p">:</span> <span class="n">datetime</span>
+<span class="linenos" data-linenos="138 "></span>    <span class="n">end</span><span class="p">:</span> <span class="n">datetime</span>
+<span class="linenos" data-linenos="139 "></span>    <span class="n">filter_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="140 "></span>    <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="141 "></span>    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="142 "></span>    <span class="n">selected_groups</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<span class="linenos" data-linenos="143 "></span>    <span class="n">dashboard_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<span class="linenos" data-linenos="144 "></span>    <span class="n">group_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<span class="linenos" data-linenos="145 "></span>
+<span class="linenos" data-linenos="146 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">window_label</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="linenos" data-linenos="147 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Render the window as a compact status-line fragment.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="148 "></span>        <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="si">:</span><span class="s1">%Y-%m-%d %H:%M</span><span class="si">}</span><span class="s1">-&gt;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">end</span><span class="si">:</span><span class="s1">%H:%M</span><span class="si">}</span><span class="s1"> UTC&#39;</span>
+</code></pre></div>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+<h4 id="tail_cw.cli.Session-functions">Functions<a href="#tail_cw.cli.Session-functions" class="headerlink" title="Permanent link">⚓︎</a></h4>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="tail_cw.cli.Session.window_label" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">window_label</span>
+
+
+<a href="#tail_cw.cli.Session.window_label" class="headerlink" title="Permanent link">⚓︎</a></h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">window_label</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Render the window as a compact status-line fragment.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/cli.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="146 "></span><span class="k">def</span><span class="w"> </span><span class="nf">window_label</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="linenos" data-linenos="147 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Render the window as a compact status-line fragment.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="148 "></span>    <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="si">:</span><span class="s1">%Y-%m-%d %H:%M</span><span class="si">}</span><span class="s1">-&gt;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">end</span><span class="si">:</span><span class="s1">%H:%M</span><span class="si">}</span><span class="s1"> UTC&#39;</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="tail_cw.cli.ShellSeed" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ShellSeed</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#tail_cw.cli.ShellSeed" class="headerlink" title="Permanent link">⚓︎</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+        <p>Which view the shell opens on, and what it opens there.</p>
+<p><code>targets</code> holds log group patterns for the log views and a dashboard
+name for the dashboard view. The entry point translates this into a
+navigation target, keeping this module free of any TUI import.</p>
+
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>tail_cw/cli.py</code></summary>
+                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="151 "></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="linenos" data-linenos="152 "></span><span class="k">class</span><span class="w"> </span><span class="nc">ShellSeed</span><span class="p">:</span>
+<span class="linenos" data-linenos="153 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Which view the shell opens on, and what it opens there.</span>
+<span class="linenos" data-linenos="154 "></span>
+<span class="linenos" data-linenos="155 "></span><span class="sd">    ``targets`` holds log group patterns for the log views and a dashboard</span>
+<span class="linenos" data-linenos="156 "></span><span class="sd">    name for the dashboard view. The entry point translates this into a</span>
+<span class="linenos" data-linenos="157 "></span><span class="sd">    navigation target, keeping this module free of any TUI import.</span>
+<span class="linenos" data-linenos="158 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="159 "></span>
+<span class="linenos" data-linenos="160 "></span>    <span class="n">view</span><span class="p">:</span> <span class="n">ShellView</span>
+<span class="linenos" data-linenos="161 "></span>    <span class="n">targets</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+<span class="linenos" data-linenos="162 "></span>    <span class="n">demo</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 </code></pre></div>
               </details>
 
@@ -2807,12 +3565,12 @@ not import Textual; the TUI runner is injected by <code>tail_cw.__main__</code>.
 
               <details class="quote">
                 <summary>Source code in <code>tail_cw/cli.py</code></summary>
-                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="51 "></span><span class="k">class</span><span class="w"> </span><span class="nc">SupportsWriteFlushStr</span><span class="p">(</span><span class="n">SupportsWriteStr</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">):</span>
-<span class="linenos" data-linenos="52 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Text sink that can also flush buffered writes (e.g. sys.stdout).&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="53 "></span>
-<span class="linenos" data-linenos="54 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos="55 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Flush buffered writes.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="56 "></span>        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="58 "></span><span class="k">class</span><span class="w"> </span><span class="nc">SupportsWriteFlushStr</span><span class="p">(</span><span class="n">SupportsWriteStr</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">):</span>
+<span class="linenos" data-linenos="59 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Text sink that can also flush buffered writes (e.g. sys.stdout).&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="60 "></span>
+<span class="linenos" data-linenos="61 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="62 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Flush buffered writes.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="63 "></span>        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 </code></pre></div>
               </details>
 
@@ -2847,9 +3605,9 @@ not import Textual; the TUI runner is injected by <code>tail_cw.__main__</code>.
 
             <details class="quote">
               <summary>Source code in <code>tail_cw/cli.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="54 "></span><span class="k">def</span><span class="w"> </span><span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos="55 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Flush buffered writes.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="56 "></span>    <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="61 "></span><span class="k">def</span><span class="w"> </span><span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="62 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Flush buffered writes.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="63 "></span>    <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 </code></pre></div>
             </details>
     </div>
@@ -2891,12 +3649,12 @@ not import Textual; the TUI runner is injected by <code>tail_cw.__main__</code>.
 
               <details class="quote">
                 <summary>Source code in <code>tail_cw/cli.py</code></summary>
-                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="43 "></span><span class="k">class</span><span class="w"> </span><span class="nc">SupportsWriteStr</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-<span class="linenos" data-linenos="44 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Text sink accepting str writes (e.g. sys.stdout, io.StringIO).&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="45 "></span>
-<span class="linenos" data-linenos="46 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="linenos" data-linenos="47 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Write text and return the number of characters written.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="48 "></span>        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="50 "></span><span class="k">class</span><span class="w"> </span><span class="nc">SupportsWriteStr</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="linenos" data-linenos="51 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Text sink accepting str writes (e.g. sys.stdout, io.StringIO).&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="52 "></span>
+<span class="linenos" data-linenos="53 "></span>    <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="linenos" data-linenos="54 "></span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Write text and return the number of characters written.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="55 "></span>        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 </code></pre></div>
               </details>
 
@@ -2931,9 +3689,9 @@ not import Textual; the TUI runner is injected by <code>tail_cw.__main__</code>.
 
             <details class="quote">
               <summary>Source code in <code>tail_cw/cli.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="46 "></span><span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="linenos" data-linenos="47 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Write text and return the number of characters written.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="48 "></span>    <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="53 "></span><span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="linenos" data-linenos="54 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Write text and return the number of characters written.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="55 "></span>    <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 </code></pre></div>
             </details>
     </div>
@@ -3061,25 +3819,25 @@ start are emitted before switching to the live stream.</p>
 
               <details class="quote">
                 <summary>Source code in <code>tail_cw/cli.py</code></summary>
-                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="80 "></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="linenos" data-linenos="81 "></span><span class="k">class</span><span class="w"> </span><span class="nc">TailRequest</span><span class="p">:</span>
-<span class="linenos" data-linenos="82 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolved parameters for a live tail session.</span>
-<span class="linenos" data-linenos="83 "></span>
-<span class="linenos" data-linenos="84 "></span><span class="sd">    Attributes:</span>
-<span class="linenos" data-linenos="85 "></span><span class="sd">        log_groups: One to ten CloudWatch log group names.</span>
-<span class="linenos" data-linenos="86 "></span><span class="sd">        filter_pattern: Optional filter applied server-side to both the live</span>
-<span class="linenos" data-linenos="87 "></span><span class="sd">            stream (``logEventFilterPattern``) and the backfill fetch.</span>
-<span class="linenos" data-linenos="88 "></span><span class="sd">        backfill_start: When set, historical events from this time to session</span>
-<span class="linenos" data-linenos="89 "></span><span class="sd">            start are emitted before switching to the live stream.</span>
-<span class="linenos" data-linenos="90 "></span><span class="sd">        profile: Optional AWS profile name.</span>
-<span class="linenos" data-linenos="91 "></span><span class="sd">        region: Optional AWS region name.</span>
-<span class="linenos" data-linenos="92 "></span><span class="sd">    &quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="93 "></span>
-<span class="linenos" data-linenos="94 "></span>    <span class="n">log_groups</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
-<span class="linenos" data-linenos="95 "></span>    <span class="n">filter_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="linenos" data-linenos="96 "></span>    <span class="n">backfill_start</span><span class="p">:</span> <span class="n">datetime</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="linenos" data-linenos="97 "></span>    <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="linenos" data-linenos="98 "></span>    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+                <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos=" 87 "></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="linenos" data-linenos=" 88 "></span><span class="k">class</span><span class="w"> </span><span class="nc">TailRequest</span><span class="p">:</span>
+<span class="linenos" data-linenos=" 89 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolved parameters for a live tail session.</span>
+<span class="linenos" data-linenos=" 90 "></span>
+<span class="linenos" data-linenos=" 91 "></span><span class="sd">    Attributes:</span>
+<span class="linenos" data-linenos=" 92 "></span><span class="sd">        log_groups: One to ten CloudWatch log group names.</span>
+<span class="linenos" data-linenos=" 93 "></span><span class="sd">        filter_pattern: Optional filter applied server-side to both the live</span>
+<span class="linenos" data-linenos=" 94 "></span><span class="sd">            stream (``logEventFilterPattern``) and the backfill fetch.</span>
+<span class="linenos" data-linenos=" 95 "></span><span class="sd">        backfill_start: When set, historical events from this time to session</span>
+<span class="linenos" data-linenos=" 96 "></span><span class="sd">            start are emitted before switching to the live stream.</span>
+<span class="linenos" data-linenos=" 97 "></span><span class="sd">        profile: Optional AWS profile name.</span>
+<span class="linenos" data-linenos=" 98 "></span><span class="sd">        region: Optional AWS region name.</span>
+<span class="linenos" data-linenos=" 99 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="100 "></span>
+<span class="linenos" data-linenos="101 "></span>    <span class="n">log_groups</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+<span class="linenos" data-linenos="102 "></span>    <span class="n">filter_pattern</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="103 "></span>    <span class="n">backfill_start</span><span class="p">:</span> <span class="n">datetime</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="104 "></span>    <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="105 "></span>    <span class="n">region</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 </code></pre></div>
               </details>
 
@@ -3118,114 +3876,182 @@ start are emitted before switching to the live stream.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Build the tail-cw argument parser with subcommands.</p>
+        <p>Build the tail-cw argument parser.</p>
+<p>Bare <code>tail-cw</code> opens the interactive shell. <code>logs</code>, <code>tail</code>, and
+<code>dash</code> open it on a specific view; <code>export</code> is the only subcommand that
+writes to stdout instead.</p>
 
 
             <details class="quote">
               <summary>Source code in <code>tail_cw/cli.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="155 "></span><span class="k">def</span><span class="w"> </span><span class="nf">build_parser</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">:</span>
-<span class="linenos" data-linenos="156 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build the tail-cw argument parser with subcommands.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="157 "></span>    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
-<span class="linenos" data-linenos="158 "></span>        <span class="n">prog</span><span class="o">=</span><span class="s1">&#39;tail-cw&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="159 "></span>        <span class="n">description</span><span class="o">=</span><span class="s1">&#39;CloudWatch Logs fetcher and TUI viewer with local Parquet caching.&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="160 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="161 "></span>    <span class="n">subparsers</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_subparsers</span><span class="p">(</span><span class="n">dest</span><span class="o">=</span><span class="s1">&#39;command&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="162 "></span>
-<span class="linenos" data-linenos="163 "></span>    <span class="n">fetch</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span>
-<span class="linenos" data-linenos="164 "></span>        <span class="s1">&#39;fetch&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="165 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Fetch log events for a time range and open the TUI (or emit NDJSON).&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="166 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="167 "></span>    <span class="n">fetch</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;log_group&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;CloudWatch log group name (e.g. /aws/lambda/my-function)&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="168 "></span>    <span class="n">fetch</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--config&#39;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;config_path&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Config file path override&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="169 "></span>    <span class="n">fetch</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--end&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;End of range: duration (2h) or ISO-8601 datetime (default: now)&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="170 "></span>    <span class="n">fetch</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--filter&#39;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;filter_pattern&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;CloudWatch Logs filter pattern&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="171 "></span>    <span class="n">fetch</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="172 "></span>        <span class="s1">&#39;--json&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="173 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;json_output&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="174 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="175 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Write events as NDJSON to stdout instead of opening the TUI&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="176 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="177 "></span>    <span class="n">fetch</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="178 "></span>        <span class="s1">&#39;--no-cache&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="179 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;no_cache&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="180 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="181 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Bypass the cache read (results are still written to the cache)&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="182 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="183 "></span>    <span class="n">fetch</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--profile&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;AWS profile name&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="184 "></span>    <span class="n">fetch</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--region&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;AWS region name&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="185 "></span>    <span class="n">fetch</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="186 "></span>        <span class="s1">&#39;--start&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="187 "></span>        <span class="n">default</span><span class="o">=</span><span class="s1">&#39;1h&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="188 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Start of range: duration (15m, 2h, 3d) or ISO-8601 datetime (default: 1h)&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="189 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="190 "></span>
-<span class="linenos" data-linenos="191 "></span>    <span class="n">tail</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span>
-<span class="linenos" data-linenos="192 "></span>        <span class="s1">&#39;tail&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="193 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Stream live log events via StartLiveTail (up to 10 log groups).&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="194 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="195 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;log_groups&#39;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;One or more CloudWatch log group names (max 10)&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="196 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="197 "></span>        <span class="s1">&#39;--backfill&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="198 "></span>        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="199 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Emit historical events for this window (e.g. 15m) before streaming live&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="200 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="201 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--config&#39;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;config_path&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Config file path override&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="202 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--filter&#39;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;filter_pattern&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;CloudWatch Logs filter pattern&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="203 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="204 "></span>        <span class="s1">&#39;--json&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="205 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;json_output&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="206 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="207 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Stream events as NDJSON to stdout instead of opening the TUI (Ctrl+C to stop)&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="208 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="209 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--profile&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;AWS profile name&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="210 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--region&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;AWS region name&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="211 "></span>
-<span class="linenos" data-linenos="212 "></span>    <span class="n">dashboards</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">&#39;dashboards&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;List CloudWatch dashboards in the account.&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="213 "></span>    <span class="n">dashboards</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--config&#39;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;config_path&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Config file path override&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="214 "></span>    <span class="n">dashboards</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="215 "></span>        <span class="s1">&#39;--json&#39;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;json_output&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Write dashboards as NDJSON to stdout&#39;</span>
-<span class="linenos" data-linenos="216 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="217 "></span>    <span class="n">dashboards</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--profile&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;AWS profile name&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="218 "></span>    <span class="n">dashboards</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--region&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;AWS region name&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="219 "></span>
-<span class="linenos" data-linenos="220 "></span>    <span class="n">dashboard</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span>
-<span class="linenos" data-linenos="221 "></span>        <span class="s1">&#39;dashboard&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="222 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Open a CloudWatch dashboard in the TUI (or emit its structure as JSON).&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="223 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="224 "></span>    <span class="n">dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;name&#39;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">&#39;?&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Dashboard name (omit when using --file or --demo)&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="225 "></span>    <span class="n">dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--config&#39;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;config_path&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Config file path override&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="226 "></span>    <span class="n">dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="227 "></span>        <span class="s1">&#39;--demo&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="228 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;demo&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="229 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="230 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Open a synthetic dashboard with generated seed data (no AWS calls)&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="231 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="232 "></span>    <span class="n">dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="233 "></span>        <span class="s1">&#39;--end&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="234 "></span>        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="235 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;End of the metric window: duration (2h) or ISO-8601 datetime (default: now)&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="236 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="237 "></span>    <span class="n">dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="238 "></span>        <span class="s1">&#39;--file&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="239 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;dashboard_file&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="240 "></span>        <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span>
-<span class="linenos" data-linenos="241 "></span>        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="242 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Load a local dashboard JSON file (same schema as a CloudWatch DashboardBody)&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="243 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="244 "></span>    <span class="n">dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="245 "></span>        <span class="s1">&#39;--json&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="246 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;json_output&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="247 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="248 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Write the parsed dashboard structure as JSON to stdout instead of opening the TUI&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="249 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="250 "></span>    <span class="n">dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--profile&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;AWS profile name&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="251 "></span>    <span class="n">dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--region&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;AWS region name&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="252 "></span>    <span class="n">dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="253 "></span>        <span class="s1">&#39;--start&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="254 "></span>        <span class="n">default</span><span class="o">=</span><span class="s1">&#39;3h&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="255 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Start of the metric window: duration (15m, 2h, 3d) or ISO-8601 datetime (default: 3h)&#39;</span><span class="p">,</span>
-<span class="linenos" data-linenos="256 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="257 "></span>    <span class="k">return</span> <span class="n">parser</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="215 "></span><span class="k">def</span><span class="w"> </span><span class="nf">build_parser</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">:</span>
+<span class="linenos" data-linenos="216 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build the tail-cw argument parser.</span>
+<span class="linenos" data-linenos="217 "></span>
+<span class="linenos" data-linenos="218 "></span><span class="sd">    Bare ``tail-cw`` opens the interactive shell. ``logs``, ``tail``, and</span>
+<span class="linenos" data-linenos="219 "></span><span class="sd">    ``dash`` open it on a specific view; ``export`` is the only subcommand that</span>
+<span class="linenos" data-linenos="220 "></span><span class="sd">    writes to stdout instead.</span>
+<span class="linenos" data-linenos="221 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="222 "></span>    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
+<span class="linenos" data-linenos="223 "></span>        <span class="n">prog</span><span class="o">=</span><span class="s1">&#39;tail-cw&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="224 "></span>        <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Read and explore AWS CloudWatch from the terminal. Run with no arguments to browse log groups.&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="225 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="226 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">parser</span><span class="p">)</span>
+<span class="linenos" data-linenos="227 "></span>    <span class="n">subparsers</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_subparsers</span><span class="p">(</span><span class="n">dest</span><span class="o">=</span><span class="s1">&#39;command&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="228 "></span>
+<span class="linenos" data-linenos="229 "></span>    <span class="n">logs</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">&#39;logs&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Open the log view on the groups matching a pattern.&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="230 "></span>    <span class="n">logs</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;patterns&#39;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Log group names or glob patterns (omit to use the browser)&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="231 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">logs</span><span class="p">)</span>
+<span class="linenos" data-linenos="232 "></span>    <span class="n">_add_window_flags</span><span class="p">(</span><span class="n">logs</span><span class="p">,</span> <span class="n">default_start</span><span class="o">=</span><span class="n">DEFAULT_WINDOW</span><span class="p">)</span>
+<span class="linenos" data-linenos="233 "></span>    <span class="n">logs</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="234 "></span>        <span class="s1">&#39;--no-cache&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="235 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;no_cache&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="236 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="237 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Bypass the cache read (results are still written to the cache)&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="238 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="239 "></span>
+<span class="linenos" data-linenos="240 "></span>    <span class="n">tail</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">&#39;tail&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Open the log view streaming live events.&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="241 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;patterns&#39;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Log group names or glob patterns (max 10)&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="242 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span>
+<span class="linenos" data-linenos="243 "></span>    <span class="n">_add_window_flags</span><span class="p">(</span><span class="n">tail</span><span class="p">,</span> <span class="n">default_start</span><span class="o">=</span><span class="n">DEFAULT_WINDOW</span><span class="p">)</span>
+<span class="linenos" data-linenos="244 "></span>
+<span class="linenos" data-linenos="245 "></span>    <span class="n">dash</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">&#39;dash&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Open a dashboard, or the dashboard picker when unnamed.&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="246 "></span>    <span class="n">dash</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;name&#39;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">&#39;?&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Dashboard name (omit to pick from a list)&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="247 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">dash</span><span class="p">)</span>
+<span class="linenos" data-linenos="248 "></span>    <span class="n">_add_window_flags</span><span class="p">(</span><span class="n">dash</span><span class="p">,</span> <span class="n">default_start</span><span class="o">=</span><span class="n">DEFAULT_DASHBOARD_WINDOW</span><span class="p">)</span>
+<span class="linenos" data-linenos="249 "></span>    <span class="n">dash</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="250 "></span>        <span class="s1">&#39;--demo&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="251 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;demo&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="252 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="253 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Open a synthetic dashboard with generated seed data (no AWS calls)&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="254 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="255 "></span>
+<span class="linenos" data-linenos="256 "></span>    <span class="n">export</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">&#39;export&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Write CloudWatch data to stdout as NDJSON or JSON.&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="257 "></span>    <span class="n">export_sub</span> <span class="o">=</span> <span class="n">export</span><span class="o">.</span><span class="n">add_subparsers</span><span class="p">(</span><span class="n">dest</span><span class="o">=</span><span class="s1">&#39;export_command&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="258 "></span>
+<span class="linenos" data-linenos="259 "></span>    <span class="n">export_logs</span> <span class="o">=</span> <span class="n">export_sub</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">&#39;logs&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Write log events for a time range as NDJSON.&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="260 "></span>    <span class="n">export_logs</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;log_group&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;CloudWatch log group name (e.g. /aws/lambda/my-function)&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="261 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">export_logs</span><span class="p">)</span>
+<span class="linenos" data-linenos="262 "></span>    <span class="n">_add_window_flags</span><span class="p">(</span><span class="n">export_logs</span><span class="p">,</span> <span class="n">default_start</span><span class="o">=</span><span class="n">DEFAULT_WINDOW</span><span class="p">)</span>
+<span class="linenos" data-linenos="263 "></span>    <span class="n">export_logs</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="264 "></span>        <span class="s1">&#39;--no-cache&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="265 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;no_cache&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="266 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="267 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Bypass the cache read (results are still written to the cache)&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="268 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="269 "></span>
+<span class="linenos" data-linenos="270 "></span>    <span class="n">export_tail</span> <span class="o">=</span> <span class="n">export_sub</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">&#39;tail&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Stream live log events as NDJSON (Ctrl+C to stop).&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="271 "></span>    <span class="n">export_tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;log_groups&#39;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;One or more CloudWatch log group names (max 10)&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="272 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">export_tail</span><span class="p">)</span>
+<span class="linenos" data-linenos="273 "></span>    <span class="n">export_tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--filter&#39;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;filter_pattern&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;CloudWatch Logs filter pattern&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="274 "></span>    <span class="n">export_tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="275 "></span>        <span class="s1">&#39;--backfill&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="276 "></span>        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="277 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Emit historical events for this window (e.g. 15m) before streaming live&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="278 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="279 "></span>
+<span class="linenos" data-linenos="280 "></span>    <span class="n">export_groups</span> <span class="o">=</span> <span class="n">export_sub</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">&#39;groups&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Write log group metadata as NDJSON.&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="281 "></span>    <span class="n">export_groups</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;pattern&#39;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">&#39;?&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Name, prefix, or glob to match&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="282 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">export_groups</span><span class="p">)</span>
+<span class="linenos" data-linenos="283 "></span>
+<span class="linenos" data-linenos="284 "></span>    <span class="n">export_dashboards</span> <span class="o">=</span> <span class="n">export_sub</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">&#39;dashboards&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Write the account dashboard list as NDJSON.&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="285 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">export_dashboards</span><span class="p">)</span>
+<span class="linenos" data-linenos="286 "></span>
+<span class="linenos" data-linenos="287 "></span>    <span class="n">export_dashboard</span> <span class="o">=</span> <span class="n">export_sub</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">&#39;dashboard&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Write one parsed dashboard structure as JSON.&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="288 "></span>    <span class="n">export_dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;name&#39;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">&#39;?&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Dashboard name (omit with --file or --demo)&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="289 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">export_dashboard</span><span class="p">)</span>
+<span class="linenos" data-linenos="290 "></span>    <span class="n">export_dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="291 "></span>        <span class="s1">&#39;--demo&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="292 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;demo&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="293 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="294 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Emit the synthetic demo dashboard (no AWS calls)&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="295 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="296 "></span>    <span class="n">export_dashboard</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="297 "></span>        <span class="s1">&#39;--file&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="298 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;dashboard_file&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="299 "></span>        <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span>
+<span class="linenos" data-linenos="300 "></span>        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="301 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Load a local dashboard JSON file (same schema as a CloudWatch DashboardBody)&#39;</span><span class="p">,</span>
+<span class="linenos" data-linenos="302 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="303 "></span>    <span class="k">return</span> <span class="n">parser</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.cli.expand_presets" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">expand_presets</span>
+
+
+<a href="#tail_cw.cli.expand_presets" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">expand_presets</span><span class="p">(</span><span class="n">patterns</span><span class="p">,</span> <span class="n">presets</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Replace every <code>@name</code> reference with the log groups of that named preset.</p>
+<p>Patterns that are not references pass through untouched. Shared by the CLI
+seeds and the shell&rsquo;s <code>:logs</code>/<code>:tail</code> so the two cannot drift.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>When a reference names no configured preset, or names one
+that holds no log groups. Expanding to nothing silently would look
+like an empty selection.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/cli.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="522 "></span><span class="k">def</span><span class="w"> </span><span class="nf">expand_presets</span><span class="p">(</span><span class="n">patterns</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">presets</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="linenos" data-linenos="523 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Replace every ``@name`` reference with the log groups of that named preset.</span>
+<span class="linenos" data-linenos="524 "></span>
+<span class="linenos" data-linenos="525 "></span><span class="sd">    Patterns that are not references pass through untouched. Shared by the CLI</span>
+<span class="linenos" data-linenos="526 "></span><span class="sd">    seeds and the shell&#39;s ``:logs``/``:tail`` so the two cannot drift.</span>
+<span class="linenos" data-linenos="527 "></span>
+<span class="linenos" data-linenos="528 "></span><span class="sd">    Raises:</span>
+<span class="linenos" data-linenos="529 "></span><span class="sd">        ValueError: When a reference names no configured preset, or names one</span>
+<span class="linenos" data-linenos="530 "></span><span class="sd">            that holds no log groups. Expanding to nothing silently would look</span>
+<span class="linenos" data-linenos="531 "></span><span class="sd">            like an empty selection.</span>
+<span class="linenos" data-linenos="532 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="533 "></span>    <span class="n">expanded</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="534 "></span>    <span class="k">for</span> <span class="n">pattern</span> <span class="ow">in</span> <span class="n">patterns</span><span class="p">:</span>
+<span class="linenos" data-linenos="535 "></span>        <span class="k">if</span> <span class="ow">not</span> <span class="n">pattern</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;@&#39;</span><span class="p">):</span>
+<span class="linenos" data-linenos="536 "></span>            <span class="n">expanded</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pattern</span><span class="p">)</span>
+<span class="linenos" data-linenos="537 "></span>            <span class="k">continue</span>
+<span class="linenos" data-linenos="538 "></span>        <span class="n">name</span> <span class="o">=</span> <span class="n">pattern</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="s1">&#39;@&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="539 "></span>        <span class="n">groups</span> <span class="o">=</span> <span class="n">presets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+<span class="linenos" data-linenos="540 "></span>        <span class="k">if</span> <span class="n">groups</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="541 "></span>            <span class="n">known</span> <span class="o">=</span> <span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;@</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">presets</span><span class="p">))</span> <span class="ow">or</span> <span class="s1">&#39;none configured&#39;</span>
+<span class="linenos" data-linenos="542 "></span>            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;Unknown preset </span><span class="si">{</span><span class="n">pattern</span><span class="si">!r}</span><span class="s1">; configured presets: </span><span class="si">{</span><span class="n">known</span><span class="si">}</span><span class="s1">&#39;</span>
+<span class="linenos" data-linenos="543 "></span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+<span class="linenos" data-linenos="544 "></span>        <span class="k">if</span> <span class="ow">not</span> <span class="n">groups</span><span class="p">:</span>
+<span class="linenos" data-linenos="545 "></span>            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;Preset </span><span class="si">{</span><span class="n">pattern</span><span class="si">!r}</span><span class="s1"> lists no log groups&#39;</span>
+<span class="linenos" data-linenos="546 "></span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+<span class="linenos" data-linenos="547 "></span>        <span class="n">expanded</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">groups</span><span class="p">)</span>
+<span class="linenos" data-linenos="548 "></span>    <span class="k">return</span> <span class="n">expanded</span>
 </code></pre></div>
             </details>
     </div>
@@ -3253,37 +4079,72 @@ does not touch the Parquet cache.</p>
 
             <details class="quote">
               <summary>Source code in <code>tail_cw/cli.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="293 "></span><span class="k">def</span><span class="w"> </span><span class="nf">iter_tail_events</span><span class="p">(</span>
-<span class="linenos" data-linenos="294 "></span>    <span class="n">request</span><span class="p">:</span> <span class="n">TailRequest</span><span class="p">,</span>
-<span class="linenos" data-linenos="295 "></span>    <span class="o">*</span><span class="p">,</span>
-<span class="linenos" data-linenos="296 "></span>    <span class="n">now</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
-<span class="linenos" data-linenos="297 "></span>    <span class="n">fetch_events</span><span class="p">:</span> <span class="n">FetchEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="298 "></span>    <span class="n">stream_events</span><span class="p">:</span> <span class="n">StreamEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="299 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">LogEvent</span><span class="p">]:</span>
-<span class="linenos" data-linenos="300 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Yield backfill events (when requested) followed by the live stream.</span>
-<span class="linenos" data-linenos="301 "></span>
-<span class="linenos" data-linenos="302 "></span><span class="sd">    The same filter pattern is pushed server-side to both FilterLogEvents</span>
-<span class="linenos" data-linenos="303 "></span><span class="sd">    (backfill) and StartLiveTail (``logEventFilterPattern``). The live path</span>
-<span class="linenos" data-linenos="304 "></span><span class="sd">    does not touch the Parquet cache.</span>
-<span class="linenos" data-linenos="305 "></span><span class="sd">    &quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="306 "></span>    <span class="n">effective_fetch</span> <span class="o">=</span> <span class="n">fetch_events</span> <span class="k">if</span> <span class="n">fetch_events</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">fetch_log_events</span>
-<span class="linenos" data-linenos="307 "></span>    <span class="n">effective_stream</span> <span class="o">=</span> <span class="n">stream_events</span> <span class="k">if</span> <span class="n">stream_events</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">stream_live_tail</span>
-<span class="linenos" data-linenos="308 "></span>    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">backfill_start</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos="309 "></span>        <span class="k">for</span> <span class="n">log_group</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">log_groups</span><span class="p">:</span>
-<span class="linenos" data-linenos="310 "></span>            <span class="k">yield from</span> <span class="n">effective_fetch</span><span class="p">(</span>
-<span class="linenos" data-linenos="311 "></span>                <span class="n">log_group</span><span class="p">,</span>
-<span class="linenos" data-linenos="312 "></span>                <span class="n">request</span><span class="o">.</span><span class="n">backfill_start</span><span class="p">,</span>
-<span class="linenos" data-linenos="313 "></span>                <span class="n">now</span><span class="p">,</span>
-<span class="linenos" data-linenos="314 "></span>                <span class="n">filter_pattern</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">filter_pattern</span><span class="p">,</span>
-<span class="linenos" data-linenos="315 "></span>                <span class="n">profile_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">profile</span><span class="p">,</span>
-<span class="linenos" data-linenos="316 "></span>                <span class="n">region_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">region</span><span class="p">,</span>
-<span class="linenos" data-linenos="317 "></span>            <span class="p">)</span>
-<span class="linenos" data-linenos="318 "></span>    <span class="k">yield from</span> <span class="n">effective_stream</span><span class="p">(</span>
-<span class="linenos" data-linenos="319 "></span>        <span class="n">request</span><span class="o">.</span><span class="n">log_groups</span><span class="p">,</span>
-<span class="linenos" data-linenos="320 "></span>        <span class="n">filter_pattern</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">filter_pattern</span><span class="p">,</span>
-<span class="linenos" data-linenos="321 "></span>        <span class="n">profile_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">profile</span><span class="p">,</span>
-<span class="linenos" data-linenos="322 "></span>        <span class="n">region_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">region</span><span class="p">,</span>
-<span class="linenos" data-linenos="323 "></span>    <span class="p">)</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="306 "></span><span class="k">def</span><span class="w"> </span><span class="nf">iter_tail_events</span><span class="p">(</span>
+<span class="linenos" data-linenos="307 "></span>    <span class="n">request</span><span class="p">:</span> <span class="n">TailRequest</span><span class="p">,</span>
+<span class="linenos" data-linenos="308 "></span>    <span class="o">*</span><span class="p">,</span>
+<span class="linenos" data-linenos="309 "></span>    <span class="n">now</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
+<span class="linenos" data-linenos="310 "></span>    <span class="n">fetch_events</span><span class="p">:</span> <span class="n">FetchEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="311 "></span>    <span class="n">stream_events</span><span class="p">:</span> <span class="n">StreamEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="312 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">LogEvent</span><span class="p">]:</span>
+<span class="linenos" data-linenos="313 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Yield backfill events (when requested) followed by the live stream.</span>
+<span class="linenos" data-linenos="314 "></span>
+<span class="linenos" data-linenos="315 "></span><span class="sd">    The same filter pattern is pushed server-side to both FilterLogEvents</span>
+<span class="linenos" data-linenos="316 "></span><span class="sd">    (backfill) and StartLiveTail (``logEventFilterPattern``). The live path</span>
+<span class="linenos" data-linenos="317 "></span><span class="sd">    does not touch the Parquet cache.</span>
+<span class="linenos" data-linenos="318 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="319 "></span>    <span class="n">effective_fetch</span> <span class="o">=</span> <span class="n">fetch_events</span> <span class="k">if</span> <span class="n">fetch_events</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">fetch_log_events</span>
+<span class="linenos" data-linenos="320 "></span>    <span class="n">effective_stream</span> <span class="o">=</span> <span class="n">stream_events</span> <span class="k">if</span> <span class="n">stream_events</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">stream_live_tail</span>
+<span class="linenos" data-linenos="321 "></span>    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">backfill_start</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="322 "></span>        <span class="k">for</span> <span class="n">log_group</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">log_groups</span><span class="p">:</span>
+<span class="linenos" data-linenos="323 "></span>            <span class="k">yield from</span> <span class="n">effective_fetch</span><span class="p">(</span>
+<span class="linenos" data-linenos="324 "></span>                <span class="n">log_group</span><span class="p">,</span>
+<span class="linenos" data-linenos="325 "></span>                <span class="n">request</span><span class="o">.</span><span class="n">backfill_start</span><span class="p">,</span>
+<span class="linenos" data-linenos="326 "></span>                <span class="n">now</span><span class="p">,</span>
+<span class="linenos" data-linenos="327 "></span>                <span class="n">filter_pattern</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">filter_pattern</span><span class="p">,</span>
+<span class="linenos" data-linenos="328 "></span>                <span class="n">profile_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">profile</span><span class="p">,</span>
+<span class="linenos" data-linenos="329 "></span>                <span class="n">region_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">region</span><span class="p">,</span>
+<span class="linenos" data-linenos="330 "></span>            <span class="p">)</span>
+<span class="linenos" data-linenos="331 "></span>    <span class="k">yield from</span> <span class="n">effective_stream</span><span class="p">(</span>
+<span class="linenos" data-linenos="332 "></span>        <span class="n">request</span><span class="o">.</span><span class="n">log_groups</span><span class="p">,</span>
+<span class="linenos" data-linenos="333 "></span>        <span class="n">filter_pattern</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">filter_pattern</span><span class="p">,</span>
+<span class="linenos" data-linenos="334 "></span>        <span class="n">profile_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">profile</span><span class="p">,</span>
+<span class="linenos" data-linenos="335 "></span>        <span class="n">region_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">region</span><span class="p">,</span>
+<span class="linenos" data-linenos="336 "></span>    <span class="p">)</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.cli.open_log_cache" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">open_log_cache</span>
+
+
+<a href="#tail_cw.cli.open_log_cache" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">open_log_cache</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Open the configured log cache. Close it, or use it as a context manager.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/cli.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="339 "></span><span class="k">def</span><span class="w"> </span><span class="nf">open_log_cache</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">TailCWConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LogCache</span><span class="p">:</span>
+<span class="linenos" data-linenos="340 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Open the configured log cache. Close it, or use it as a context manager.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="341 "></span>    <span class="k">return</span> <span class="n">LogCache</span><span class="p">(</span>
+<span class="linenos" data-linenos="342 "></span>        <span class="n">request_cache_dir</span><span class="p">(</span><span class="n">config</span><span class="p">),</span>
+<span class="linenos" data-linenos="343 "></span>        <span class="n">size_limit_mb</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">size_limit_mb</span><span class="p">,</span>
+<span class="linenos" data-linenos="344 "></span>        <span class="n">default_ttl_seconds</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">default_ttl_seconds</span><span class="p">,</span>
+<span class="linenos" data-linenos="345 "></span>        <span class="n">eviction_policy</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">eviction_policy</span><span class="p">,</span>
+<span class="linenos" data-linenos="346 "></span>        <span class="n">compression_level</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">parquet</span><span class="o">.</span><span class="n">compression_level</span><span class="p">,</span>
+<span class="linenos" data-linenos="347 "></span>        <span class="n">row_group_size</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">parquet</span><span class="o">.</span><span class="n">row_group_size</span><span class="p">,</span>
+<span class="linenos" data-linenos="348 "></span>        <span class="n">infer_schema_length</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">parquet</span><span class="o">.</span><span class="n">infer_schema_length</span><span class="p">,</span>
+<span class="linenos" data-linenos="349 "></span>    <span class="p">)</span>
 </code></pre></div>
             </details>
     </div>
@@ -3335,25 +4196,25 @@ ISO-8601 datetime.</p>
 
             <details class="quote">
               <summary>Source code in <code>tail_cw/cli.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="134 "></span><span class="k">def</span><span class="w"> </span><span class="nf">parse_time</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">now</span><span class="p">:</span> <span class="n">datetime</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">datetime</span><span class="p">:</span>
-<span class="linenos" data-linenos="135 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse a relative duration (``15m``, ``2h``, ``3d``) or ISO-8601 datetime.</span>
-<span class="linenos" data-linenos="136 "></span>
-<span class="linenos" data-linenos="137 "></span><span class="sd">    Relative durations are interpreted as offsets before ``now``. Naive</span>
-<span class="linenos" data-linenos="138 "></span><span class="sd">    absolute datetimes are assumed to be UTC.</span>
-<span class="linenos" data-linenos="139 "></span>
-<span class="linenos" data-linenos="140 "></span><span class="sd">    Raises:</span>
-<span class="linenos" data-linenos="141 "></span><span class="sd">        ValueError: If the value is neither a supported duration nor a valid</span>
-<span class="linenos" data-linenos="142 "></span><span class="sd">            ISO-8601 datetime.</span>
-<span class="linenos" data-linenos="143 "></span><span class="sd">    &quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="144 "></span>    <span class="n">text</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-<span class="linenos" data-linenos="145 "></span>    <span class="k">if</span> <span class="n">match</span> <span class="o">:=</span> <span class="n">_DURATION_RE</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
-<span class="linenos" data-linenos="146 "></span>        <span class="k">return</span> <span class="n">now</span> <span class="o">-</span> <span class="n">_duration_to_timedelta</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)),</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
-<span class="linenos" data-linenos="147 "></span>    <span class="k">try</span><span class="p">:</span>
-<span class="linenos" data-linenos="148 "></span>        <span class="n">parsed</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">fromisoformat</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
-<span class="linenos" data-linenos="149 "></span>    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-<span class="linenos" data-linenos="150 "></span>        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;Invalid time </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s1">: expected a duration like 15m, 2h, or 3d, or an ISO-8601 datetime&#39;</span>
-<span class="linenos" data-linenos="151 "></span>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
-<span class="linenos" data-linenos="152 "></span>    <span class="k">return</span> <span class="n">parsed</span> <span class="k">if</span> <span class="n">parsed</span><span class="o">.</span><span class="n">tzinfo</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">parsed</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">tzinfo</span><span class="o">=</span><span class="n">UTC</span><span class="p">)</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="178 "></span><span class="k">def</span><span class="w"> </span><span class="nf">parse_time</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">now</span><span class="p">:</span> <span class="n">datetime</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">datetime</span><span class="p">:</span>
+<span class="linenos" data-linenos="179 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse a relative duration (``15m``, ``2h``, ``3d``) or ISO-8601 datetime.</span>
+<span class="linenos" data-linenos="180 "></span>
+<span class="linenos" data-linenos="181 "></span><span class="sd">    Relative durations are interpreted as offsets before ``now``. Naive</span>
+<span class="linenos" data-linenos="182 "></span><span class="sd">    absolute datetimes are assumed to be UTC.</span>
+<span class="linenos" data-linenos="183 "></span>
+<span class="linenos" data-linenos="184 "></span><span class="sd">    Raises:</span>
+<span class="linenos" data-linenos="185 "></span><span class="sd">        ValueError: If the value is neither a supported duration nor a valid</span>
+<span class="linenos" data-linenos="186 "></span><span class="sd">            ISO-8601 datetime.</span>
+<span class="linenos" data-linenos="187 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="188 "></span>    <span class="n">text</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+<span class="linenos" data-linenos="189 "></span>    <span class="k">if</span> <span class="n">match</span> <span class="o">:=</span> <span class="n">_DURATION_RE</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+<span class="linenos" data-linenos="190 "></span>        <span class="k">return</span> <span class="n">now</span> <span class="o">-</span> <span class="n">_duration_to_timedelta</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)),</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+<span class="linenos" data-linenos="191 "></span>    <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="192 "></span>        <span class="n">parsed</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">fromisoformat</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+<span class="linenos" data-linenos="193 "></span>    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+<span class="linenos" data-linenos="194 "></span>        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;Invalid time </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s1">: expected a duration like 15m, 2h, or 3d, or an ISO-8601 datetime&#39;</span>
+<span class="linenos" data-linenos="195 "></span>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+<span class="linenos" data-linenos="196 "></span>    <span class="k">return</span> <span class="n">parsed</span> <span class="k">if</span> <span class="n">parsed</span><span class="o">.</span><span class="n">tzinfo</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">parsed</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">tzinfo</span><span class="o">=</span><span class="n">UTC</span><span class="p">)</span>
 </code></pre></div>
             </details>
     </div>
@@ -3378,9 +4239,9 @@ ISO-8601 datetime.</p>
 
             <details class="quote">
               <summary>Source code in <code>tail_cw/cli.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="376 "></span><span class="k">def</span><span class="w"> </span><span class="nf">request_cache_dir</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">TailCWConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
-<span class="linenos" data-linenos="377 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the configured cache directory, falling back to the XDG default.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="378 "></span>    <span class="k">return</span> <span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">cache_dir</span> <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">cache_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">get_default_cache_dir</span><span class="p">()</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="432 "></span><span class="k">def</span><span class="w"> </span><span class="nf">request_cache_dir</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">TailCWConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="linenos" data-linenos="433 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the configured cache directory, falling back to the XDG default.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="434 "></span>    <span class="k">return</span> <span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">cache_dir</span> <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">cache_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">get_default_cache_dir</span><span class="p">()</span>
 </code></pre></div>
             </details>
     </div>
@@ -3406,54 +4267,76 @@ ISO-8601 datetime.</p>
 
             <details class="quote">
               <summary>Source code in <code>tail_cw/cli.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="326 "></span><span class="k">def</span><span class="w"> </span><span class="nf">resolve_parquet_path</span><span class="p">(</span>
-<span class="linenos" data-linenos="327 "></span>    <span class="n">request</span><span class="p">:</span> <span class="n">FetchRequest</span><span class="p">,</span>
-<span class="linenos" data-linenos="328 "></span>    <span class="n">config</span><span class="p">:</span> <span class="n">TailCWConfig</span><span class="p">,</span>
-<span class="linenos" data-linenos="329 "></span>    <span class="o">*</span><span class="p">,</span>
-<span class="linenos" data-linenos="330 "></span>    <span class="n">use_cache</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-<span class="linenos" data-linenos="331 "></span>    <span class="n">fetch_events</span><span class="p">:</span> <span class="n">FetchEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="332 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos="333 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the cached Parquet path for a request, fetching from AWS on miss.</span>
-<span class="linenos" data-linenos="334 "></span>
-<span class="linenos" data-linenos="335 "></span><span class="sd">    Returns None when the request matches no events.</span>
-<span class="linenos" data-linenos="336 "></span><span class="sd">    &quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="337 "></span>    <span class="n">effective_fetch</span> <span class="o">=</span> <span class="n">fetch_events</span> <span class="k">if</span> <span class="n">fetch_events</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">fetch_log_events</span>
-<span class="linenos" data-linenos="338 "></span>    <span class="n">cache_key</span> <span class="o">=</span> <span class="n">generate_cache_key</span><span class="p">(</span>
-<span class="linenos" data-linenos="339 "></span>        <span class="n">request</span><span class="o">.</span><span class="n">log_group</span><span class="p">,</span>
-<span class="linenos" data-linenos="340 "></span>        <span class="n">request</span><span class="o">.</span><span class="n">start_time</span><span class="p">,</span>
-<span class="linenos" data-linenos="341 "></span>        <span class="n">request</span><span class="o">.</span><span class="n">end_time</span><span class="p">,</span>
-<span class="linenos" data-linenos="342 "></span>        <span class="n">filter_pattern</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">filter_pattern</span><span class="p">,</span>
-<span class="linenos" data-linenos="343 "></span>        <span class="n">region_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">region</span><span class="p">,</span>
-<span class="linenos" data-linenos="344 "></span>        <span class="n">profile_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">profile</span><span class="p">,</span>
-<span class="linenos" data-linenos="345 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="346 "></span>    <span class="n">cache_dir</span> <span class="o">=</span> <span class="n">request_cache_dir</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-<span class="linenos" data-linenos="347 "></span>    <span class="k">with</span> <span class="n">LogCache</span><span class="p">(</span>
-<span class="linenos" data-linenos="348 "></span>        <span class="n">cache_dir</span><span class="p">,</span>
-<span class="linenos" data-linenos="349 "></span>        <span class="n">size_limit_mb</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">size_limit_mb</span><span class="p">,</span>
-<span class="linenos" data-linenos="350 "></span>        <span class="n">default_ttl_seconds</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">default_ttl_seconds</span><span class="p">,</span>
-<span class="linenos" data-linenos="351 "></span>        <span class="n">eviction_policy</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">eviction_policy</span><span class="p">,</span>
-<span class="linenos" data-linenos="352 "></span>        <span class="n">compression_level</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">parquet</span><span class="o">.</span><span class="n">compression_level</span><span class="p">,</span>
-<span class="linenos" data-linenos="353 "></span>        <span class="n">row_group_size</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">parquet</span><span class="o">.</span><span class="n">row_group_size</span><span class="p">,</span>
-<span class="linenos" data-linenos="354 "></span>        <span class="n">infer_schema_length</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">parquet</span><span class="o">.</span><span class="n">infer_schema_length</span><span class="p">,</span>
-<span class="linenos" data-linenos="355 "></span>    <span class="p">)</span> <span class="k">as</span> <span class="n">cache</span><span class="p">:</span>
-<span class="linenos" data-linenos="356 "></span>        <span class="k">if</span> <span class="n">use_cache</span> <span class="ow">and</span> <span class="p">(</span><span class="n">cached_path</span> <span class="o">:=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_parquet_path</span><span class="p">(</span><span class="n">cache_key</span><span class="p">))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos="357 "></span>            <span class="k">return</span> <span class="n">cached_path</span>
-<span class="linenos" data-linenos="358 "></span>        <span class="n">events</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span>
-<span class="linenos" data-linenos="359 "></span>            <span class="n">effective_fetch</span><span class="p">(</span>
-<span class="linenos" data-linenos="360 "></span>                <span class="n">request</span><span class="o">.</span><span class="n">log_group</span><span class="p">,</span>
-<span class="linenos" data-linenos="361 "></span>                <span class="n">request</span><span class="o">.</span><span class="n">start_time</span><span class="p">,</span>
-<span class="linenos" data-linenos="362 "></span>                <span class="n">request</span><span class="o">.</span><span class="n">end_time</span><span class="p">,</span>
-<span class="linenos" data-linenos="363 "></span>                <span class="n">filter_pattern</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">filter_pattern</span><span class="p">,</span>
-<span class="linenos" data-linenos="364 "></span>                <span class="n">profile_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">profile</span><span class="p">,</span>
-<span class="linenos" data-linenos="365 "></span>                <span class="n">region_name</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">region</span><span class="p">,</span>
-<span class="linenos" data-linenos="366 "></span>            <span class="p">),</span>
-<span class="linenos" data-linenos="367 "></span>        <span class="p">)</span>
-<span class="linenos" data-linenos="368 "></span>        <span class="k">try</span><span class="p">:</span>
-<span class="linenos" data-linenos="369 "></span>            <span class="n">first_event</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">events</span><span class="p">)</span>
-<span class="linenos" data-linenos="370 "></span>        <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
-<span class="linenos" data-linenos="371 "></span>            <span class="k">return</span> <span class="kc">None</span>
-<span class="linenos" data-linenos="372 "></span>        <span class="n">cache</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">chain</span><span class="p">([</span><span class="n">first_event</span><span class="p">],</span> <span class="n">events</span><span class="p">),</span> <span class="n">cache_key</span><span class="p">)</span>
-<span class="linenos" data-linenos="373 "></span>        <span class="k">return</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_parquet_path</span><span class="p">(</span><span class="n">cache_key</span><span class="p">)</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="388 "></span><span class="k">def</span><span class="w"> </span><span class="nf">resolve_parquet_path</span><span class="p">(</span>
+<span class="linenos" data-linenos="389 "></span>    <span class="n">request</span><span class="p">:</span> <span class="n">FetchRequest</span><span class="p">,</span>
+<span class="linenos" data-linenos="390 "></span>    <span class="n">config</span><span class="p">:</span> <span class="n">TailCWConfig</span><span class="p">,</span>
+<span class="linenos" data-linenos="391 "></span>    <span class="o">*</span><span class="p">,</span>
+<span class="linenos" data-linenos="392 "></span>    <span class="n">use_cache</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="linenos" data-linenos="393 "></span>    <span class="n">fetch_events</span><span class="p">:</span> <span class="n">FetchEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="394 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="395 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the cached Parquet path for a request, fetching from AWS on miss.</span>
+<span class="linenos" data-linenos="396 "></span>
+<span class="linenos" data-linenos="397 "></span><span class="sd">    Returns None when the request matches no events.</span>
+<span class="linenos" data-linenos="398 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="399 "></span>    <span class="k">with</span> <span class="n">open_log_cache</span><span class="p">(</span><span class="n">config</span><span class="p">)</span> <span class="k">as</span> <span class="n">cache</span><span class="p">:</span>
+<span class="linenos" data-linenos="400 "></span>        <span class="k">return</span> <span class="n">_resolve_into_cache</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">cache</span><span class="p">,</span> <span class="n">use_cache</span><span class="o">=</span><span class="n">use_cache</span><span class="p">,</span> <span class="n">fetch_events</span><span class="o">=</span><span class="n">fetch_events</span><span class="p">)</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.cli.resolve_parquet_paths" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">resolve_parquet_paths</span>
+
+
+<a href="#tail_cw.cli.resolve_parquet_paths" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">resolve_parquet_paths</span><span class="p">(</span><span class="n">requests</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">use_cache</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">fetch_events</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Resolve several fetches in parallel, dropping the ones with no events.</p>
+<p>One Parquet file per request keeps each log group independently cacheable;
+the caller merges them at read time. Results keep the request order rather
+than completion order so the caller&rsquo;s group list stays meaningful.</p>
+<p>Every worker shares one <code>LogCache</code>. Separate instances over the same
+directory delete each other&rsquo;s not-yet-referenced Parquet files during orphan
+cleanup, which silently drops groups from the result.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/cli.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="403 "></span><span class="k">def</span><span class="w"> </span><span class="nf">resolve_parquet_paths</span><span class="p">(</span>
+<span class="linenos" data-linenos="404 "></span>    <span class="n">requests</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">FetchRequest</span><span class="p">],</span>
+<span class="linenos" data-linenos="405 "></span>    <span class="n">config</span><span class="p">:</span> <span class="n">TailCWConfig</span><span class="p">,</span>
+<span class="linenos" data-linenos="406 "></span>    <span class="o">*</span><span class="p">,</span>
+<span class="linenos" data-linenos="407 "></span>    <span class="n">use_cache</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="linenos" data-linenos="408 "></span>    <span class="n">fetch_events</span><span class="p">:</span> <span class="n">FetchEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="409 "></span>    <span class="n">max_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+<span class="linenos" data-linenos="410 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
+<span class="linenos" data-linenos="411 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve several fetches in parallel, dropping the ones with no events.</span>
+<span class="linenos" data-linenos="412 "></span>
+<span class="linenos" data-linenos="413 "></span><span class="sd">    One Parquet file per request keeps each log group independently cacheable;</span>
+<span class="linenos" data-linenos="414 "></span><span class="sd">    the caller merges them at read time. Results keep the request order rather</span>
+<span class="linenos" data-linenos="415 "></span><span class="sd">    than completion order so the caller&#39;s group list stays meaningful.</span>
+<span class="linenos" data-linenos="416 "></span>
+<span class="linenos" data-linenos="417 "></span><span class="sd">    Every worker shares one ``LogCache``. Separate instances over the same</span>
+<span class="linenos" data-linenos="418 "></span><span class="sd">    directory delete each other&#39;s not-yet-referenced Parquet files during orphan</span>
+<span class="linenos" data-linenos="419 "></span><span class="sd">    cleanup, which silently drops groups from the result.</span>
+<span class="linenos" data-linenos="420 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="421 "></span>    <span class="k">if</span> <span class="ow">not</span> <span class="n">requests</span><span class="p">:</span>
+<span class="linenos" data-linenos="422 "></span>        <span class="k">return</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="423 "></span>    <span class="k">with</span> <span class="n">open_log_cache</span><span class="p">(</span><span class="n">config</span><span class="p">)</span> <span class="k">as</span> <span class="n">cache</span><span class="p">:</span>
+<span class="linenos" data-linenos="424 "></span>        <span class="n">resolve</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="n">_resolve_into_cache</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span> <span class="n">use_cache</span><span class="o">=</span><span class="n">use_cache</span><span class="p">,</span> <span class="n">fetch_events</span><span class="o">=</span><span class="n">fetch_events</span><span class="p">)</span>
+<span class="linenos" data-linenos="425 "></span>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">requests</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+<span class="linenos" data-linenos="426 "></span>            <span class="n">path</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span><span class="n">requests</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="linenos" data-linenos="427 "></span>            <span class="k">return</span> <span class="p">[]</span> <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="n">path</span><span class="p">]</span>
+<span class="linenos" data-linenos="428 "></span>        <span class="k">with</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">max_workers</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">requests</span><span class="p">)))</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
+<span class="linenos" data-linenos="429 "></span>            <span class="k">return</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">resolve</span><span class="p">,</span> <span class="n">requests</span><span class="p">)</span> <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
 </code></pre></div>
             </details>
     </div>
@@ -3468,45 +4351,133 @@ ISO-8601 datetime.</p>
 
 
 <a href="#tail_cw.cli.run_cli" class="headerlink" title="Permanent link">⚓︎</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_cli</span><span class="p">(</span><span class="n">argv</span><span class="p">,</span> <span class="n">run_tui</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">fetch_events</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">run_tail_tui</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">run_dashboard_tui</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stream_events</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_cli</span><span class="p">(</span><span class="n">argv</span><span class="p">,</span> <span class="n">run_shell</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">fetch_events</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stream_events</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">is_tty</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Parse arguments and dispatch to the requested subcommand.</p>
-<p>Returns the process exit code.</p>
+        <p>Parse arguments and either open the shell or write an export to stdout.</p>
+<p>Bare <code>tail-cw</code> opens the shell on a TTY and prints help with exit code 2
+otherwise, so piping into a script still gets usable output rather than a
+terminal app. Returns the process exit code.</p>
 
 
             <details class="quote">
               <summary>Source code in <code>tail_cw/cli.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="562 "></span><span class="k">def</span><span class="w"> </span><span class="nf">run_cli</span><span class="p">(</span>
-<span class="linenos" data-linenos="563 "></span>    <span class="n">argv</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="564 "></span>    <span class="n">run_tui</span><span class="p">:</span> <span class="n">RunTui</span><span class="p">,</span>
-<span class="linenos" data-linenos="565 "></span>    <span class="o">*</span><span class="p">,</span>
-<span class="linenos" data-linenos="566 "></span>    <span class="n">fetch_events</span><span class="p">:</span> <span class="n">FetchEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="567 "></span>    <span class="n">run_tail_tui</span><span class="p">:</span> <span class="n">RunTailTui</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="568 "></span>    <span class="n">run_dashboard_tui</span><span class="p">:</span> <span class="n">RunDashboardTui</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="569 "></span>    <span class="n">stream_events</span><span class="p">:</span> <span class="n">StreamEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="570 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="linenos" data-linenos="571 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse arguments and dispatch to the requested subcommand.</span>
-<span class="linenos" data-linenos="572 "></span>
-<span class="linenos" data-linenos="573 "></span><span class="sd">    Returns the process exit code.</span>
-<span class="linenos" data-linenos="574 "></span><span class="sd">    &quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="575 "></span>    <span class="n">parser</span> <span class="o">=</span> <span class="n">build_parser</span><span class="p">()</span>
-<span class="linenos" data-linenos="576 "></span>    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">argv</span><span class="p">)</span>
-<span class="linenos" data-linenos="577 "></span>    <span class="n">now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">tz</span><span class="o">=</span><span class="n">UTC</span><span class="p">)</span>
-<span class="linenos" data-linenos="578 "></span>    <span class="k">match</span> <span class="n">args</span><span class="o">.</span><span class="n">command</span><span class="p">:</span>
-<span class="linenos" data-linenos="579 "></span>        <span class="k">case</span> <span class="s1">&#39;fetch&#39;</span><span class="p">:</span>
-<span class="linenos" data-linenos="580 "></span>            <span class="k">return</span> <span class="n">_run_fetch_command</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">now</span><span class="p">,</span> <span class="n">run_tui</span><span class="p">,</span> <span class="n">fetch_events</span><span class="o">=</span><span class="n">fetch_events</span><span class="p">)</span>
-<span class="linenos" data-linenos="581 "></span>        <span class="k">case</span> <span class="s1">&#39;tail&#39;</span><span class="p">:</span>
-<span class="linenos" data-linenos="582 "></span>            <span class="k">return</span> <span class="n">_run_tail_command</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">now</span><span class="p">,</span> <span class="n">run_tail_tui</span><span class="p">,</span> <span class="n">fetch_events</span><span class="o">=</span><span class="n">fetch_events</span><span class="p">,</span> <span class="n">stream_events</span><span class="o">=</span><span class="n">stream_events</span><span class="p">)</span>
-<span class="linenos" data-linenos="583 "></span>        <span class="k">case</span> <span class="s1">&#39;dashboards&#39;</span><span class="p">:</span>
-<span class="linenos" data-linenos="584 "></span>            <span class="k">return</span> <span class="n">_run_dashboards_command</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
-<span class="linenos" data-linenos="585 "></span>        <span class="k">case</span> <span class="s1">&#39;dashboard&#39;</span><span class="p">:</span>
-<span class="linenos" data-linenos="586 "></span>            <span class="k">return</span> <span class="n">_run_dashboard_command</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">now</span><span class="p">,</span> <span class="n">run_dashboard_tui</span><span class="p">)</span>
-<span class="linenos" data-linenos="587 "></span>        <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
-<span class="linenos" data-linenos="588 "></span>            <span class="n">parser</span><span class="o">.</span><span class="n">print_help</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
-<span class="linenos" data-linenos="589 "></span>            <span class="k">return</span> <span class="mi">2</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="726 "></span><span class="k">def</span><span class="w"> </span><span class="nf">run_cli</span><span class="p">(</span>
+<span class="linenos" data-linenos="727 "></span>    <span class="n">argv</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="728 "></span>    <span class="n">run_shell</span><span class="p">:</span> <span class="n">RunShell</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="729 "></span>    <span class="o">*</span><span class="p">,</span>
+<span class="linenos" data-linenos="730 "></span>    <span class="n">fetch_events</span><span class="p">:</span> <span class="n">FetchEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="731 "></span>    <span class="n">stream_events</span><span class="p">:</span> <span class="n">StreamEvents</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="732 "></span>    <span class="n">is_tty</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="733 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="linenos" data-linenos="734 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse arguments and either open the shell or write an export to stdout.</span>
+<span class="linenos" data-linenos="735 "></span>
+<span class="linenos" data-linenos="736 "></span><span class="sd">    Bare ``tail-cw`` opens the shell on a TTY and prints help with exit code 2</span>
+<span class="linenos" data-linenos="737 "></span><span class="sd">    otherwise, so piping into a script still gets usable output rather than a</span>
+<span class="linenos" data-linenos="738 "></span><span class="sd">    terminal app. Returns the process exit code.</span>
+<span class="linenos" data-linenos="739 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="740 "></span>    <span class="n">parser</span> <span class="o">=</span> <span class="n">build_parser</span><span class="p">()</span>
+<span class="linenos" data-linenos="741 "></span>    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">argv</span><span class="p">)</span>
+<span class="linenos" data-linenos="742 "></span>    <span class="n">now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">tz</span><span class="o">=</span><span class="n">UTC</span><span class="p">)</span>
+<span class="linenos" data-linenos="743 "></span>    <span class="n">interactive</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">isatty</span><span class="p">()</span> <span class="k">if</span> <span class="n">is_tty</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">is_tty</span>
+<span class="linenos" data-linenos="744 "></span>    <span class="k">match</span> <span class="n">args</span><span class="o">.</span><span class="n">command</span><span class="p">:</span>
+<span class="linenos" data-linenos="745 "></span>        <span class="k">case</span> <span class="s1">&#39;export&#39;</span><span class="p">:</span>
+<span class="linenos" data-linenos="746 "></span>            <span class="k">return</span> <span class="n">_run_export_command</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">now</span><span class="p">,</span> <span class="n">parser</span><span class="p">,</span> <span class="n">fetch_events</span><span class="o">=</span><span class="n">fetch_events</span><span class="p">,</span> <span class="n">stream_events</span><span class="o">=</span><span class="n">stream_events</span><span class="p">)</span>
+<span class="linenos" data-linenos="747 "></span>        <span class="k">case</span> <span class="s1">&#39;logs&#39;</span> <span class="o">|</span> <span class="s1">&#39;tail&#39;</span> <span class="o">|</span> <span class="s1">&#39;dash&#39;</span><span class="p">:</span>
+<span class="linenos" data-linenos="748 "></span>            <span class="k">return</span> <span class="n">_run_shell_command</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">now</span><span class="p">,</span> <span class="n">run_shell</span><span class="p">)</span>
+<span class="linenos" data-linenos="749 "></span>        <span class="k">case</span><span class="w"> </span><span class="k">_</span> <span class="k">if</span> <span class="n">interactive</span><span class="p">:</span>
+<span class="linenos" data-linenos="750 "></span>            <span class="k">return</span> <span class="n">_run_shell_command</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">now</span><span class="p">,</span> <span class="n">run_shell</span><span class="p">)</span>
+<span class="linenos" data-linenos="751 "></span>        <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
+<span class="linenos" data-linenos="752 "></span>            <span class="n">parser</span><span class="o">.</span><span class="n">print_help</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+<span class="linenos" data-linenos="753 "></span>            <span class="k">return</span> <span class="mi">2</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.cli.seed_from_args" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">seed_from_args</span>
+
+
+<a href="#tail_cw.cli.seed_from_args" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">seed_from_args</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">presets</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Choose the opening view from the subcommand and its arguments.</p>
+<p>A log group argument naming an unknown preset propagates <code>ValueError</code> from
+:func:<code>expand_presets</code>.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/cli.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="560 "></span><span class="k">def</span><span class="w"> </span><span class="nf">seed_from_args</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">argparse</span><span class="o">.</span><span class="n">Namespace</span><span class="p">,</span> <span class="n">presets</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ShellSeed</span><span class="p">:</span>
+<span class="linenos" data-linenos="561 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Choose the opening view from the subcommand and its arguments.</span>
+<span class="linenos" data-linenos="562 "></span>
+<span class="linenos" data-linenos="563 "></span><span class="sd">    A log group argument naming an unknown preset propagates ``ValueError`` from</span>
+<span class="linenos" data-linenos="564 "></span><span class="sd">    :func:`expand_presets`.</span>
+<span class="linenos" data-linenos="565 "></span><span class="sd">    &quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="566 "></span>    <span class="n">known</span> <span class="o">=</span> <span class="n">presets</span> <span class="k">if</span> <span class="n">presets</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
+<span class="linenos" data-linenos="567 "></span>    <span class="k">match</span> <span class="n">args</span><span class="o">.</span><span class="n">command</span><span class="p">:</span>
+<span class="linenos" data-linenos="568 "></span>        <span class="k">case</span> <span class="s1">&#39;logs&#39;</span><span class="p">:</span>
+<span class="linenos" data-linenos="569 "></span>            <span class="k">return</span> <span class="n">_log_view_seed</span><span class="p">(</span><span class="s1">&#39;logs&#39;</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">patterns</span><span class="p">,</span> <span class="n">known</span><span class="p">)</span>
+<span class="linenos" data-linenos="570 "></span>        <span class="k">case</span> <span class="s1">&#39;tail&#39;</span><span class="p">:</span>
+<span class="linenos" data-linenos="571 "></span>            <span class="k">return</span> <span class="n">_log_view_seed</span><span class="p">(</span><span class="s1">&#39;tail&#39;</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">patterns</span><span class="p">,</span> <span class="n">known</span><span class="p">)</span>
+<span class="linenos" data-linenos="572 "></span>        <span class="k">case</span> <span class="s1">&#39;dash&#39;</span> <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">demo</span><span class="p">:</span>
+<span class="linenos" data-linenos="573 "></span>            <span class="k">return</span> <span class="n">ShellSeed</span><span class="p">(</span><span class="n">view</span><span class="o">=</span><span class="s1">&#39;dashboard&#39;</span><span class="p">,</span> <span class="n">targets</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;demo&#39;</span><span class="p">,),</span> <span class="n">demo</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="linenos" data-linenos="574 "></span>        <span class="k">case</span> <span class="s1">&#39;dash&#39;</span> <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="575 "></span>            <span class="k">return</span> <span class="n">ShellSeed</span><span class="p">(</span><span class="n">view</span><span class="o">=</span><span class="s1">&#39;dashboard&#39;</span><span class="p">,</span> <span class="n">targets</span><span class="o">=</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">name</span><span class="p">,))</span>
+<span class="linenos" data-linenos="576 "></span>        <span class="k">case</span> <span class="s1">&#39;dash&#39;</span><span class="p">:</span>
+<span class="linenos" data-linenos="577 "></span>            <span class="k">return</span> <span class="n">ShellSeed</span><span class="p">(</span><span class="n">view</span><span class="o">=</span><span class="s1">&#39;dashboards&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="578 "></span>        <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
+<span class="linenos" data-linenos="579 "></span>            <span class="k">return</span> <span class="n">ShellSeed</span><span class="p">(</span><span class="n">view</span><span class="o">=</span><span class="s1">&#39;groups&#39;</span><span class="p">)</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.cli.session_from_args" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">session_from_args</span>
+
+
+<a href="#tail_cw.cli.session_from_args" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">session_from_args</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">now</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build the shared shell session from parsed arguments.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>tail_cw/cli.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="504 "></span><span class="k">def</span><span class="w"> </span><span class="nf">session_from_args</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">argparse</span><span class="o">.</span><span class="n">Namespace</span><span class="p">,</span> <span class="n">now</span><span class="p">:</span> <span class="n">datetime</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Session</span><span class="p">:</span>
+<span class="linenos" data-linenos="505 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build the shared shell session from parsed arguments.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="506 "></span>    <span class="n">start</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s1">&#39;start&#39;</span><span class="p">,</span> <span class="n">DEFAULT_WINDOW</span><span class="p">)</span>
+<span class="linenos" data-linenos="507 "></span>    <span class="n">end</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s1">&#39;end&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="linenos" data-linenos="508 "></span>    <span class="n">start_time</span> <span class="o">=</span> <span class="n">parse_time</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">now</span><span class="o">=</span><span class="n">now</span><span class="p">)</span>
+<span class="linenos" data-linenos="509 "></span>    <span class="n">end_time</span> <span class="o">=</span> <span class="n">parse_time</span><span class="p">(</span><span class="n">end</span><span class="p">,</span> <span class="n">now</span><span class="o">=</span><span class="n">now</span><span class="p">)</span> <span class="k">if</span> <span class="n">end</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">now</span>
+<span class="linenos" data-linenos="510 "></span>    <span class="k">if</span> <span class="n">start_time</span> <span class="o">&gt;=</span> <span class="n">end_time</span><span class="p">:</span>
+<span class="linenos" data-linenos="511 "></span>        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;--start (</span><span class="si">{</span><span class="n">start_time</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span><span class="si">}</span><span class="s1">) must be before --end (</span><span class="si">{</span><span class="n">end_time</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span><span class="si">}</span><span class="s1">)&#39;</span>
+<span class="linenos" data-linenos="512 "></span>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+<span class="linenos" data-linenos="513 "></span>    <span class="k">return</span> <span class="n">Session</span><span class="p">(</span>
+<span class="linenos" data-linenos="514 "></span>        <span class="n">start</span><span class="o">=</span><span class="n">start_time</span><span class="p">,</span>
+<span class="linenos" data-linenos="515 "></span>        <span class="n">end</span><span class="o">=</span><span class="n">end_time</span><span class="p">,</span>
+<span class="linenos" data-linenos="516 "></span>        <span class="n">filter_pattern</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s1">&#39;filter_pattern&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+<span class="linenos" data-linenos="517 "></span>        <span class="n">profile</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">profile</span><span class="p">,</span>
+<span class="linenos" data-linenos="518 "></span>        <span class="n">region</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">region</span><span class="p">,</span>
+<span class="linenos" data-linenos="519 "></span>    <span class="p">)</span>
 </code></pre></div>
             </details>
     </div>
@@ -3531,14 +4502,14 @@ ISO-8601 datetime.</p>
 
             <details class="quote">
               <summary>Source code in <code>tail_cw/cli.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="400 "></span><span class="k">def</span><span class="w"> </span><span class="nf">stream_ndjson</span><span class="p">(</span><span class="n">events</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">LogEvent</span><span class="p">],</span> <span class="n">stream</span><span class="p">:</span> <span class="n">SupportsWriteFlushStr</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="linenos" data-linenos="401 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Write log events as NDJSON, flushing after every line for live consumers.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="402 "></span>    <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
-<span class="linenos" data-linenos="403 "></span>    <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
-<span class="linenos" data-linenos="404 "></span>        <span class="n">stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">_event_to_record</span><span class="p">(</span><span class="n">event</span><span class="p">),</span> <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39;:&#39;</span><span class="p">))</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="405 "></span>        <span class="n">stream</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
-<span class="linenos" data-linenos="406 "></span>        <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
-<span class="linenos" data-linenos="407 "></span>    <span class="k">return</span> <span class="n">count</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="456 "></span><span class="k">def</span><span class="w"> </span><span class="nf">stream_ndjson</span><span class="p">(</span><span class="n">events</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">LogEvent</span><span class="p">],</span> <span class="n">stream</span><span class="p">:</span> <span class="n">SupportsWriteFlushStr</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="linenos" data-linenos="457 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Write log events as NDJSON, flushing after every line for live consumers.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="458 "></span>    <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="linenos" data-linenos="459 "></span>    <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
+<span class="linenos" data-linenos="460 "></span>        <span class="n">stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">_event_to_record</span><span class="p">(</span><span class="n">event</span><span class="p">),</span> <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39;:&#39;</span><span class="p">))</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="461 "></span>        <span class="n">stream</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+<span class="linenos" data-linenos="462 "></span>        <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+<span class="linenos" data-linenos="463 "></span>    <span class="k">return</span> <span class="n">count</span>
 </code></pre></div>
             </details>
     </div>
@@ -3563,13 +4534,13 @@ ISO-8601 datetime.</p>
 
             <details class="quote">
               <summary>Source code in <code>tail_cw/cli.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="391 "></span><span class="k">def</span><span class="w"> </span><span class="nf">write_ndjson</span><span class="p">(</span><span class="n">events</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">LogEvent</span><span class="p">],</span> <span class="n">stream</span><span class="p">:</span> <span class="n">SupportsWriteStr</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="linenos" data-linenos="392 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Write log events to a stream as NDJSON and return the number written.&quot;&quot;&quot;</span>
-<span class="linenos" data-linenos="393 "></span>    <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
-<span class="linenos" data-linenos="394 "></span>    <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
-<span class="linenos" data-linenos="395 "></span>        <span class="n">stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">_event_to_record</span><span class="p">(</span><span class="n">event</span><span class="p">),</span> <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39;:&#39;</span><span class="p">))</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
-<span class="linenos" data-linenos="396 "></span>        <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
-<span class="linenos" data-linenos="397 "></span>    <span class="k">return</span> <span class="n">count</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="447 "></span><span class="k">def</span><span class="w"> </span><span class="nf">write_ndjson</span><span class="p">(</span><span class="n">events</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">LogEvent</span><span class="p">],</span> <span class="n">stream</span><span class="p">:</span> <span class="n">SupportsWriteStr</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="linenos" data-linenos="448 "></span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Write log events to a stream as NDJSON and return the number written.&quot;&quot;&quot;</span>
+<span class="linenos" data-linenos="449 "></span>    <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="linenos" data-linenos="450 "></span>    <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
+<span class="linenos" data-linenos="451 "></span>        <span class="n">stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">_event_to_record</span><span class="p">(</span><span class="n">event</span><span class="p">),</span> <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">,</span> <span class="s1">&#39;:&#39;</span><span class="p">))</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="linenos" data-linenos="452 "></span>        <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+<span class="linenos" data-linenos="453 "></span>    <span class="k">return</span> <span class="n">count</span>
 </code></pre></div>
             </details>
     </div>
