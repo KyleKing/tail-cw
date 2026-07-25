@@ -92,11 +92,30 @@ Deliverables, in order:
 Rescoped on 2026-07-25 by [ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md). The rule is now: build what only a CloudWatch-native terminal tool can build, and send the rest to Logs Insights, which grew roughly fifty new commands across June and July 2026 and got GA PPL, SQL, JOIN, and sub-queries.
 
 - **correlation-ID pivot (the headline).** Select a request, trace, or Hatchet `workflow_run_id` in any event and fan out across related log groups, building on `query/trace.py`. Much cheaper than when this was scheduled: the multi-group fan-out and the timestamp-merged read already exist from the M2 browser work, so this is mostly wiring
-- **spans as a log group.** With Transaction Search on, `aws/spans` holds OTel spans with W3C trace IDs, so the pivot extends from logs to spans without a span store. This is what the lifted tracing gate now means
+- **spans from X-Ray, not from `aws/spans`.** Measured in the prod account on 2026-07-25: Transaction Search is off (`get-trace-segment-destination` returns `Destination: XRay`), so `aws/spans` does not exist, while X-Ray already carries about 3,800 traces an hour including `hatchet-server` and an `execution_loop.lag_spike` service. Read the X-Ray API directly rather than enabling Transaction Search, which would duplicate every span into CloudWatch Logs at ingest cost. This is what the lifted tracing gate now means
 - **Logs Insights as a backend, not a reimplementation.** Surface `pattern`, `diff`, `stats by`, and context windows by sending a query to `StartQuery` with a scan-size estimate shown first, at $0.005/GB scanned. The local DuckDB and Polars engine keeps the job it is better at, which is free re-filtering over an already-cached Parquet window
 - **time-bucketed histogram of the current view.** Partly built: `bucket_event_counts` in `tail_cw/preview.py` already powers the dashboard log-volume sparklines
 - **dropped:** reimplementing LogsQL (`stream_context before N after N`, `unpack_json`) in the local engine. Logs Insights does this server-side now, and maintaining a second query language is the kind of cost ADR 0010 exists to avoid
 - later: matcher hooks to auto-link events to Sentry/PostHog issues
+
+#### Prerequisite: trace context does not cross the Hatchet boundary yet (measured 2026-07-25)
+
+The correlation pivot can only join on a key present in both places, and today there is none. Measured against `read-prod` over a three-hour window:
+
+| Key                   | `irm-ecs-api-prod` | `irm-prod-ecs-hatchet-workers` | Shared |
+| --------------------- | ------------------ | ------------------------------ | ------ |
+| distinct `trace_id`   | 100                | 22                             | **0**  |
+| distinct `request_id` | 100                | 23                             | **0**  |
+
+No `workflow_run_id` appears in worker logs at all. The cause shows in the IDs: 100 of 100 API trace IDs are timestamp-prefixed X-Ray style (`6a648fb4…`), and 0 of 22 worker IDs are, so the two sides run different ID generators and produce disjoint trace-ID spaces.
+
+The good news is that both sides already log structured JSON carrying `trace_id`, `span_id`, and `request_id`, and `trace_id` is already first in `DEFAULT_TRACE_ID_FIELDS`. So the tooling side is ready and the gap is instrumentation, in the application repo rather than here:
+
+1. enable Hatchet's OTel instrumentor (`hatchet-sdk[otel]`, `HatchetInstrumentor().instrument()`) on both the triggering API and the consuming workers, which injects and reads W3C `traceparent` through task metadata automatically
+1. align both sides on `AwsXRayIdGenerator` so the ID formats match and X-Ray keeps accepting them
+1. failing that, stamp `Context.workflow_run_id` into worker log lines and join on that instead, which is weaker because it does not reach the API
+
+Until one of those lands, build and test the pivot against a single service's log groups, where trace IDs do correlate.
 
 ### Resolved: the custom stack stays, with a narrower scope (2026-07-25)
 

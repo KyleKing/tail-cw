@@ -69,7 +69,7 @@ What tail-cw keeps building is what nothing else does: live tail through `StartL
 - M3 is rescoped in the roadmap: keep the correlation-ID pivot, delegate `pattern`, `stats`, and context-window features to Logs Insights behind a scan-size estimate, and drop the plan to reimplement LogsQL
 - `pyarrow` (125 MB installed) and `numpy` (25 MB) are declared dependencies that nothing under `tail_cw/` imports. Parquet I/O goes through polars natively. They should be dropped
 - A separate packaging defect is now blocking any release: the real runtime dependencies live in `[dependency-groups]`, which consumers never install, so a clean install of the built wheel fails on `import boto3`. This is unrelated to the scope question but must be fixed before tagging
-- The decision rests partly on `aws/spans` being queryable the way AWS documents. Confirm with one real query before committing a milestone to it
+- **Correction, verified against the prod account on 2026-07-25.** `aws/spans` does not exist there. `aws xray get-trace-segment-destination` returns `Destination: XRay, Status: ACTIVE`, so Transaction Search is off and spans stay in X-Ray. Since X-Ray already holds them (about 3,800 traces an hour), reading the X-Ray API directly is cheaper than enabling Transaction Search, which would duplicate every span into CloudWatch Logs at ingest cost. The `aws/spans` route stays valid, but it is the second choice for this account, not the first. See the roadmap's tracing prerequisite for the measurement
 - If the maintenance trend keeps climbing after M3 without the tool earning it in daily use, reopen this question. The measurement to watch is whether new code goes into things only tail-cw can do, or into reimplementing what AWS ships
 
 ## Sources
