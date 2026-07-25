@@ -159,6 +159,7 @@ def _live_services(
             window=timedelta(seconds=config.preview.window_seconds),
             now=session.end,
             config=config,
+            sample_limit=config.preview.sample_limit,
             profile_name=session.profile,
             region_name=session.region,
         )
