@@ -89,20 +89,26 @@ Deliverables, in order:
 
 ### M3 (Avenue C): investigation tools
 
-- correlation-ID pivot: select a request/trace ID in any event, fan out a search across related log groups (builds on `query/trace.py`). VictoriaLogs proves this pattern with Grafana derived fields that jump from a `trace_id` in a log line to all related logs, so the design is sound; see [ADR 0007](../docs/docs/adr/0007-victorialogs-grafana-replacement-evaluation.md)
-- Logs Insights `pattern`/`diff` subcommand and TUI action for warning/error spelunking, with a scan-size estimate shown before running
-- time-bucketed histogram/sparkline of the current view for quick activity graphs
-- LogsQL-inspired query-engine features worth stealing (seen in the VictoriaLogs demo): surrounding-log context (`stream_context before N after N`), `stats by (field)` aggregation, and inline JSON field extraction (`unpack_json`) so structured fields are filterable without a regex
+Rescoped on 2026-07-25 by [ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md). The rule is now: build what only a CloudWatch-native terminal tool can build, and send the rest to Logs Insights, which grew roughly fifty new commands across June and July 2026 and got GA PPL, SQL, JOIN, and sub-queries.
+
+- **correlation-ID pivot (the headline).** Select a request, trace, or Hatchet `workflow_run_id` in any event and fan out across related log groups, building on `query/trace.py`. Much cheaper than when this was scheduled: the multi-group fan-out and the timestamp-merged read already exist from the M2 browser work, so this is mostly wiring
+- **spans as a log group.** With Transaction Search on, `aws/spans` holds OTel spans with W3C trace IDs, so the pivot extends from logs to spans without a span store. This is what the lifted tracing gate now means
+- **Logs Insights as a backend, not a reimplementation.** Surface `pattern`, `diff`, `stats by`, and context windows by sending a query to `StartQuery` with a scan-size estimate shown first, at $0.005/GB scanned. The local DuckDB and Polars engine keeps the job it is better at, which is free re-filtering over an already-cached Parquet window
+- **time-bucketed histogram of the current view.** Partly built: `bucket_event_counts` in `tail_cw/preview.py` already powers the dashboard log-volume sparklines
+- **dropped:** reimplementing LogsQL (`stream_context before N after N`, `unpack_json`) in the local engine. Logs Insights does this server-side now, and maintaining a second query language is the kind of cost ADR 0010 exists to avoid
 - later: matcher hooks to auto-link events to Sentry/PostHog issues
 
-### Open question: is the custom stack the right vehicle? (added 2026-07-24)
+### Resolved: the custom stack stays, with a narrower scope (2026-07-25)
 
-A parallel exploration weighed replacing tail-cw with VictoriaLogs, VictoriaTraces, and Grafana fed by a pull-based CloudWatch ingest (see `demo/` and [ADR 0007](../docs/docs/adr/0007-victorialogs-grafana-replacement-evaluation.md)). Two points bear on the roadmap:
+The open question from 2026-07-24 is answered in [ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md), which supersedes ADR 0007. tail-cw is not replaced by VictoriaLogs, VictoriaTraces, and Grafana. Three things drove that.
 
-- Distributed tracing is a real gap. The founding use case (build a timeline across an API and its Kafka workers, explain a congestion root cause) is a span-based tracing problem, and tail-cw has none. The correlation-ID pivot at M3 is the closest we get. True tracing would be a large new subsystem
-- ADR 0007 sets a gate: do not build tracing into tail-cw until the replacement question resolves, because tracing is the largest piece of net-new code and the piece the candidate stack (VictoriaTraces over OTLP, Jaeger-compatible) most clearly already solves
+Tracing stopped being a reason to switch. X-Ray accepts OTLP natively and, with Transaction Search on, every span lands in an ordinary `aws/spans` log group in OTel format with W3C trace IDs. Hatchet's SDKs already propagate `traceparent` and expose `Context.workflow_run_id` inside task code. So spans are reachable with the query machinery we have, and the remaining gap is joining across log groups by a correlation ID, which is M3.
 
-So no tracing milestone is scheduled yet. If the evaluation keeps tail-cw (ADR 0007 options 1 or 3), tracing becomes its own milestone then.
+The candidate stack is not ready where we would have depended on it. VictoriaTraces is v0.10.0 and its own README warns that on-disk structures and APIs may break, and Grafana's trace-to-logs pivot accepts only Loki or Splunk, not VictoriaLogs.
+
+The custom stack's growth is the real risk, so the decision narrows scope rather than blessing more code. `tail_cw/` grew 82% in the nineteen days to 2026-07-25, and the ADR that weighed replacing it described it as "roughly 2000 lines" when it was already near 8,000.
+
+The tracing gate is lifted and redirected. Tracing may be built, and it is built by reading `aws/spans`, not by standing up a span store.
 
 ### M4: CloudWatch dashboards and metric exploration (prioritized next, added 2026-07-24)
 

@@ -1,6 +1,8 @@
 # ADR 0007: VictoriaLogs and Grafana as a replacement candidate
 
-Date: 2026-07-24 Status: Proposed (open question, no code commitment yet)
+Date: 2026-07-24 Status: Superseded by [ADR 0010](./0010-keep-tail-cw-with-a-narrower-scope.md) on 2026-07-25
+
+> Resolved: keep tail-cw and narrow its scope. Two premises below did not hold. The "roughly 2000 lines" figure was 7,965 on the day this was written, and the Kafka-worker topology has been replaced by Hatchet. The decisive change is that tracing stopped being a reason to switch: X-Ray accepts OTLP natively and Transaction Search puts spans in an ordinary `aws/spans` log group, while VictoriaTraces remains pre-GA with an unstable on-disk format. See ADR 0010 for the evidence and the consequences.
 
 ## Problem
 
