@@ -241,11 +241,11 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             return
 
         column_widths = {
-            'timestamp': 25,
-            'log_group': 30,
-            'log_stream': 30,
+            'timestamp': 23,
+            'log_group': 20,
+            'log_stream': 16,
             'message': None,
-            'event_id': 20,
+            'event_id': 12,
         }
         for key, label in get_column_definitions():
             self._table.add_column(label, key=key, width=column_widths.get(key))
