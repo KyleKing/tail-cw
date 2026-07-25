@@ -10,6 +10,7 @@ import pytest
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.cache.storage import (
+    METADATA_DIRNAME,
     LogCache,
     generate_cache_key,
     is_jsonl_message,
@@ -976,3 +977,36 @@ def test_log_cache_override_default_ttl(fix_test_cache: Path):
 
         # Should still exist (longer TTL)
         assert cache.exists(cache_key) is True
+
+
+def test_metadata_store_does_not_use_pickle(fix_test_cache: Path):
+    """The metadata store serializes with JSON, closing CVE-2025-69872.
+
+    diskcache pickles by default, so write access to the cache directory means
+    code execution when we read it back, and upstream has no fix. This asserts
+    the JSONDisk swap holds.
+    """
+    cache_dir = fix_test_cache / 'nopickle'
+    with LogCache(cache_dir) as cache:
+        cache.write_payload('preview:v1:probe', {'event_count': 7, 'note': 'hello'})
+        assert cache.read_payload('preview:v1:probe') == {'event_count': 7, 'note': 'hello'}
+
+    stored = b''.join(path.read_bytes() for path in (cache_dir / METADATA_DIRNAME).rglob('*') if path.is_file())
+    for opcode in (b'\x80\x04', b'\x80\x05', b'__reduce__', b'copy_reg'):
+        assert opcode not in stored
+
+
+def test_metadata_directory_is_versioned_away_from_the_pickle_store(fix_test_cache: Path):
+    """A pickle-era store is left alone rather than read back as empty.
+
+    Reading it under JSONDisk yields None for every key, which would make each
+    cached Parquet file look orphaned and get swept on the first write.
+    """
+    assert METADATA_DIRNAME != 'metadata'
+
+    cache_dir = fix_test_cache / 'versioned'
+    with LogCache(cache_dir) as cache:
+        cache.write_payload('preview:v1:x', {'event_count': 1})
+
+    assert (cache_dir / METADATA_DIRNAME).is_dir()
+    assert not (cache_dir / 'metadata').exists()

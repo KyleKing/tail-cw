@@ -19,12 +19,22 @@ from threading import Lock
 from typing import Any
 
 import polars as pl
-from diskcache import Cache
+from diskcache import Cache, JSONDisk
 
 from tail_cw.aws.client import LogEvent
 
 # Progress callback signature: current progress, total (or -1 when unknown), status message.
 ProgressCallback = Callable[[int, int, str], None]
+
+METADATA_DIRNAME = 'metadata-v2'
+"""Metadata store directory.
+
+Versioned because v2 serializes with JSON instead of pickle. A pickle-era store
+reads back as empty under JSONDisk, which would make every cached Parquet file
+look orphaned and get swept on the first write. A new directory makes the format
+change explicit: the old cache is simply cold, and its files are reclaimed by the
+normal orphan sweep.
+"""
 
 # Precompiled regex for detecting ISO8601/RFC3339 timestamps at start of message
 # Matches formats like: 2025-01-01T12:00:00Z, 2025-01-01T12:00:00.123456+00:00
@@ -153,6 +163,18 @@ def _hash_canonical(canonical: dict[str, Any], *, prefix: str) -> str:
     digest_b64 = base64.urlsafe_b64encode(hasher.digest()).decode('ascii').rstrip('=')
 
     return f'{prefix}:{digest_b64}'
+
+
+def _metadata_path(metadata_value: Any) -> str:
+    """Extract the Parquet path from a metadata entry.
+
+    Entries are ``[path, size]`` today. JSON serialization turns the stored
+    tuple into a list, and older caches hold a bare path string, so all three
+    shapes have to read back.
+    """
+    if isinstance(metadata_value, (tuple, list)):
+        return str(metadata_value[0])
+    return str(metadata_value)
 
 
 def is_jsonl_message(message: str) -> bool:
@@ -500,10 +522,16 @@ class LogCache:
 
         # Initialize DiskCache with size limit and eviction policy
         # Size limit is in bytes
+        # JSONDisk rather than the default pickle Disk: CVE-2025-69872 lets anyone
+        # with write access to the cache directory run code when we read it back,
+        # and it has no upstream fix. Everything stored here is plain data, so JSON
+        # costs nothing and removes the deserialization gadget entirely.
         self._metadata = Cache(
-            str(self._cache_dir / 'metadata'),
+            str(self._cache_dir / METADATA_DIRNAME),
             size_limit=self._size_limit_bytes,
             eviction_policy=eviction_policy,
+            disk=JSONDisk,
+            disk_compress_level=1,
         )
 
     def _cleanup_orphaned_files(self) -> int:
@@ -512,26 +540,25 @@ class LogCache:
         Returns:
             Number of orphaned files deleted.
         """
-        # Find all files referenced in metadata
-        referenced_files = set()
-        for cache_key in self._metadata.iterkeys():  # type: ignore[attr-defined]
-            metadata_value = self._metadata.get(cache_key)
-            if metadata_value is not None:
-                # Handle both old string format and new tuple format
-                path_str = str(metadata_value[0]) if isinstance(metadata_value, tuple) else str(metadata_value)
-                referenced_files.add(Path(path_str))
-
-        # Delete orphaned Parquet files, sparing writes that have not yet
-        # registered their metadata. Without this a concurrent fan-out deletes
-        # another thread's file mid-write.
+        # The whole sweep holds the in-flight lock, which is what makes it safe
+        # against a concurrent fan-out. A writer registers its path before the
+        # file exists and clears that registration only after its metadata is
+        # set, so under this lock every file on disk is either registered or
+        # referenced. Snapshotting the two sets separately leaves a window where
+        # a write completes between them and the file looks orphaned.
         with self._inflight_lock:
             inflight = set(self._inflight)
+            referenced_files = set()
+            for cache_key in self._metadata.iterkeys():  # type: ignore[attr-defined]
+                metadata_value = self._metadata.get(cache_key)
+                if metadata_value is not None:
+                    referenced_files.add(Path(_metadata_path(metadata_value)))
 
-        cleaned_count = 0
-        for parquet_file in self._parquet_dir.glob('*.parquet'):
-            if parquet_file not in referenced_files and parquet_file not in inflight:
-                parquet_file.unlink()
-                cleaned_count += 1
+            cleaned_count = 0
+            for parquet_file in self._parquet_dir.glob('*.parquet'):
+                if parquet_file not in referenced_files and parquet_file not in inflight:
+                    parquet_file.unlink()
+                    cleaned_count += 1
 
         return cleaned_count
 
@@ -545,49 +572,44 @@ class LogCache:
         Returns:
             Number of files evicted.
         """
-        # Collect all Parquet files with their sizes and creation times
-        parquet_files = []
-        total_size = 0
-        for parquet_file in self._parquet_dir.glob('*.parquet'):
-            stat = parquet_file.stat()
-            size = stat.st_size
-            # Use birthtime if available, otherwise ctime
-            ctime = getattr(stat, 'st_birthtime', stat.st_ctime)
-            parquet_files.append((parquet_file, size, ctime))
-            total_size += size
-
-        # Check if we're over the limit
-        if total_size <= self._size_limit_bytes:
-            return 0
-
-        # Sort by creation time (oldest first) for FIFO
-        parquet_files.sort(key=itemgetter(2))
-
-        # Delete oldest files until under limit
+        # Held for the whole pass for the same reason as the orphan sweep: a
+        # concurrent writer must not have its file evicted between the scan and
+        # the delete.
         evicted_count = 0
         with self._inflight_lock:
             inflight = set(self._inflight)
 
-        for parquet_file, size, _ctime in parquet_files:
+            parquet_files = []
+            total_size = 0
+            for parquet_file in self._parquet_dir.glob('*.parquet'):
+                stat = parquet_file.stat()
+                size = stat.st_size
+                # Use birthtime if available, otherwise ctime
+                ctime = getattr(stat, 'st_birthtime', stat.st_ctime)
+                parquet_files.append((parquet_file, size, ctime))
+                total_size += size
+
             if total_size <= self._size_limit_bytes:
-                break
-            if parquet_file in inflight:
-                continue
+                return 0
 
-            # Find and delete corresponding metadata entries
-            for cache_key in list(self._metadata.iterkeys()):  # type: ignore[attr-defined]
-                metadata_value = self._metadata.get(cache_key)
-                if metadata_value is not None:
-                    # Handle both old string format and new tuple format
-                    path_str = str(metadata_value[0]) if isinstance(metadata_value, tuple) else str(metadata_value)
+            # Oldest first, for FIFO eviction
+            parquet_files.sort(key=itemgetter(2))
 
-                    if Path(path_str) == parquet_file:
+            for parquet_file, size, _ctime in parquet_files:
+                if total_size <= self._size_limit_bytes:
+                    break
+                if parquet_file in inflight:
+                    continue
+
+                # Find and delete corresponding metadata entries
+                for cache_key in list(self._metadata.iterkeys()):  # type: ignore[attr-defined]
+                    metadata_value = self._metadata.get(cache_key)
+                    if metadata_value is not None and Path(_metadata_path(metadata_value)) == parquet_file:
                         self._metadata.delete(cache_key)
 
-            # Delete the Parquet file
-            parquet_file.unlink()
-            total_size -= size
-            evicted_count += 1
+                parquet_file.unlink()
+                total_size -= size
+                evicted_count += 1
 
         return evicted_count
 
@@ -692,8 +714,7 @@ class LogCache:
         if metadata_value is None:
             return iter(())
 
-        # Handle both old string format and new tuple format
-        parquet_path_str = str(metadata_value[0]) if isinstance(metadata_value, tuple) else str(metadata_value)
+        parquet_path_str = _metadata_path(metadata_value)
 
         parquet_path = Path(parquet_path_str)
 
@@ -764,8 +785,7 @@ class LogCache:
         if metadata_value is None:
             return None
 
-        # Handle both old string format and new tuple format
-        parquet_path_str = str(metadata_value[0]) if isinstance(metadata_value, tuple) else str(metadata_value)
+        parquet_path_str = _metadata_path(metadata_value)
 
         parquet_path = Path(parquet_path_str)
         if not parquet_path.exists():
