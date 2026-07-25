@@ -147,12 +147,17 @@ class TailCWConfig:
         [trace]
         trace_id_fields = ["trace_id", "traceId"]
 
+        [presets]
+        api = ["/aws/lambda/api-a", "/ecs/api-b"]
+
     Attributes:
         cache: Cache persistence configuration.
         parquet: Parquet conversion configuration.
         preview: Log group preview sampling configuration.
         tui: TUI incremental loading configuration.
         trace: Trace extraction configuration.
+        presets: Named log group sets, referenced as ``@name`` wherever a log
+            group pattern is accepted.
     """
 
     cache: CacheConfig = field(default_factory=CacheConfig)
@@ -160,6 +165,7 @@ class TailCWConfig:
     preview: PreviewConfig = field(default_factory=PreviewConfig)
     tui: TUIConfig = field(default_factory=TUIConfig)
     trace: TraceConfig = field(default_factory=TraceConfig)
+    presets: dict[str, list[str]] = field(default_factory=dict)
 
 
 def get_default_config_path() -> Path:
@@ -196,6 +202,24 @@ def _load_section(section: Any, factory: type[Any]) -> dict[str, Any]:
     return {key: section[key] for key in section if key in allowed_fields}
 
 
+def _load_presets(section: Any) -> dict[str, list[str]]:
+    match section:
+        case None:
+            return {}
+        case dict():
+            table: dict[str, Any] = section
+        case _:
+            msg = '[presets] must be a table mapping each name to a list of log groups'
+            raise ValueError(msg)
+    presets: dict[str, list[str]] = {}
+    for name, value in table.items():
+        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+            msg = f'Preset {name!r} must be a list of log group names'
+            raise ValueError(msg)
+        presets[name] = list(value)
+    return presets
+
+
 def load_config(config_path: Path | None = None) -> TailCWConfig:
     """Load configuration from a TOML file.
 
@@ -209,7 +233,8 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
         defaults are returned.
 
     Raises:
-        ValueError: If the configuration file cannot be parsed as TOML.
+        ValueError: If the configuration file cannot be parsed as TOML, or the
+            ``[presets]`` table does not map each name to a list of strings.
         OSError: When reading the configuration file fails.
 
     Examples:
@@ -253,6 +278,7 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
         preview=PreviewConfig(**preview_kwargs),
         tui=TUIConfig(**tui_kwargs),
         trace=TraceConfig(**trace_kwargs),
+        presets=_load_presets(data.get('presets')),
     )
 
     if config.cache.cache_dir is None:
@@ -312,7 +338,10 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'search_limit = 10000\n'
             'trace_limit = 100\n\n'
             '[trace]\n'
-            'trace_id_fields = ["trace_id", "traceId", "x-trace-id"]\n'
+            'trace_id_fields = ["trace_id", "traceId", "x-trace-id"]\n\n'
+            '[presets]\n'
+            '# Reference a preset as @api wherever a log group pattern is accepted.\n'
+            '# api = ["/aws/lambda/api-a", "/ecs/api-b"]\n'
         )
 
         temp_path = path.with_suffix('.tmp')

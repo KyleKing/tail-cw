@@ -164,11 +164,12 @@ def test_demo_resolve_logs_defaults_to_the_demo_group():
     assert len(paths) == 1
 
 
-def test_live_services_populates_every_service_except_log_volume():
+def test_live_services_populates_every_service():
+    """A live dashboard gets the same service set the demo does, log volume included."""
     services = _live_services(TailCWConfig(), _make_session())
     unset = {field.name for field in fields(ShellServices) if getattr(services, field.name) is None}
 
-    assert unset == {'log_volume'}
+    assert unset == set()
 
 
 def test_live_services_are_callable_without_touching_aws():

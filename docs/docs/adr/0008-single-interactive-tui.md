@@ -91,7 +91,7 @@ The widget's own filter or query text carries into the log view as the starting 
 
 - `LogTailApp` and `DashboardApp` stop being `App` subclasses and become screens under one shell. Their bindings, workers, and tests mostly survive. What moves is ownership of the command line, the header, and the quit binding
 - state that was per-process becomes app state: time window, filter, profile, selected groups, current dashboard. A window set in a dashboard is the window a dive inherits
-- a `--profile` switch inside the app becomes reachable, which ADR 0006 deferred. It stays deferred here, but the shell is where it will land
+- an in-app profile switch looks reachable now that one app holds the state, and [ADR 0009](./0009-no-in-app-profile-switching.md) decides against it: nearly everything the shell holds is account-scoped, so a switch is a teardown rather than a setting change
 - M2's group browser ships as this ADR's home view rather than as `tail-cw groups`, and M2's pattern resolution layer becomes a prerequisite rather than a follow-on
 - three new pure modules carry the logic that needs testing without a terminal: pattern normalization, the navigation stack and jumplist, and dive candidate ranking. The shell itself stays thin enough to test with Pilot
 - ADR 0007 is unaffected. Nothing here builds tracing, and a smaller CLI surface makes the hybrid option easier, not harder, because the terminal path gets sharper while heavy historical analysis stays out of scope

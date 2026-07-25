@@ -8,7 +8,8 @@ Run `tail-cw` with no arguments and you land in the log group browser. Everythin
 
 ## What it does
 
-- A log group browser as the home screen, with a preview pane that shows each group's distinct message shapes and their counts, so you can tell forty `/aws/lambda/*` groups apart by content rather than by name
+- A log group browser as the home screen, with a preview pane that shows each group's distinct message shapes and their counts, so you can tell forty `/aws/lambda/*` groups apart by content rather than by name. Groups you have opened before sort to the top, per account
+- Named presets in config, so `tail-cw tail @api` opens the set of groups you always look at together
 - Live tail through `StartLiveTail` (up to 10 groups) with a ring buffer, pause and resume, and bounded reconnect. `L` flips a historical search to live and back without losing the filter or window
 - One filter model that reads the same across the live stream, a historical fetch, and cached data
 - Every fetch cached as ZSTD Parquet and queried locally with DuckDB or Polars, so re-filtering and trace grouping are free after the first pull
@@ -54,6 +55,7 @@ uv run tail-cw dash --demo                        # offline synthetic dashboard,
 uv run tail-cw dash my-service --region us-east-1 # open a console dashboard
 uv run tail-cw logs '/aws/lambda/api*' --start 2h # open the log view on matching groups
 uv run tail-cw tail /aws/lambda/my-fn             # open it streaming live
+uv run tail-cw tail @api                          # open a named preset from config
 ```
 
 `logs`, `tail`, and `dash` only choose the opening view; every one of them lands in the same app, so anything reachable from one is reachable from the others.

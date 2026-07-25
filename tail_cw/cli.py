@@ -12,7 +12,7 @@ import argparse
 import json
 import re
 import sys
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -519,13 +519,56 @@ def session_from_args(args: argparse.Namespace, now: datetime) -> Session:
     )
 
 
-def seed_from_args(args: argparse.Namespace) -> ShellSeed:
-    """Choose the opening view from the subcommand and its arguments."""
+def expand_presets(patterns: Sequence[str], presets: Mapping[str, Sequence[str]]) -> list[str]:
+    """Replace every ``@name`` reference with the log groups of that named preset.
+
+    Patterns that are not references pass through untouched. Shared by the CLI
+    seeds and the shell's ``:logs``/``:tail`` so the two cannot drift.
+
+    Raises:
+        ValueError: When a reference names no configured preset, or names one
+            that holds no log groups. Expanding to nothing silently would look
+            like an empty selection.
+    """
+    expanded: list[str] = []
+    for pattern in patterns:
+        if not pattern.startswith('@'):
+            expanded.append(pattern)
+            continue
+        name = pattern.removeprefix('@')
+        groups = presets.get(name)
+        if groups is None:
+            known = ', '.join(f'@{key}' for key in sorted(presets)) or 'none configured'
+            msg = f'Unknown preset {pattern!r}; configured presets: {known}'
+            raise ValueError(msg)
+        if not groups:
+            msg = f'Preset {pattern!r} lists no log groups'
+            raise ValueError(msg)
+        expanded.extend(groups)
+    return expanded
+
+
+def _log_view_seed(
+    view: Literal['logs', 'tail'],
+    patterns: Sequence[str],
+    presets: Mapping[str, Sequence[str]],
+) -> ShellSeed:
+    expanded = expand_presets(patterns, presets)
+    return ShellSeed(view=view if expanded else 'groups', targets=tuple(expanded))
+
+
+def seed_from_args(args: argparse.Namespace, presets: Mapping[str, Sequence[str]] | None = None) -> ShellSeed:
+    """Choose the opening view from the subcommand and its arguments.
+
+    A log group argument naming an unknown preset propagates ``ValueError`` from
+    :func:`expand_presets`.
+    """
+    known = presets if presets is not None else {}
     match args.command:
         case 'logs':
-            return ShellSeed(view='logs' if args.patterns else 'groups', targets=tuple(args.patterns))
+            return _log_view_seed('logs', args.patterns, known)
         case 'tail':
-            return ShellSeed(view='tail' if args.patterns else 'groups', targets=tuple(args.patterns))
+            return _log_view_seed('tail', args.patterns, known)
         case 'dash' if args.demo:
             return ShellSeed(view='dashboard', targets=('demo',), demo=True)
         case 'dash' if args.name is not None:
@@ -548,7 +591,12 @@ def _run_shell_command(args: argparse.Namespace, now: datetime, run_shell: RunSh
     config = _load_config_or_report(args.config_path)
     if config is None:
         return 1
-    run_shell(config, session, seed_from_args(args))
+    try:
+        seed = seed_from_args(args, config.presets)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+    run_shell(config, session, seed)
     return 0
 
 

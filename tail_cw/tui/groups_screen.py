@@ -19,6 +19,7 @@ from textual.widgets import DataTable, Input
 
 from tail_cw.aws.log_groups import LogGroupInfo, resolve_group_pattern
 from tail_cw.preview import GroupPreview
+from tail_cw.recents import sort_by_recency
 from tail_cw.tui.picker import (
     DEBOUNCE_SECONDS,
     SELECTED_MARKER,
@@ -42,6 +43,9 @@ NO_GROUP_SERVICE = 'No log group listing available. Start tail-cw with AWS crede
 
 NO_PREVIEW_SERVICE = 'No preview available. Start tail-cw with AWS credentials to sample a group.'
 """Shown in place of a preview when no preview service is wired."""
+
+RECENT_MARKER = '·'
+"""Glyph marking a group opened recently; the selection marker outranks it."""
 
 _COLUMNS = (
     PickerColumn(key='marker', label=' ', width=2),
@@ -91,6 +95,7 @@ class GroupsScreen(ShellScreen):
         self._groups: list[LogGroupInfo] = []
         self._visible: list[LogGroupInfo] = []
         self._selected: list[str] = []
+        self._recent: tuple[str, ...] = ()
         self._previews: dict[str, GroupPreview] = {}
         self._preview_debounce: Debounce | None = None
 
@@ -103,9 +108,10 @@ class GroupsScreen(ShellScreen):
         yield Picker(_COLUMNS, placeholder='/ filter groups (Enter keeps, Esc clears)')
 
     def on_mount(self) -> None:
-        """Draw the breadcrumb, adopt the session selection, and load the list."""
+        """Draw the breadcrumb, adopt the session selection and recents, and load the list."""
         super().on_mount()
         self._preview_debounce = Debounce(self, self._debounce_seconds)
+        self._recent = self.shell.recent_groups()
         self._selected = list(self.shell.session.selected_groups)[:MAX_SELECTED_GROUPS]
         self._update_status()
         self.restore_focus()
@@ -279,8 +285,8 @@ class GroupsScreen(ShellScreen):
         self.app.call_from_thread(self._apply_groups, groups)
 
     def _apply_groups(self, groups: list[LogGroupInfo]) -> None:
-        self._groups = groups
-        self.shell.session.group_names = [info.name for info in groups]
+        self._groups = sort_by_recency(groups, self._recent)
+        self.shell.session.group_names = [info.name for info in self._groups]
         self._apply_filter(self._picker.filter_value)
 
     def _apply_filter(self, pattern: str) -> None:
@@ -292,10 +298,14 @@ class GroupsScreen(ShellScreen):
         self._update_status()
         self._request_preview()
 
+    def _marker(self, name: str) -> str:
+        if name in self._selected:
+            return SELECTED_MARKER
+        return RECENT_MARKER if name in self._recent else ''
+
     def _row_cells(self, info: LogGroupInfo) -> tuple[str, str, str, str, str]:
-        marker = SELECTED_MARKER if info.name in self._selected else ''
         return (
-            marker,
+            self._marker(info.name),
             info.name,
             humanize_bytes(info.stored_bytes),
             format_retention(info.retention_days),
@@ -305,8 +315,7 @@ class GroupsScreen(ShellScreen):
     def _mark_row(self, name: str) -> None:
         if name not in self.visible_groups:
             return
-        marker = SELECTED_MARKER if name in self._selected else ''
-        self._picker.table.update_cell(name, 'marker', marker)
+        self._picker.table.update_cell(name, 'marker', self._marker(name))
 
     def _update_status(self) -> None:
         self._picker.set_status(

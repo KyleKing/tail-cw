@@ -1,13 +1,15 @@
-"""Sample a log group's recent events and summarize their message shapes.
+"""Cheap summaries of a log group: its message shapes, and its activity over time.
 
 Answers "what is in this group?" cheaply enough to walk a long list of groups: one
 capped fetch per group, clustered into recurring shapes, cached with a short TTL so
-revisiting a group costs nothing. Core layer, so no Textual import belongs here.
+revisiting a group costs nothing. ``bucket_event_counts`` answers the companion
+question, "when was it busy?", for the log-volume sparklines on a dashboard. Core
+layer, so no Textual import belongs here.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from itertools import islice
@@ -19,6 +21,9 @@ from tail_cw.config.config import TailCWConfig, get_default_cache_dir
 from tail_cw.query.patterns import MessagePattern, cluster_messages
 
 FetchEvents = Callable[..., Iterator[LogEvent]]
+
+DEFAULT_VOLUME_BUCKETS = 48
+"""Buckets per log-volume series; the sparkline resamples this to the cell width."""
 
 
 @dataclass(frozen=True)
@@ -151,3 +156,30 @@ def _decode_payload(log_group: str, payload: dict[str, Any]) -> GroupPreview | N
             for pattern in patterns
         ],
     )
+
+
+def bucket_event_counts(
+    timestamps: Iterable[datetime],
+    *,
+    start: datetime,
+    end: datetime,
+    buckets: int = DEFAULT_VOLUME_BUCKETS,
+) -> list[float]:
+    """Count timestamps into equal-width buckets spanning the window.
+
+    Timestamps outside the window are ignored, and ``end`` itself lands in the
+    final bucket rather than falling off the end. Returns an empty list when the
+    window is empty or ``buckets`` is not positive, so a caller can render
+    nothing without a special case.
+    """
+    span = (end - start).total_seconds()
+    if buckets <= 0 or span <= 0:
+        return []
+    counts = [0.0] * buckets
+    for timestamp in timestamps:
+        offset = (timestamp - start).total_seconds()
+        if offset < 0 or offset > span:
+            continue
+        index = min(int(offset / span * buckets), buckets - 1)
+        counts[index] += 1
+    return counts

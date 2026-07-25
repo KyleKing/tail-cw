@@ -26,9 +26,10 @@ from tail_cw.aws.client import LogEvent
 from tail_cw.aws.dashboards import Dashboard, DashboardSummary, DiveCandidate, Widget
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.aws.metrics import MetricSeries
-from tail_cw.cli import Session
+from tail_cw.cli import Session, expand_presets
 from tail_cw.config import TailCWConfig
 from tail_cw.preview import GroupPreview
+from tail_cw.recents import Recents, load_recents, profile_recents, record_selection, save_recents
 from tail_cw.tui.command_bar import CommandLine
 from tail_cw.tui.dive_screen import DiveConfirmScreen
 from tail_cw.tui.navigation import (
@@ -274,18 +275,22 @@ class TailCWApp(App[None]):
         build_screen: ScreenFactory,
         services: ShellServices | None = None,
         target: NavTarget | None = None,
+        recents_path: Path | None = None,
     ) -> None:
         """Store the config, shared session, injected services, and opening view.
 
         ``build_screen`` maps a navigation target to a view. It is injected
         because the views subclass ``ShellScreen``; importing them here would
         make the module cycle. ``tail_cw.tui.views`` supplies the real one.
+        ``recents_path`` overrides the XDG data file the group history is kept in.
         """
         super().__init__()
         self.title = 'tail-cw'
         self.config_data = config
         self.session = session
         self.services = services if services is not None else ShellServices()
+        self._recents_path = recents_path
+        self.recents: Recents = load_recents(recents_path)
         self._build_screen = build_screen
         self._opening = target if target is not None else NavTarget(kind=ViewKind.GROUPS, label='groups')
         self._nav = initial(self._opening)
@@ -368,7 +373,7 @@ class TailCWApp(App[None]):
             case ('<dashboard>',):
                 return self.session.dashboard_names
             case ('<group>',):
-                return self.session.group_names
+                return [f'@{name}' for name in sorted(self.config_data.presets)] + self.session.group_names
             case _:
                 return list(args)
 
@@ -409,7 +414,14 @@ class TailCWApp(App[None]):
         return True
 
     def _command_logs(self, argument: str, *, live: bool) -> None:
-        groups = argument.split() if argument else list(self.session.selected_groups)
+        if argument:
+            try:
+                groups = expand_presets(argument.split(), self.config_data.presets)
+            except ValueError as err:
+                self.notify(str(err), severity='warning')
+                return
+        else:
+            groups = list(self.session.selected_groups)
         if not groups:
             self.notify('Select a group first, or name one: :logs <group>', severity='warning')
             return
@@ -421,9 +433,21 @@ class TailCWApp(App[None]):
         if len(groups) > MAX_SELECTED_GROUPS:
             self.notify(f'Showing the first {MAX_SELECTED_GROUPS} of {len(groups)} groups', severity='warning')
         self.session.selected_groups = capped
+        self._record_recents(capped)
         label = 'tail' if live else 'logs'
         suffix = capped[0] if len(capped) == 1 else f'{len(capped)} groups'
         self.goto(NavTarget(kind=ViewKind.LOGS, label=f'{label} {suffix}', payload=tuple(capped)))
+
+    def recent_groups(self) -> tuple[str, ...]:
+        """The groups most recently opened under the session's profile, newest first."""
+        return profile_recents(self.recents, self.session.profile)
+
+    def _record_recents(self, groups: Sequence[str]) -> None:
+        self.recents = record_selection(self.recents, groups, profile=self.session.profile)
+        try:
+            save_recents(self.recents, self._recents_path)
+        except OSError as err:
+            self.notify(f'Could not save recent groups: {err}', severity='warning')
 
     def _command_dash(self, argument: str) -> None:
         if not argument:

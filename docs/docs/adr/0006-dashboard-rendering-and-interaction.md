@@ -45,4 +45,4 @@ The payoff beyond correctness: native rendering exports to SVG, so charts are ve
 
 - ADR 0005 still stands for the dashboard import (`GetDashboard`), the metric-shorthand-to-`GetMetricData` translation, and the cost model; only its rendering decision is superseded here
 - charts render over plain SSH and in any terminal, at lower curve fidelity than matplotlib but with legible labels and no artifacts
-- deferred: an in-app `:profile` switch (setting `AWS_PROFILE` before launch works today), and full vim operator-plus-text-object composition beyond `:focus`/`:filter` (the two-chart stage limits its value)
+- deferred: an in-app `:profile` switch (setting `AWS_PROFILE` before launch works today), and full vim operator-plus-text-object composition beyond `:focus`/`:filter` (the two-chart stage limits its value). The `:profile` deferral was later closed by [ADR 0009](./0009-no-in-app-profile-switching.md), which decides against building it

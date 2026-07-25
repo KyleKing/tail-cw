@@ -170,6 +170,49 @@ def test_load_config_invalid_toml(tmp_path: Path):
         load_config(config_path)
 
 
+def test_load_config_presets(tmp_path: Path):
+    config_path = tmp_path / 'presets.toml'
+    config_path.write_text(
+        '[presets]\napi = ["/aws/lambda/api-a", "/ecs/api-b"]\nweb = []\n',
+        encoding='utf-8',
+    )
+
+    config = load_config(config_path)
+
+    assert config.presets == {'api': ['/aws/lambda/api-a', '/ecs/api-b'], 'web': []}
+
+
+def test_load_config_without_presets_defaults_to_empty(tmp_path: Path):
+    config_path = tmp_path / 'no-presets.toml'
+    config_path.write_text('[cache]\nsize_limit_mb = 256', encoding='utf-8')
+
+    assert load_config(config_path).presets == {}
+
+
+def test_load_config_rejects_a_scalar_preset(tmp_path: Path):
+    config_path = tmp_path / 'scalar.toml'
+    config_path.write_text('[presets]\napi = "/aws/lambda/api-a"\n', encoding='utf-8')
+
+    with pytest.raises(ValueError, match="Preset 'api' must be a list"):
+        load_config(config_path)
+
+
+def test_load_config_rejects_a_preset_holding_a_non_string(tmp_path: Path):
+    config_path = tmp_path / 'mixed.toml'
+    config_path.write_text('[presets]\napi = ["/aws/lambda/api-a", 7]\n', encoding='utf-8')
+
+    with pytest.raises(ValueError, match="Preset 'api' must be a list"):
+        load_config(config_path)
+
+
+def test_load_config_rejects_a_non_table_presets_section(tmp_path: Path):
+    config_path = tmp_path / 'not-a-table.toml'
+    config_path.write_text('presets = ["api"]\n', encoding='utf-8')
+
+    with pytest.raises(ValueError, match=r'\[presets\] must be a table'):
+        load_config(config_path)
+
+
 def test_create_default_config_file(tmp_path: Path):
     config_path = tmp_path / 'config' / 'config.toml'
     created = create_default_config_file(config_path)
@@ -183,6 +226,7 @@ def test_create_default_config_file(tmp_path: Path):
     assert 'preview' in data
     assert 'tui' in data
     assert 'trace' in data
+    assert data['presets'] == {}
 
 
 def test_create_default_config_file_atomic(tmp_path: Path):

@@ -18,6 +18,7 @@ from tail_cw.cli import (
     ShellSeed,
     TailRequest,
     build_parser,
+    expand_presets,
     iter_tail_events,
     parse_time,
     resolve_parquet_path,
@@ -312,6 +313,82 @@ def test_seed_from_args_dash_demo_ignores_name():
 
     assert seed.targets == ('demo',)
     assert seed.demo is True
+
+
+def test_expand_presets_passes_plain_patterns_through():
+    assert expand_presets(['/group/one', '/aws/*'], {}) == ['/group/one', '/aws/*']
+
+
+def test_expand_presets_substitutes_the_named_groups():
+    presets = {'api': ['/aws/lambda/api-a', '/ecs/api-b']}
+
+    assert expand_presets(['@api', '/ecs/web'], presets) == ['/aws/lambda/api-a', '/ecs/api-b', '/ecs/web']
+
+
+def test_expand_presets_rejects_an_unknown_name():
+    with pytest.raises(ValueError, match="Unknown preset '@web'"):
+        expand_presets(['@web'], {'api': ['/a']})
+
+
+def test_expand_presets_names_the_configured_presets_in_the_error():
+    with pytest.raises(ValueError, match='@api, @web'):
+        expand_presets(['@nope'], {'web': ['/w'], 'api': ['/a']})
+
+
+def test_expand_presets_rejects_a_bare_at_sign():
+    with pytest.raises(ValueError, match="Unknown preset '@'"):
+        expand_presets(['@'], {'api': ['/a']})
+
+
+def test_expand_presets_rejects_an_empty_preset():
+    with pytest.raises(ValueError, match="Preset '@api' lists no log groups"):
+        expand_presets(['@api'], {'api': []})
+
+
+def test_seed_from_args_expands_a_preset():
+    args = build_parser().parse_args(['tail', '@api'])
+
+    seed = seed_from_args(args, {'api': ['/aws/lambda/api-a', '/ecs/api-b']})
+
+    assert seed == ShellSeed(view='tail', targets=('/aws/lambda/api-a', '/ecs/api-b'))
+
+
+def test_seed_from_args_rejects_an_unknown_preset():
+    args = build_parser().parse_args(['logs', '@api'])
+
+    with pytest.raises(ValueError, match='Unknown preset'):
+        seed_from_args(args)
+
+
+def _write_preset_config(tmp_path: Path) -> Path:
+    config_path = tmp_path / 'config.toml'
+    cache_dir = tmp_path / 'cache'
+    config_path.write_text(
+        f'[cache]\ncache_dir = "{cache_dir.as_posix()}"\n\n[presets]\napi = ["/aws/lambda/api-a", "/ecs/api-b"]\n',
+        encoding='utf-8',
+    )
+    return config_path
+
+
+def test_run_cli_expands_a_preset_into_the_seed(tmp_path):
+    config_path = _write_preset_config(tmp_path)
+    shell = _RecordingShell()
+
+    result = run_cli(['tail', '@api', '--config', str(config_path)], shell, is_tty=False)
+
+    assert result == 0
+    assert shell.calls[0][2] == ShellSeed(view='tail', targets=('/aws/lambda/api-a', '/ecs/api-b'))
+
+
+def test_run_cli_reports_an_unknown_preset(tmp_path, capsys):
+    config_path = _write_preset_config(tmp_path)
+    shell = _RecordingShell()
+
+    result = run_cli(['logs', '@web', '--config', str(config_path)], shell, is_tty=False)
+
+    assert result == 2
+    assert 'Unknown preset' in capsys.readouterr().err
+    assert shell.calls == []
 
 
 def test_session_from_args_builds_window():

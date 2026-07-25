@@ -19,10 +19,11 @@ from tail_cw.aws.dashboards import Dashboard, DashboardSummary, get_dashboard, l
 from tail_cw.aws.live_tail import stream_live_tail
 from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups
 from tail_cw.aws.metrics import MetricSeries, fetch_metric_data
+from tail_cw.cache.storage import read_parquet_to_log_events
 from tail_cw.cli import FetchRequest, Session, ShellSeed, resolve_parquet_paths, run_cli
 from tail_cw.config import TailCWConfig
 from tail_cw.demo import demo_dashboard, demo_fetch_metrics, demo_log_volume, demo_resolve_logs
-from tail_cw.preview import GroupPreview, build_group_preview
+from tail_cw.preview import GroupPreview, bucket_event_counts, build_group_preview
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.shell import ShellServices, TailCWApp
 from tail_cw.tui.views import build_screen
@@ -124,6 +125,13 @@ def _live_services(config: TailCWConfig, session: Session) -> ShellServices:
             region_name=session.region,
         )
 
+    def log_volume(log_group: str, start: datetime, end: datetime) -> list[float]:
+        paths = resolve_logs([log_group], start, end, None)
+        if not paths:
+            return []
+        timestamps = (event.timestamp for event in read_parquet_to_log_events(paths[0]))
+        return bucket_event_counts(timestamps, start=start, end=end)
+
     def count_events(log_group: str, start: datetime, end: datetime) -> int:
         events = fetch_log_events(
             log_group,
@@ -142,6 +150,7 @@ def _live_services(config: TailCWConfig, session: Session) -> ShellServices:
         fetch_metrics=fetch_metrics,
         resolve_logs=resolve_logs,
         live_stream=live_stream,
+        log_volume=log_volume,
         count_events=count_events,
     )
 

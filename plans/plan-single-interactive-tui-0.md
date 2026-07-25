@@ -185,4 +185,5 @@ Steps 1 through 4 are independent of each other and of the Textual layer, so the
 ## Open questions
 
 - whether the preview sample should reuse a cached Parquet window when one already covers it, trading freshness for zero API calls
-- whether `:profile` lands here (ADR 0006 deferred it) or waits, given that switching profiles invalidates the group list, the preview cache, and the dashboard list at once
+- ~~whether `:profile` lands here~~ — settled by [ADR 0009](../docs/docs/adr/0009-no-in-app-profile-switching.md): it does not get built, because the invalidation it forces is the whole feature
+- ~~log volume on a live dashboard~~ — closed. `_live_services` wires `log_volume` from the resolved Parquet window through `bucket_event_counts`, so real log widgets get the sparkline the demo already had

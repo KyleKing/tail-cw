@@ -7,6 +7,7 @@ screens are covered by their own modules.
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from textual.app import App, ComposeResult
@@ -15,6 +16,7 @@ from textual.widgets import Label
 
 from tail_cw.cli import Session
 from tail_cw.config import TailCWConfig
+from tail_cw.recents import Recents, load_recents, save_recents
 from tail_cw.tui.command_bar import CommandLine
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.shell import (
@@ -95,13 +97,16 @@ def _app(
     session: Session | None = None,
     services: ShellServices | None = None,
     target: NavTarget | None = None,
+    config: TailCWConfig | None = None,
+    recents_path: Path | None = None,
 ) -> TailCWApp:
     return TailCWApp(
-        TailCWConfig(),
+        config if config is not None else TailCWConfig(),
         session if session is not None else _session(),
         build_screen=_build_screen,
         services=services,
         target=target,
+        recents_path=recents_path,
     )
 
 
@@ -354,6 +359,74 @@ async def test_open_logs_labels_a_multi_group_view_by_count():
     async with _running(app) as _pilot:
         app.open_logs(['/a', '/b'])
         assert '2 groups' in app.nav.stack[-1].label
+
+
+async def test_open_logs_records_the_selection_in_recents(tmp_path: Path):
+    """Opening a view is the moment a selection is resolved, so it is recorded."""
+    path = tmp_path / 'recents.json'
+    app = _app(recents_path=path)
+    async with _running(app) as _pilot:
+        app.open_logs(['/a', '/b'])
+        app.open_logs(['/c'])
+        assert app.recent_groups() == ('/c', '/a', '/b')
+        assert load_recents(path).by_profile == {'': ('/c', '/a', '/b')}
+
+
+async def test_recents_are_scoped_to_the_profile(tmp_path: Path):
+    """A group recorded under one profile stays out of another's history."""
+    path = tmp_path / 'recents.json'
+    save_recents(Recents(by_profile={'dev': ('/dev-only',)}), path)
+    app = _app(session=_session(profile='prod'), recents_path=path)
+    async with _running(app) as _pilot:
+        app.open_logs(['/prod-only'])
+        assert app.recent_groups() == ('/prod-only',)
+        assert load_recents(path).by_profile['dev'] == ('/dev-only',)
+
+
+async def test_a_failed_recents_write_notifies_instead_of_crashing(monkeypatch: pytest.MonkeyPatch):
+    """The history is a convenience; losing it must not break navigation."""
+
+    def _explode(_recents: Recents, _path: Path | None = None) -> None:
+        msg = 'disk full'
+        raise OSError(msg)
+
+    monkeypatch.setattr('tail_cw.tui.shell.save_recents', _explode)
+    app = _app()
+    async with _running(app) as _pilot:
+        app.open_logs(['/a'])
+        assert app.recent_groups() == ('/a',)
+        assert app.nav.stack[-1].payload == ('/a',)
+
+
+async def test_logs_command_expands_a_preset():
+    """`:logs @api` opens the preset's groups."""
+    app = _app(config=TailCWConfig(presets={'api': ['/aws/lambda/api-a', '/ecs/api-b']}))
+    async with _running(app) as _pilot:
+        screen = app.screen
+        assert isinstance(screen, ShellScreen)
+        app.run_command(screen, 'logs @api')
+        assert app.nav.stack[-1].payload == ('/aws/lambda/api-a', '/ecs/api-b')
+
+
+async def test_tail_command_on_an_unknown_preset_does_not_navigate():
+    """An unknown `@name` warns rather than opening an empty view."""
+    app = _app(config=TailCWConfig(presets={'api': ['/a']}))
+    async with _running(app) as _pilot:
+        screen = app.screen
+        assert isinstance(screen, ShellScreen)
+        depth = len(app.nav.stack)
+        app.run_command(screen, 'tail @web')
+        assert len(app.nav.stack) == depth
+
+
+async def test_completion_offers_presets_before_group_names():
+    """Tab suggests `@name` wherever a group is accepted."""
+    session = _session(group_names=['/aws/lambda/api'])
+    app = _app(session=session, config=TailCWConfig(presets={'api': ['/aws/lambda/api']}))
+    async with _running(app) as _pilot:
+        screen = app.screen
+        assert isinstance(screen, ShellScreen)
+        assert screen.complete_command('logs @') == ['logs @api']
 
 
 async def test_command_registry_merges_view_commands():

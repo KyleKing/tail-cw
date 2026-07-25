@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from textual.widgets import DataTable
@@ -13,9 +14,11 @@ from tail_cw.cli import Session
 from tail_cw.config import load_config
 from tail_cw.preview import GroupPreview
 from tail_cw.query.patterns import MessagePattern
+from tail_cw.recents import Recents, save_recents
 from tail_cw.tui.groups_screen import (
     NO_GROUP_SERVICE,
     NO_PREVIEW_SERVICE,
+    RECENT_MARKER,
     GroupsScreen,
     render_preview,
 )
@@ -69,7 +72,13 @@ def _session() -> Session:
     return Session(start=_NOW - timedelta(hours=1), end=_NOW)
 
 
-def _app(services: ShellServices, session: Session | None = None, *, debounce: float = _TICK) -> TailCWApp:
+def _app(
+    services: ShellServices,
+    session: Session | None = None,
+    *,
+    debounce: float = _TICK,
+    recents_path: Path | None = None,
+) -> TailCWApp:
     def build_screen(target: NavTarget) -> ShellScreen:
         """Stand in for tail_cw.tui.views so only the group browser is exercised."""
         if target.kind is ViewKind.GROUPS:
@@ -82,6 +91,7 @@ def _app(services: ShellServices, session: Session | None = None, *, debounce: f
         build_screen=build_screen,
         services=services,
         target=NavTarget(kind=ViewKind.GROUPS, label='groups'),
+        recents_path=recents_path,
     )
 
 
@@ -484,3 +494,54 @@ async def test_the_table_holds_focus_after_the_command_line_closes() -> None:
         await pilot.pause()
         assert screen.query_one(Picker).table.has_focus
         assert isinstance(screen.query_one(Picker).table, DataTable)
+
+
+async def test_recent_groups_sort_first_and_are_marked(tmp_path: Path) -> None:
+    path = tmp_path / 'recents.json'
+    save_recents(Recents(by_profile={'': ('/ecs/web', '/aws/lambda/api-worker')}), path)
+    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)), recents_path=path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await _settle(app, pilot)
+        screen = _screen(app)
+        assert screen.visible_groups == ['/ecs/web', '/aws/lambda/api-worker', '/aws/lambda/api']
+        assert [row[0] for row in _rows(screen)] == [RECENT_MARKER, RECENT_MARKER, '']
+
+
+async def test_selecting_a_recent_group_shows_the_selection_marker(tmp_path: Path) -> None:
+    path = tmp_path / 'recents.json'
+    save_recents(Recents(by_profile={'': ('/ecs/web',)}), path)
+    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)), recents_path=path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await _settle(app, pilot)
+        screen = _screen(app)
+        screen.action_toggle_select()
+        await pilot.pause()
+        assert _rows(screen)[0][0] == '●'
+        screen.action_toggle_select()
+        await pilot.pause()
+        assert _rows(screen)[0][0] == RECENT_MARKER
+
+
+async def test_a_recent_group_from_another_profile_is_ignored(tmp_path: Path) -> None:
+    path = tmp_path / 'recents.json'
+    save_recents(Recents(by_profile={'dev': ('/ecs/web',)}), path)
+    session = _session()
+    session.profile = 'prod'
+    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)), session, recents_path=path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await _settle(app, pilot)
+        screen = _screen(app)
+        assert screen.visible_groups == [info.name for info in _GROUPS]
+        assert [row[0] for row in _rows(screen)] == ['', '', '']
+
+
+async def test_opening_a_group_records_it_for_the_next_visit(tmp_path: Path) -> None:
+    path = tmp_path / 'recents.json'
+    app = _app(ShellServices(list_groups=lambda: list(_GROUPS)), recents_path=path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await _settle(app, pilot)
+        screen = _screen(app)
+        screen.action_toggle_select()
+        screen.action_open_logs()
+        await pilot.pause()
+        assert app.recent_groups() == ('/aws/lambda/api',)

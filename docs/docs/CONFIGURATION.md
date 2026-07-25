@@ -24,6 +24,7 @@ Cache files created by the application are stored separately in the XDG cache di
 
 - `[cache]` controls cache storage limits and eviction behaviour.
 - `[parquet]` tunes the Parquet writer used when materialising NDJSON logs.
+- `[presets]` names groups of log groups so `@name` stands in for the whole set.
 - `[preview]` bounds the log group previews shown in the browser.
 - `[tui]` exposes pagination and search limits for the Textual UI.
 - `[trace]` lists the field names inspected when extracting distributed trace identifiers.
@@ -41,6 +42,9 @@ eviction_policy = "least-recently-stored"
 row_group_size = 200000
 compression_level = 5
 infer_schema_length = 200
+
+[presets]
+api = ["/aws/lambda/api-a", "/ecs/api-b"]
 
 [preview]
 sample_limit = 500   # events read per group preview
@@ -65,6 +69,20 @@ trace_id_fields = ["trace_id", "traceId", "context.trace_id"]
 1. Alternatively, copy the example configuration above into the default path and adjust values as needed.
 
 The helper performs an atomic write and sets restrictive permissions on POSIX systems to keep credentials and preferences private.
+
+## Presets and Recents
+
+A preset names a set of log groups you open together. Reference it with `@name` anywhere a log group pattern is accepted, so `tail-cw tail @api` and the shell's `:logs @api` both expand to the configured list. Naming a preset that does not exist is an error rather than an empty selection: the CLI writes the available names to stderr and exits 2, and the TUI warns.
+
+Group selections are also remembered per AWS profile, most recent first, in `recents.json` under the user data directory:
+
+| Platform | Default path                                         |
+| -------- | ---------------------------------------------------- |
+| Linux    | `~/.local/share/tail-cw/recents.json`                |
+| macOS    | `~/Library/Application Support/tail-cw/recents.json` |
+| Windows  | `%LOCALAPPDATA%\tail-cw\recents.json`                |
+
+The browser sorts remembered groups to the top so the ones you actually use surface first. Recents are kept per profile because log groups belong to an account. The file is a convenience only: deleting it loses the ordering and nothing else, a corrupt file is ignored rather than failing start-up, and reading history never creates the directory.
 
 ## Performance Tuning
 

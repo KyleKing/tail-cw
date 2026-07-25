@@ -11,7 +11,7 @@ import pytest
 from tail_cw.aws.client import LogEvent
 from tail_cw.cache.storage import LogCache, generate_preview_cache_key
 from tail_cw.config.config import CacheConfig, PreviewConfig, TailCWConfig
-from tail_cw.preview import build_group_preview
+from tail_cw.preview import DEFAULT_VOLUME_BUCKETS, bucket_event_counts, build_group_preview
 
 NOW = datetime(2026, 1, 15, 12, tzinfo=UTC)
 WINDOW = timedelta(minutes=15)
@@ -234,3 +234,65 @@ def test_preview_cache_key_varies_by_inputs():
     assert base != generate_preview_cache_key('/aws/lambda/other', window_seconds=900)
     assert base != generate_preview_cache_key(GROUP, window_seconds=900, profile_name='prod')
     assert base != generate_preview_cache_key(GROUP, window_seconds=900, region_name='us-west-2')
+
+
+def _at(minutes: float) -> datetime:
+    return NOW - WINDOW + timedelta(minutes=minutes)
+
+
+def test_bucket_event_counts_spreads_events_across_the_window():
+    """Each timestamp lands in the bucket covering its offset."""
+    counts = bucket_event_counts(
+        [_at(0), _at(1), _at(7.5), _at(14)],
+        start=NOW - WINDOW,
+        end=NOW,
+        buckets=3,
+    )
+
+    assert counts == [2.0, 1.0, 1.0]
+
+
+def test_bucket_event_counts_puts_the_end_in_the_final_bucket():
+    """A timestamp exactly at the window end counts rather than falling off."""
+    counts = bucket_event_counts([NOW], start=NOW - WINDOW, end=NOW, buckets=4)
+
+    assert counts == [0.0, 0.0, 0.0, 1.0]
+
+
+def test_bucket_event_counts_ignores_events_outside_the_window():
+    """Events before the start or after the end are dropped."""
+    counts = bucket_event_counts(
+        [_at(-5), _at(5), NOW + timedelta(minutes=1)],
+        start=NOW - WINDOW,
+        end=NOW,
+        buckets=3,
+    )
+
+    assert counts == [0.0, 1.0, 0.0]
+
+
+def test_bucket_event_counts_with_no_events_is_all_zero():
+    """An empty group still renders a flat series rather than nothing."""
+    assert bucket_event_counts([], start=NOW - WINDOW, end=NOW, buckets=3) == [0.0, 0.0, 0.0]
+
+
+@pytest.mark.parametrize(
+    ('start', 'end', 'buckets'),
+    [
+        (NOW, NOW, 4),
+        (NOW, NOW - WINDOW, 4),
+        (NOW - WINDOW, NOW, 0),
+        (NOW - WINDOW, NOW, -1),
+    ],
+)
+def test_bucket_event_counts_refuses_a_degenerate_request(start: datetime, end: datetime, buckets: int):
+    """An empty window or a non-positive bucket count yields nothing to render."""
+    assert bucket_event_counts([NOW], start=start, end=end, buckets=buckets) == []
+
+
+def test_bucket_event_counts_defaults_to_the_module_bucket_count():
+    """The default resolution is high enough for the sparkline to resample down."""
+    counts = bucket_event_counts([_at(1)], start=NOW - WINDOW, end=NOW)
+
+    assert len(counts) == DEFAULT_VOLUME_BUCKETS
+    assert sum(counts) == pytest.approx(1.0)
