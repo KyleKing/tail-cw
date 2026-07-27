@@ -156,6 +156,15 @@ known-first-party = ['tail_cw']
 '__init__.py' = [
   'undocumented-public-package', # Missing docstring in public package
 ]
+'demo-aws/src/*.py' = [
+  'suspicious-non-cryptographic-random-usage', # The demo seeds `random` to replay a scenario, not to make secrets
+]
+'demo-aws/tests/*.py' = [
+  'assert', # Use of `assert` detected
+  'magic-value-comparison', # Magic value used in comparison (acceptable in tests)
+  'suspicious-non-cryptographic-random-usage', # Seeded `random` is the thing under test
+  'undocumented-public-function', # Missing docstring in public function
+]
 'scripts/*.py' = [
   'implicit-namespace-package', # File `scripts/*.py` is part of an implicit namespace package. Add an `__init__.py`.
 ]
@@ -167,15 +176,6 @@ known-first-party = ['tail_cw']
   'non-self-return-type', # __enter__ should return Self (LogCache is fine for this use case)
   'too-many-positional-arguments', # Too many positional arguments (6/5) - cache key needs all parameters
   'unspecified-encoding', # Text mode without explicit encoding (UTF-8 default is fine)
-]
-'demo-aws/src/*.py' = [
-  'suspicious-non-cryptographic-random-usage', # The demo seeds `random` to replay a scenario, not to make secrets
-]
-'demo-aws/tests/*.py' = [
-  'assert', # Use of `assert` detected
-  'magic-value-comparison', # Magic value used in comparison (acceptable in tests)
-  'suspicious-non-cryptographic-random-usage', # Seeded `random` is the thing under test
-  'undocumented-public-function', # Missing docstring in public function
 ]
 'tests/*.py' = [
   'assert', # Use of `assert` detected

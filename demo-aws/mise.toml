@@ -1,14 +1,14 @@
-[tools]
-opentofu = "1.12"
-
-[tasks.up]
-description = "Stand up the demo and start generating traffic"
-run = "tofu init -input=false && tofu apply -auto-approve"
+[tasks.down]
+description = "Destroy every demo resource"
+run = "tofu destroy -auto-approve"
 
 [tasks.restart]
 description = "Start a fresh run without rebuilding everything (resets the incident clock and the stop time)"
 run = "tofu apply -auto-approve -replace=time_static.run"
 
-[tasks.down]
-description = "Destroy every demo resource"
-run = "tofu destroy -auto-approve"
+[tasks.up]
+description = "Stand up the demo and start generating traffic"
+run = "tofu init -input=false && tofu apply -auto-approve"
+
+[tools]
+opentofu = "1.12"

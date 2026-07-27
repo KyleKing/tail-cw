@@ -66,13 +66,13 @@ From a chart, `d` dives into the log groups behind it. That works because every 
 
 The handler reads `RUN_EPOCH` (stamped at apply time) and decides which phase it is in, so the fifteen minutes have a shape rather than being uniform noise.
 
-| Minutes | Phase | What you see |
-| --- | --- | --- |
-| 0 to 2 | warmup | Cold starts, latency about 1.4x baseline, errors near 1% |
-| 2 to 6 | steady | Baseline. Errors near 1.5% |
-| 6 to 10 | incident | `payments` degrades: 35% failures, latency 7x. The gateway returns 502 on checkout, the queue backs up, poison messages reach the DLQ, and all three alarms go off |
-| 10 to 12 | recovery | `payments` improves to 10% failures at 2.5x latency |
-| 12 on | steady | Back to baseline |
+| Minutes  | Phase    | What you see                                                                                                                                                       |
+| -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0 to 2   | warmup   | Cold starts, latency about 1.4x baseline, errors near 1%                                                                                                           |
+| 2 to 6   | steady   | Baseline. Errors near 1.5%                                                                                                                                         |
+| 6 to 10  | incident | `payments` degrades: 35% failures, latency 7x. The gateway returns 502 on checkout, the queue backs up, poison messages reach the DLQ, and all three alarms go off |
+| 10 to 12 | recovery | `payments` improves to 10% failures at 2.5x latency                                                                                                                |
+| 12 on    | steady   | Back to baseline                                                                                                                                                   |
 
 Failures split two ways on purpose. About 70% return a 5xx to the caller, and the rest raise, so `AWS/Lambda Errors` is non-zero and the error-rate alarm has something real to measure.
 
@@ -80,16 +80,16 @@ Failures split two ways on purpose. About 70% return a 5xx to the caller, and th
 
 These field names are a contract with tail-cw's parsers. `scenario.build_log_record` owns them and `tests/test_scenario.py` asserts tail-cw's own `extract_trace_id_from_event`, `extract_span_metadata`, `extract_service_name`, and `is_error_event` read them correctly, so drift on either side fails the test suite.
 
-| Field | Why it is there |
-| --- | --- |
-| `level` | Error detection reads `ERROR`, `FATAL`, and `CRITICAL` |
-| `service_name` | Groups spans by service in the trace view |
-| `trace_id` | One simulated request across every service that handled it |
-| `span_id` | One service's leg of that request |
-| `duration_ms` | One of the four duration names tail-cw recognises. `latency_ms` is not among them |
-| `status_code` | Anything at 500 or above counts as an error |
-| `event`, `route`, `phase`, `error_type` | Give the group browser several distinct message shapes to cluster |
-| `xray_trace_id` | Pivot from a log line into the X-Ray console |
+| Field                                   | Why it is there                                                                   |
+| --------------------------------------- | --------------------------------------------------------------------------------- |
+| `level`                                 | Error detection reads `ERROR`, `FATAL`, and `CRITICAL`                            |
+| `service_name`                          | Groups spans by service in the trace view                                         |
+| `trace_id`                              | One simulated request across every service that handled it                        |
+| `span_id`                               | One service's leg of that request                                                 |
+| `duration_ms`                           | One of the four duration names tail-cw recognises. `latency_ms` is not among them |
+| `status_code`                           | Anything at 500 or above counts as an error                                       |
+| `event`, `route`, `phase`, `error_type` | Give the group browser several distinct message shapes to cluster                 |
+| `xray_trace_id`                         | Pivot from a log line into the X-Ray console                                      |
 
 `parent_span_id` is deliberately absent, matching [ADR 0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md): these logs carry no parent links, so emitting one would imply a hierarchy that is not there.
 

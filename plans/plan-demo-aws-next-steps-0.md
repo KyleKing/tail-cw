@@ -13,12 +13,17 @@ cd demo-aws && tofu init && tofu apply
 ```
 
 - [ ] Fix the shell first: `AWS_PROFILE=PowerUserAccess-760682031284` does not resolve, and no default region is set. Both break `tofu apply` and tail-cw
+
 - [ ] Confirm CloudWatch accepts the dashboard body. The widget schema is written from the documented shape and never round-tripped through `PutDashboard`. The riskiest parts are the invisible metric rows feeding the availability expression and the `alarm` widget's ARN list
+
 - [ ] Confirm percentile stats resolve on the EMF metric. `RequestLatencyMs` is charted at p50/p90/p99 and alarmed at p99, and a custom metric needs enough samples per period before percentiles return anything
+
 - [ ] Check whether the Python runtime prefixes plain `print` output. tail-cw tolerates an ISO timestamp before the `{`, so either way parses, but confirm which shape lands in the group
+
 - [ ] Watch the gateway's own duration. It paces 90 requests against a 55s timeout, and during the incident a single `POST /v1/orders` can spend up to `MAX_SLEEP_SECONDS` in `payments`. If the loop falls behind, traffic thins exactly when the demo is most interesting. Either lower `MAX_SLEEP_SECONDS`, raise `requests_per_minute`, or accept the dip
 
-  [AI: if it does fall behind, do you want the incident to show as fewer, slower requests (realistic) or hold throughput flat so the latency spike reads cleanly on the chart (better demo)?]
+    [AI: if it does fall behind, do you want the incident to show as fewer, slower requests (realistic) or hold throughput flat so the latency spike reads cleanly on the chart (better demo)?]
+
 - [ ] Confirm `tofu destroy` leaves nothing. Log groups are the usual survivor; these are declared explicitly rather than created by Lambda, so they should go, but verify in the console
 
 ## Drive tail-cw against it
