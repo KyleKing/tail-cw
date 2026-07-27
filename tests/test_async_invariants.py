@@ -32,7 +32,7 @@ def _python_files() -> list[Path]:
 
 
 def _module_name(path: Path) -> str:
-    return str(path.relative_to(PACKAGE.parent).with_suffix('')).replace('/', '.')
+    return '.'.join(path.relative_to(PACKAGE.parent).with_suffix('').parts)
 
 
 def _called_name(node: ast.Call) -> str:
@@ -53,7 +53,7 @@ def test_no_textual_thread_workers() -> None:
     offenders = [
         f'{_module_name(path)}:{node.lineno}'
         for path in _python_files()
-        for node in ast.walk(ast.parse(path.read_text()))
+        for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
         if isinstance(node, ast.Call) and _asks_for_a_thread(node)
     ]
     assert offenders == [], f'thread workers reintroduced: {offenders}'
@@ -64,7 +64,7 @@ def test_no_call_from_thread() -> None:
     offenders = [
         f'{_module_name(path)}:{node.lineno}'
         for path in _python_files()
-        for node in ast.walk(ast.parse(path.read_text()))
+        for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
         if isinstance(node, ast.Attribute) and node.attr == 'call_from_thread'
     ]
     assert offenders == [], f'call_from_thread reintroduced: {offenders}'
@@ -74,7 +74,7 @@ def test_boto3_is_not_imported() -> None:
     """boto3 is not a dependency; importing it would work locally and fail on a clean install."""
     offenders = []
     for path in _python_files():
-        for node in ast.walk(ast.parse(path.read_text())):
+        for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
             if isinstance(node, ast.Import):
                 names = [alias.name for alias in node.names]
             elif isinstance(node, ast.ImportFrom):
@@ -91,7 +91,7 @@ def test_no_asyncio_gather() -> None:
     offenders = [
         f'{_module_name(path)}:{node.lineno}'
         for path in _python_files()
-        for node in ast.walk(ast.parse(path.read_text()))
+        for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
         if isinstance(node, ast.Attribute) and node.attr == 'gather'
     ]
     assert offenders == [], f'use asyncio.TaskGroup instead of gather: {offenders}'
@@ -102,7 +102,7 @@ def test_no_module_level_asyncio_primitives() -> None:
     bound_to_a_loop = {'Semaphore', 'Lock', 'Event', 'Condition', 'BoundedSemaphore', 'Queue'}
     offenders = []
     for path in _python_files():
-        for node in ast.parse(path.read_text()).body:
+        for node in ast.parse(path.read_text(encoding='utf-8')).body:
             if not isinstance(node, ast.Assign):
                 continue
             value = node.value

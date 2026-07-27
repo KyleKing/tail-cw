@@ -1,2 +1,7 @@
 > Need to test against AWS for real using the opentofu files
 claude --resume cec3c8ac-915b-4eaf-961a-3fe159467c63
+
+## 2026-07-27
+
+- `write_ndjson` opens its output with `output_path.open('w')` (tail_cw/cache/storage.py:243), so a non-ASCII log message fails on a Windows locale that is not UTF-8. No test covers it yet
+- CI only runs tests on macOS and Windows; there is no Linux test job
