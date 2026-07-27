@@ -120,6 +120,7 @@ ignore = [
   'missing-type-kwargs', # Missing type annotation for `**kwargs`
   'multi-line-summary-second-line', # "Multi-line docstring summary should start at the second line" (Conflicts with D212)
   'non-empty-init-module', # `__init__` module should only contain docstrings and re-exports
+  'noqa-comments', # Prefer `ruff: ignore` over `noqa`; `noqa` stays for cross-tool compatibility
   'raise-vanilla-args', # Avoid specifying long messages outside the exception class
   'raw-string-in-exception', # Exception must not use a string literal, assign to variable first
   'too-many-arguments', # Too many arguments in function definition (6 > 5)
