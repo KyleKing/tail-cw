@@ -1,3 +1,2 @@
-Need to test against AWS for real!
-
-Then build out the streaming path further, followed by M2 ((log group discovery: tail-cw groups, fuzzy find, last-write/size/retention metadata, sample-a-group schema inference) - now reshaped to highlight flexible log group matching
+> Need to test against AWS for real using the opentofu files
+claude --resume cec3c8ac-915b-4eaf-961a-3fe159467c63

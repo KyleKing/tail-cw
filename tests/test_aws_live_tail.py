@@ -23,14 +23,6 @@ async def _collect(events: AsyncIterator[Any]) -> list[Any]:
 ACCOUNT_ARN_PREFIX = 'arn:aws:logs:us-east-1:123456789012:log-group:'
 
 
-@pytest.fixture(autouse=True)
-def _hermetic_aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv('AWS_PROFILE', raising=False)
-    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'testing')
-    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'testing')
-    monkeypatch.setenv('AWS_DEFAULT_REGION', 'us-east-1')
-
-
 def _make_live_event(
     log_stream_name: str = 'stream-1',
     timestamp: int = 1700000000000,
