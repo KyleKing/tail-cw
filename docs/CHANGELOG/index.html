@@ -2500,6 +2500,7 @@ and every <code>--json</code> flag moved under <code>tail-cw export</code>.</li>
 </ul>
 <h3 id="feat">Feat<a class="headerlink" href="#feat" title="Permanent link">⚓︎</a></h3>
 <ul>
+<li><strong>demo-aws</strong>: add ephemeral OpenTofu stack that generates real CloudWatch data</li>
 <li><strong>discovery</strong>: match log groups by substring when no prefix hits</li>
 <li>finish m2 with recents and presets, and close the deferred gaps</li>
 <li>replace the cli subcommands with one interactive tui</li>
@@ -2524,6 +2525,8 @@ and every <code>--json</code> flag moved under <code>tail-cw export</code>.</li>
 </ul>
 <h3 id="fix">Fix<a class="headerlink" href="#fix" title="Permanent link">⚓︎</a></h3>
 <ul>
+<li><strong>tests</strong>: read source with utf-8 so the async invariant guards run on Windows</li>
+<li><strong>tests</strong>: isolate the suite from the machine&rsquo;s AWS configuration</li>
 <li><strong>trace</strong>: read every selected group off the message loop</li>
 <li><strong>config</strong>: honor preview.sample_limit when sampling a group</li>
 <li><strong>cache</strong>: stop pickling metadata, and close the fan-out race properly</li>
