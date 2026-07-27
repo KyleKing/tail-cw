@@ -94,7 +94,7 @@ asyncio_mode = "auto"
 
 [tool.ruff]
 # Docs: https://github.com/charliermarsh/ruff
-# Tip: uv run ruff rule RUF100
+# Tip: uv run ruff rule unused-noqa
 line-length = 120
 target-version = 'py311'
 
@@ -107,7 +107,7 @@ ignore = [
   'blind-except', # Do not catch blind exception: `Exception`
   'docstring-missing-exception', # Raised exception `RuntimeError` missing from docstring
   'docstring-missing-returns', # Missing "Returns" in docstring; prefer minimal docstrings
-  'incorrect-blank-line-before-class', # "1 blank line required before class docstring" (Conflicts with D211)
+  'incorrect-blank-line-before-class', # "1 blank line required before class docstring" (Conflicts with blank-line-before-class)
   'invalid-todo-tag', # Invalid TODO tag: `FIXME`
   'line-contains-fixme', # Line contains FIXME
   'line-contains-hack', # Line contains HACK
@@ -118,7 +118,7 @@ ignore = [
   'missing-trailing-comma', # Conflicts with formatter
   'missing-type-args', # Missing type annotation for `*args`
   'missing-type-kwargs', # Missing type annotation for `**kwargs`
-  'multi-line-summary-second-line', # "Multi-line docstring summary should start at the second line" (Conflicts with D212)
+  'multi-line-summary-second-line', # "Multi-line docstring summary should start at the second line" (Conflicts with multi-line-summary-first-line)
   'non-empty-init-module', # `__init__` module should only contain docstrings and re-exports
   'noqa-comments', # Prefer `ruff: ignore` over `noqa`; `noqa` stays for cross-tool compatibility
   'raise-vanilla-args', # Avoid specifying long messages outside the exception class
