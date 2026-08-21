@@ -13,6 +13,7 @@ import pytest
 
 from tail_cw.aws.client import LogEvent
 from tail_cw.aws.dashboards import Dashboard, DashboardSummary, TextWidget, WidgetLayout
+from tail_cw.aws.insights import InsightsQueryError, InsightsResult
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.cache.storage import read_parquet_to_log_events
 from tail_cw.cli import (
@@ -1201,3 +1202,57 @@ def test_run_cli_export_summary_names_the_groups_it_capped(tmp_path, capsys, mon
     assert result == 0
     assert fetcher.calls == ['/aws/lambda/one']
     assert 'not fetched: /aws/lambda/two' in capsys.readouterr().err
+
+
+def test_run_cli_export_insights_writes_rows_and_reports_scanned_volume(tmp_path, capsys, monkeypatch):
+    _install_groups(monkeypatch, ['/aws/lambda/one', '/other'])
+    captured: dict[str, object] = {}
+
+    async def fake_query(_client, **kwargs):
+        captured.update(kwargs)
+        return InsightsResult(
+            columns=('day', 'events'),
+            rows=({'day': '2026-08-14', 'events': '7'},),
+            records_matched=7,
+            records_scanned=100,
+            bytes_scanned=1_500_000_000,
+        )
+
+    monkeypatch.setattr('tail_cw.cli.run_insights_query', fake_query)
+    argv = [
+        'export',
+        'insights',
+        '/aws/lambda/*',
+        '--config',
+        str(_write_config_file(tmp_path)),
+        '--query',
+        'stats count(*) by bin(1d)',
+        '--format',
+        'md',
+    ]
+
+    result = run_cli(argv, None, is_tty=False)
+
+    captured_output = capsys.readouterr()
+    assert result == 0
+    assert captured['log_groups'] == ['/aws/lambda/one']
+    assert captured['query'] == 'stats count(*) by bin(1d)'
+    assert '| day | events |' in captured_output.out
+    assert '| 2026-08-14 | 7 |' in captured_output.out
+    # Insights bills on bytes scanned, so the caller is always told.
+    assert '1.500 GB scanned' in captured_output.err
+
+
+def test_run_cli_export_insights_reports_a_failed_query(tmp_path, capsys, monkeypatch):
+    _install_groups(monkeypatch, ['/aws/lambda/one'])
+
+    async def failing_query(_client, **_kwargs):
+        raise InsightsQueryError('Insights query q-1 ended as Failed')
+
+    monkeypatch.setattr('tail_cw.cli.run_insights_query', failing_query)
+    argv = ['export', 'insights', '/aws/lambda/*', '--config', str(_write_config_file(tmp_path)), '--query', 'x']
+
+    result = run_cli(argv, None, is_tty=False)
+
+    assert result == 1
+    assert 'ended as Failed' in capsys.readouterr().err

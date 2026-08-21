@@ -5,6 +5,8 @@ Pure formatting: takes a :class:`~tail_cw.query.rollup.RollupReport` and returns
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 from tail_cw.charts.sparkline import sparkline_blocks
 from tail_cw.query.rollup import Granularity, PatternRollup, RollupReport
 
@@ -24,6 +26,20 @@ def render_markdown(report: RollupReport, *, title: str, window_label: str, sour
     for index, pattern in enumerate(report.patterns, start=1):
         lines.extend(_pattern_section(index, pattern, report))
     return '\n'.join(lines) + '\n'
+
+
+def render_rows_markdown(columns: Sequence[str], rows: Sequence[Mapping[str, str]]) -> str:
+    """Render arbitrary query rows as a markdown table."""
+    if not columns:
+        return 'No rows returned.\n'
+    header = '| ' + ' | '.join(columns) + ' |'
+    divider = '|' + '|'.join(['---'] * len(columns)) + '|'
+    body = ['| ' + ' | '.join(_escape_cell(row.get(column, '')) for column in columns) + ' |' for row in rows]
+    return '\n'.join([header, divider, *body]) + '\n'
+
+
+def _escape_cell(value: str) -> str:
+    return value.replace('|', '\\|')
 
 
 def _totals_sentence(report: RollupReport) -> str:

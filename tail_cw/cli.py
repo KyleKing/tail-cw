@@ -13,7 +13,7 @@ import asyncio
 import json
 import re
 import sys
-from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -31,6 +31,12 @@ from tail_cw.aws.dashboards import (
     list_dashboards,
     load_dashboard_file,
 )
+from tail_cw.aws.insights import (
+    MAX_INSIGHTS_LOG_GROUPS,
+    InsightsQueryError,
+    InsightsResult,
+    run_insights_query,
+)
 from tail_cw.aws.live_tail import MAX_LIVE_TAIL_LOG_GROUPS, stream_live_tail
 from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups, resolve_group_pattern
 from tail_cw.cache.storage import LogCache, generate_cache_key, read_parquet_to_log_events
@@ -39,7 +45,7 @@ from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
 from tail_cw.demo import demo_dashboard
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.fuzzy import DEFAULT_SIMILARITY
-from tail_cw.query.report import render_markdown
+from tail_cw.query.report import render_markdown, render_rows_markdown
 from tail_cw.query.rollup import DEFAULT_PATTERN_LIMIT, Granularity, RollupReport, roll_up
 from tail_cw.query.severity import Severity
 
@@ -50,6 +56,7 @@ ShellView = Literal['groups', 'logs', 'tail', 'dashboards', 'dashboard']
 DEFAULT_WINDOW = '1h'
 DEFAULT_DASHBOARD_WINDOW = '3h'
 DEFAULT_SUMMARY_MAX_GROUPS = 25
+INSIGHTS_DEFAULT_LIMIT = 1000
 
 _DURATION_RE = re.compile(r'(\d+)([dhm])')
 
@@ -294,6 +301,39 @@ def _add_export_parsers(export: argparse.ArgumentParser) -> None:
         help=f'Fuzzy merge threshold for near-identical shapes, 0 to disable (default: {DEFAULT_SIMILARITY})',
     )
     export_summary.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
+
+    export_insights = export_sub.add_parser(
+        'insights',
+        help='Run a CloudWatch Logs Insights query (billed per GB scanned).',
+    )
+    export_insights.add_argument('patterns', nargs='*', help='Log group names or glob patterns')
+    _add_aws_flags(export_insights)
+    export_insights.add_argument(
+        '--start',
+        default=DEFAULT_WINDOW,
+        help=f'Start of range: duration (15m, 2h, 3d) or ISO-8601 datetime (default: {DEFAULT_WINDOW})',
+    )
+    export_insights.add_argument('--end', default=None, help='End of range: duration or ISO-8601 datetime')
+    export_insights.add_argument('--query', required=True, help='Logs Insights query string')
+    export_insights.add_argument(
+        '--limit',
+        type=int,
+        default=INSIGHTS_DEFAULT_LIMIT,
+        help=f'Maximum rows returned (default: {INSIGHTS_DEFAULT_LIMIT})',
+    )
+    export_insights.add_argument(
+        '--format',
+        dest='output_format',
+        choices=['ndjson', 'md'],
+        default='ndjson',
+        help='One JSON object per row, or a markdown table (default: ndjson)',
+    )
+    export_insights.add_argument(
+        '--max-groups',
+        type=int,
+        default=MAX_INSIGHTS_LOG_GROUPS,
+        help=f'Cap on groups queried (default: {MAX_INSIGHTS_LOG_GROUPS}, the Insights maximum)',
+    )
 
     export_dashboards = export_sub.add_parser('dashboards', help='Write the account dashboard list as NDJSON.')
     _add_aws_flags(export_dashboards)
@@ -897,6 +937,59 @@ async def _export_summary(
     return 0
 
 
+async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: datetime) -> int:
+    try:
+        start_time, end_time = _window_from_args(args, now)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+    config = _load_config_or_report(args.config_path)
+    if config is None:
+        return 1
+    logs = await pool.client('logs')
+    names = await _resolve_summary_groups(logs, args.patterns, config.presets)
+    if not names:
+        sys.stderr.write('No log groups matched\n')
+        return 1
+    if len(names) > args.max_groups:
+        sys.stderr.write(
+            f'Capped at {args.max_groups} of {len(names)} matching groups; '
+            f'not queried: {", ".join(names[args.max_groups :])}\n',
+        )
+        names = names[: args.max_groups]
+
+    try:
+        result = await run_insights_query(
+            logs,
+            log_groups=names,
+            query=args.query,
+            start_time=start_time,
+            end_time=end_time,
+            limit=args.limit,
+        )
+    except (InsightsQueryError, ValueError) as err:
+        sys.stderr.write(f'{err}\n')
+        return 1
+
+    _report_insights_cost(result, group_count=len(names))
+    if args.output_format == 'md':
+        sys.stdout.write(render_rows_markdown(result.columns, result.rows))
+        return 0
+    for row in result.rows:
+        _write_json_line(dict(row))
+    return 0
+
+
+def _report_insights_cost(result: InsightsResult, *, group_count: int) -> None:
+    """Write what the query scanned to stderr, because Insights bills on it."""
+    gigabytes = result.bytes_scanned / 1_000_000_000
+    sys.stderr.write(
+        f'{len(result.rows)} rows from {group_count} groups; '
+        f'{result.records_matched:,} of {result.records_scanned:,} records matched, '
+        f'{gigabytes:.3f} GB scanned\n',
+    )
+
+
 async def _export_dashboards(pool: ClientProvider, args: argparse.Namespace) -> int:
     if _load_config_or_report(args.config_path) is None:
         return 1
@@ -934,19 +1027,16 @@ async def _dispatch_export(
     fetch_events: FetchEvents | None,
     stream_events: StreamEvents | None,
 ) -> int:
-    match args.export_command:
-        case 'logs':
-            return await _export_logs(pool, args, now, fetch_events=fetch_events, executor=executor)
-        case 'tail':
-            return await _export_tail(pool, args, now, fetch_events=fetch_events, stream_events=stream_events)
-        case 'groups':
-            return await _export_groups(pool, args)
-        case 'summary':
-            return await _export_summary(pool, args, now, fetch_events=fetch_events, executor=executor)
-        case 'dashboards':
-            return await _export_dashboards(pool, args)
-        case _:
-            return await _export_dashboard(pool, args)
+    handlers: dict[str, Callable[[], Awaitable[int]]] = {
+        'logs': lambda: _export_logs(pool, args, now, fetch_events=fetch_events, executor=executor),
+        'tail': lambda: _export_tail(pool, args, now, fetch_events=fetch_events, stream_events=stream_events),
+        'groups': lambda: _export_groups(pool, args),
+        'summary': lambda: _export_summary(pool, args, now, fetch_events=fetch_events, executor=executor),
+        'insights': lambda: _export_insights(pool, args, now),
+        'dashboards': lambda: _export_dashboards(pool, args),
+        'dashboard': lambda: _export_dashboard(pool, args),
+    }
+    return await handlers[args.export_command]()
 
 
 async def _run_export_command(
@@ -957,7 +1047,8 @@ async def _run_export_command(
     fetch_events: FetchEvents | None,
     stream_events: StreamEvents | None,
 ) -> int:
-    if args.export_command not in {'logs', 'tail', 'groups', 'summary', 'dashboards', 'dashboard'}:
+    """Run one export subcommand. Argparse rejects unknown names, so only a missing one."""
+    if args.export_command is None:
         parser.print_help(sys.stderr)
         return 2
     with blocking_pool() as executor:
