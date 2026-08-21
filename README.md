@@ -41,6 +41,17 @@ Dedicated CloudWatch tailers solved log streaming years ago and then stopped. Th
 - Gonzo: a strong log-analysis TUI with no native CloudWatch source, so you pipe `aws logs tail` into it
 - AWS CloudWatch MCP server: Insights and pattern analysis for agents, with no live tail and no human surface
 
+## CPU use
+
+DuckDB and Polars each size their own thread pool from the CPU count, and the blocking pool runs several of their calls at once, so the default is heavy oversubscription. tail-cw caps both at 40% of the machine: a two-group cold fetch that peaked at 700% CPU on a 12-core laptop peaks at 374% with the cap, and takes the same wall time, because the work is bound by CloudWatch's API rather than by local cores.
+
+Raise or lower it with `TAIL_CW_CPU_FRACTION` (a share of the CPU count, default `0.4`) or pin a thread count with `TAIL_CW_MAX_THREADS`. An explicit `POLARS_MAX_THREADS` in your shell always wins.
+
+```sh
+TAIL_CW_CPU_FRACTION=0.8 uv run tail-cw export summary '/aws/*'   # let it use more
+TAIL_CW_MAX_THREADS=2 uv run tail-cw export summary '/aws/*'      # keep it out of the way
+```
+
 ## Install
 
 ```sh

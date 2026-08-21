@@ -23,6 +23,7 @@ import duckdb
 import polars as pl
 
 from tail_cw.aws.client import LogEvent
+from tail_cw.cpu_budget import duckdb_threads
 from tail_cw.query.parser import FilterNode, FilterNodeType
 
 MAX_POLARS_FIELD_DEPTH = 2
@@ -175,6 +176,7 @@ def _query_with_duckdb(
     """
     try:
         with duckdb.connect() as con:
+            con.execute(f'SET threads = {duckdb_threads()}')
             sql = 'SELECT * FROM read_parquet(?)'
             params: list[Any] = [str(parquet_path)]
 

@@ -71,6 +71,7 @@ If you introduce or modify Textual UI code:
     - Concurrent work uses `asyncio.TaskGroup`, not `asyncio.gather`; `gather` leaves siblings running when one fails.
     - Never declare an `asyncio.Semaphore`, `Lock`, or `Event` at module level. They bind to the first event loop that touches them. Build them inside the running loop.
     - `async def` with no `await` is a bug unless it is an async generator or an adapter conforming to an awaitable signature.
+    - Native engines get a CPU budget, not the whole machine: `tail_cw/cpu_budget.py` caps DuckDB and Polars at 40% of the CPU count (`TAIL_CW_CPU_FRACTION` / `TAIL_CW_MAX_THREADS` override). `POLARS_MAX_THREADS` is read at import, so `apply_native_thread_limits()` must stay the first thing `tail_cw/__init__.py` does after the type-check hook. Polars' pool is process-wide so it takes the whole budget; DuckDB sizes per connection, so it takes the budget divided by the blocking-pool width.
     - Before offloading a new blocking library to a thread, measure whether it releases the GIL. Threads are a real offload for DuckDB and Polars (3.09x on four threads, against 1.07x for pure-Python CPU work); a GIL-holding library needs a process pool instead.
 - Efficient log views (common TUI pattern)
     - Use `deque(maxlen=...)` as a ring buffer for tailing logs.
