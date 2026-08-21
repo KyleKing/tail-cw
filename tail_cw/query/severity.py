@@ -27,11 +27,16 @@ WARNING_STATUS_THRESHOLD = 400
 _ERROR_LEVELS = {'ERROR', 'FATAL', 'CRITICAL'}
 _WARNING_LEVELS = {'WARN', 'WARNING'}
 # A line that labels its own level says more than a keyword anywhere in its body, so
-# "WARNING: Bedrock transient error" is a warning rather than an error.
+# "WARNING: Bedrock transient error" is a warning rather than an error. The label may sit
+# behind a leading timestamp, and the single-letter form with "!" is what the CloudWatch
+# agent and other Go tools emit.
+_TIMESTAMP_PREFIX = r'(?:\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s+)?'
+_LEVEL_WORDS = 'TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|FATAL|CRITICAL'
 _LEVEL_PREFIX_RE = re.compile(
-    r'^\s*[\[\(<]?(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|FATAL|CRITICAL)[\]\)>]?\s*[:\-|]',
+    rf'^\s*{_TIMESTAMP_PREFIX}(?:[\[\(<]?(?P<word>{_LEVEL_WORDS})[\]\)>]?\s*[:\-|]|(?P<letter>[EWID])!)',
     re.IGNORECASE,
 )
+_LETTER_LEVELS = {'E': 'ERROR', 'W': 'WARNING', 'I': 'INFO', 'D': 'DEBUG'}
 
 
 class Severity(IntEnum):
@@ -84,7 +89,8 @@ def event_severity(event: LogEvent) -> Severity:
 def keyword_severity(message: str) -> Severity:
     """Classify free text by its own level prefix when it has one, else by keyword."""
     if match := _LEVEL_PREFIX_RE.match(message):
-        return _level_severity(match.group(1).upper())
+        word = match.group('word') or _LETTER_LEVELS[match.group('letter').upper()]
+        return _level_severity(word.upper())
     lowered = message.lower()
     if any(keyword in lowered for keyword in ERROR_KEYWORDS):
         return Severity.ERROR
@@ -94,24 +100,25 @@ def keyword_severity(message: str) -> Severity:
 
 
 def _structured_severity(data: Mapping[str, Any]) -> Severity:
-    highest = Severity.INFO
-    for key, value in data.items():
-        if not value:
-            continue
-        highest = max(highest, _field_severity(key.lower(), value))
-        if highest is Severity.ERROR:
-            return highest
-    return highest
+    """Classify a record from its level and status, scanning its text only as a last resort.
 
-
-def _field_severity(lowered_key: str, value: Any) -> Severity:
-    if lowered_key in ERROR_LEVEL_FIELDS:
-        return _level_severity(str(value).upper())
-    if lowered_key in STATUS_FIELDS:
-        return _status_severity(value)
-    if lowered_key in MESSAGE_FIELDS and isinstance(value, str):
-        return keyword_severity(value)
-    return Severity.INFO
+    A record that declares its own level is taken at its word: a service logging
+    ``{"level": "info", "message": "error finding route"}`` is reporting a routine miss, and
+    keyword-scanning the body over the top of that manufactures errors. A status field still
+    escalates, because it is structured rather than prose.
+    """
+    populated = {key.lower(): value for key, value in data.items() if value}
+    status = max(
+        (_status_severity(value) for key, value in populated.items() if key in STATUS_FIELDS),
+        default=Severity.INFO,
+    )
+    levels = [_level_severity(str(value).upper()) for key, value in populated.items() if key in ERROR_LEVEL_FIELDS]
+    if levels:
+        return max(*levels, status)
+    bodies = [
+        keyword_severity(value) for key, value in populated.items() if key in MESSAGE_FIELDS and isinstance(value, str)
+    ]
+    return max([status, *bodies])
 
 
 def _level_severity(level: str) -> Severity:

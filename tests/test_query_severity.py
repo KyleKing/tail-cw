@@ -37,7 +37,11 @@ def _event(message: str) -> LogEvent:
         ({'level': 'info', 'event': 'trace-error lookup'}, Severity.INFO),
         # The highest signal across fields wins, whichever field carries it.
         ({'level': 'warning', 'status_code': 500, 'event': 'x'}, Severity.ERROR),
-        ({'level': 'info', 'message': 'unhandled exception'}, Severity.ERROR),
+        # A declared level is authoritative, so prose in the body cannot promote it.
+        ({'level': 'info', 'message': 'error finding route'}, Severity.INFO),
+        ({'message': 'unhandled exception'}, Severity.ERROR),
+        # A status field is structured, so it still escalates past a declared level.
+        ({'level': 'info', 'status_code': 500, 'event': 'x'}, Severity.ERROR),
     ],
 )
 def test_event_severity_reads_structured_fields(payload, expected):
@@ -51,6 +55,12 @@ def test_event_severity_reads_structured_fields(payload, expected):
         ('[WARNING] something failed', Severity.WARNING),
         ('WARN - retrying after error', Severity.WARNING),
         ('ERROR: boom', Severity.ERROR),
+        # The label may sit behind a timestamp, and Go tools abbreviate it to one letter.
+        ('2026-08-21 18:00:00,123 - dagster - WARNING - job failed', Severity.WARNING),
+        ('2026-08-21T18:00:00Z [warning ] no entity relationships', Severity.WARNING),
+        ('2026-08-21T18:00:00Z I! {"detail":"error"}', Severity.INFO),
+        ('2026-08-21T18:00:00Z E! {"detail":"x"}', Severity.ERROR),
+        ('Interesting! nothing to see', Severity.INFO),
         ('INFO: all good', Severity.INFO),
         ('Unhandled exception in worker', Severity.ERROR),
         ('request completed', Severity.INFO),
