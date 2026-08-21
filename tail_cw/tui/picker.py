@@ -149,7 +149,9 @@ class FilterInput(Input):
     FilterInput {
         height: 1;
         padding: 0 1;
-        border: none;
+        /* Input's own rule sets a tall border, which at height 1 leaves no row for the
+           text. Without !important the base class wins and the box renders empty. */
+        border: none !important;
         background: $boost;
         display: none;
     }

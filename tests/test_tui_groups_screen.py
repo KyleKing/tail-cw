@@ -180,6 +180,9 @@ async def test_filter_runs_the_resolution_ladder() -> None:
         await pilot.press('slash')
         await pilot.pause()
         assert picker.filter_input.has_focus
+        # Input's own rule sets a tall border, which at height 1 leaves no row for the
+        # text, so the query types invisibly.
+        assert picker.filter_input.content_size.height >= 1
 
         picker.filter_input.value = '/aws/lambda/'
         await pilot.pause()
