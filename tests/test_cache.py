@@ -344,25 +344,30 @@ def test_write_log_events_to_parquet_custom_row_group_size(fix_test_cache: Path)
         assert parquet_file.metadata.row_group(index).num_rows <= 500
 
 
-def test_write_log_events_to_parquet_custom_infer_schema_length(fix_test_cache: Path):
-    """Verify writes complete with a custom schema inference window."""
-    events = [
-        _make_log_event(
-            event_id=f'event-{i}',
-            message=(f'{{"value": {i}}}' if i % 2 == 0 else f'plain-{i}'),
-        )
-        for i in range(200)
+def test_write_log_events_to_parquet_keeps_fields_that_only_appear_late(fix_test_cache: Path):
+    """A field absent, null, or differently typed early must not break or vanish.
+
+    Sampling the first N rows to infer the schema panics the Parquet writer on a
+    null-then-string key, fails to parse an int-then-string key, and silently drops a key
+    that first appears past the sample, so the whole file is scanned instead.
+    """
+    early = [
+        _make_log_event(event_id=f'early-{index}', message='{"kept": null, "widened": 1}') for index in range(1200)
     ]
-    output_path = fix_test_cache / 'custom_infer.parquet'
+    late = [
+        _make_log_event(event_id='late-null', message='{"kept": "text", "widened": 2}'),
+        _make_log_event(event_id='late-widened', message='{"kept": "text", "widened": "text"}'),
+        _make_log_event(event_id='late-new', message='{"kept": "text", "widened": 3, "appeared": "text"}'),
+    ]
+    output_path = fix_test_cache / 'late_fields.parquet'
 
-    stats = write_log_events_to_parquet(
-        events,
-        output_path,
-        infer_schema_length=50,
-    )
+    stats = write_log_events_to_parquet([*early, *late], output_path)
 
-    assert stats['total_events'] == 200
-    assert output_path.exists()
+    assert stats['total_events'] == len(early) + len(late)
+    parsed = pl.read_parquet(output_path)['parsed']
+    assert set(parsed.struct.fields) == {'kept', 'widened', 'appeared'}
+    assert parsed.struct.field('kept').drop_nulls().to_list() == ['text', 'text', 'text']
+    assert parsed.struct.field('appeared').drop_nulls().to_list() == ['text']
 
 
 def test_write_log_events_to_parquet_with_progress_callback(fix_test_cache: Path):
@@ -506,7 +511,6 @@ def test_log_cache_with_custom_config(fix_test_cache: Path):
     with LogCache(
         cache_dir,
         row_group_size=50,
-        infer_schema_length=25,
         compression_level=5,
     ) as cache:
         start = datetime(2025, 1, 1, tzinfo=UTC)
@@ -517,7 +521,6 @@ def test_log_cache_with_custom_config(fix_test_cache: Path):
 
         assert stats['total_events'] == 150
         assert cache._row_group_size == 50
-        assert cache._infer_schema_length == 25
 
         parquet_files = list(cache._parquet_dir.glob('*.parquet'))
         assert len(parquet_files) == 1

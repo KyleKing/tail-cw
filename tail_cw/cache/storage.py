@@ -278,7 +278,6 @@ def write_log_events_to_parquet(
     output_path: Path,
     compression_level: int = 3,
     row_group_size: int = 100_000,
-    infer_schema_length: int = 1000,
     progress_callback: ProgressCallback | None = None,
 ) -> dict[str, int]:
     """Convert LogEvent instances to a compressed Parquet file.
@@ -298,8 +297,6 @@ def write_log_events_to_parquet(
             compression but slower. Default 3 is a good balance.
         row_group_size: Number of rows per Parquet row group. Larger values
             improve scan performance at the cost of memory usage.
-        infer_schema_length: Number of rows read while inferring the schema
-            from NDJSON input.
         progress_callback: Optional callable invoked during conversion with
             ``(current, total, status_message)``.
 
@@ -357,10 +354,12 @@ def write_log_events_to_parquet(
         if progress_callback:
             progress_callback(total_events, total_events, 'Converting to Parquet...')
 
-        # Convert NDJSON to Parquet using Polars
-        # Use scan_ndjson for lazy loading with schema inference
+        # The whole file is scanned to infer the schema. Sampling the first N rows is
+        # unsound over arbitrary log payloads: a key that is null in the sample and a string
+        # later panics the Parquet writer, an int-then-string key fails to parse, and a key
+        # first appearing after the sample is silently dropped and becomes unqueryable.
         (
-            pl.scan_ndjson(str(temp_file), infer_schema_length=infer_schema_length).sink_parquet(
+            pl.scan_ndjson(str(temp_file), infer_schema_length=None).sink_parquet(
                 str(output_path),
                 compression='zstd',
                 compression_level=compression_level,
@@ -490,7 +489,6 @@ class LogCache:
         eviction_policy: str = 'least-recently-stored',
         compression_level: int = 3,
         row_group_size: int = 100_000,
-        infer_schema_length: int = 1000,
     ) -> None:
         """Initialize LogCache with specified configuration.
 
@@ -504,7 +502,6 @@ class LogCache:
             compression_level: Default ZSTD compression level applied when
                 writing Parquet files.
             row_group_size: Default Parquet row group size used during writes.
-            infer_schema_length: Number of rows scanned when inferring schemas.
 
         Raises:
             OSError: If cache directory cannot be created.
@@ -515,7 +512,6 @@ class LogCache:
         self._size_limit_bytes = size_limit_mb * 1024 * 1024
         self._compression_level = compression_level
         self._row_group_size = row_group_size
-        self._infer_schema_length = infer_schema_length
         self._inflight: set[Path] = set()
         self._inflight_lock = Lock()
 
@@ -623,7 +619,6 @@ class LogCache:
         ttl_seconds: TtlSeconds | None = None,
         compression_level: int | None = None,
         row_group_size: int | None = None,
-        infer_schema_length: int | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> dict[str, int]:
         """Write log events to cache.
@@ -637,7 +632,6 @@ class LogCache:
             compression_level: Optional override for compression level used during
                 this write.
             row_group_size: Optional override for Parquet row group size.
-            infer_schema_length: Optional override for schema inference length.
             progress_callback: Optional callable notified of progress updates.
 
         Returns:
@@ -654,9 +648,6 @@ class LogCache:
 
         effective_compression = compression_level if compression_level is not None else self._compression_level
         effective_row_group_size = row_group_size if row_group_size is not None else self._row_group_size
-        effective_infer_schema_length = (
-            infer_schema_length if infer_schema_length is not None else self._infer_schema_length
-        )
 
         with self._inflight_lock:
             self._inflight.add(parquet_path)
@@ -667,7 +658,6 @@ class LogCache:
                 parquet_path,
                 compression_level=effective_compression,
                 row_group_size=effective_row_group_size,
-                infer_schema_length=effective_infer_schema_length,
                 progress_callback=progress_callback,
             )
 

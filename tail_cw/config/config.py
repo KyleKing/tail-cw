@@ -60,13 +60,10 @@ class ParquetConfig:
             improve scan performance at the cost of memory.
         compression_level: ZSTD compression level (1-22). Higher levels trade
             speed for reduced file size.
-        infer_schema_length: Number of rows sampled when inferring the schema
-            from NDJSON payloads.
     """
 
     row_group_size: int = 100_000
     compression_level: int = 3
-    infer_schema_length: int = 1000
 
 
 @dataclass(slots=True)
@@ -324,8 +321,7 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'eviction_policy = "least-recently-stored"\n\n'
             '[parquet]\n'
             'row_group_size = 100000\n'
-            'compression_level = 3\n'
-            'infer_schema_length = 1000\n\n'
+            'compression_level = 3\n\n'
             '[preview]\n'
             'sample_limit = 500\n'
             'window_seconds = 900  # 15 minutes\n'

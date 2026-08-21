@@ -402,7 +402,6 @@ def open_log_cache(config: TailCWConfig) -> LogCache:
         eviction_policy=config.cache.eviction_policy,
         compression_level=config.parquet.compression_level,
         row_group_size=config.parquet.row_group_size,
-        infer_schema_length=config.parquet.infer_schema_length,
     )
 
 

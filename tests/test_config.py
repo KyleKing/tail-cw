@@ -47,7 +47,6 @@ def test_default_config_values():
 
     assert config.parquet.row_group_size == 100_000
     assert config.parquet.compression_level == 3
-    assert config.parquet.infer_schema_length == 1000
 
     assert config.preview.sample_limit == 500
     assert config.preview.window_seconds == 900
@@ -103,7 +102,6 @@ def test_load_config_valid_toml(xdg_paths: tuple[Path, Path], tmp_path: Path):
                 '[parquet]',
                 'row_group_size = 200000',
                 'compression_level = 5',
-                'infer_schema_length = 250',
                 '',
                 '[preview]',
                 'sample_limit = 120',
@@ -133,7 +131,6 @@ def test_load_config_valid_toml(xdg_paths: tuple[Path, Path], tmp_path: Path):
 
     assert config.parquet.row_group_size == 200_000
     assert config.parquet.compression_level == 5
-    assert config.parquet.infer_schema_length == 250
 
     assert config.preview.sample_limit == 120
     assert config.preview.window_seconds == 600
@@ -247,11 +244,10 @@ def test_cache_config_dataclass(tmp_path: Path):
 
 
 def test_parquet_config_dataclass():
-    config = ParquetConfig(row_group_size=64_000, compression_level=7, infer_schema_length=128)
+    config = ParquetConfig(row_group_size=64_000, compression_level=7)
 
     assert config.row_group_size == 64_000
     assert config.compression_level == 7
-    assert config.infer_schema_length == 128
 
 
 def test_preview_config_dataclass():
