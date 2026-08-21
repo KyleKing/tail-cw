@@ -23,6 +23,8 @@ DITTO = '.'
 DITTO_ALL = '...'
 _ID_PREFIX = 'q'
 
+DEFAULT_PERIOD_SECONDS = 300
+
 
 @dataclass(frozen=True)
 class MetricSeries:

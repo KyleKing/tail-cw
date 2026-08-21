@@ -23,6 +23,7 @@ from typing import Any, Literal
 
 from beartype.typing import Protocol
 
+from tail_cw.aws.alarms import ALARM_STATES, AlarmSummary, describe_alarm_history, describe_alarms
 from tail_cw.aws.client import ClientProvider, LogEvent, client_pool, fetch_log_events
 from tail_cw.aws.dashboards import (
     DashboardSummary,
@@ -39,6 +40,12 @@ from tail_cw.aws.insights import (
 )
 from tail_cw.aws.live_tail import MAX_LIVE_TAIL_LOG_GROUPS, stream_live_tail
 from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups, resolve_group_pattern
+from tail_cw.aws.metrics import (
+    DEFAULT_PERIOD_SECONDS,
+    MetricSeries,
+    build_metric_data_queries,
+    fetch_metric_data,
+)
 from tail_cw.cache.storage import LogCache, generate_cache_key, read_parquet_to_log_events
 from tail_cw.concurrency import blocking_pool, closing_stream, consume_in_thread, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
@@ -57,6 +64,7 @@ DEFAULT_WINDOW = '1h'
 DEFAULT_DASHBOARD_WINDOW = '3h'
 DEFAULT_SUMMARY_MAX_GROUPS = 25
 INSIGHTS_DEFAULT_LIMIT = 1000
+DEFAULT_HISTORY_WINDOW = '7d'
 
 _DURATION_RE = re.compile(r'(\d+)([dhm])')
 
@@ -229,125 +237,183 @@ def _add_window_flags(parser: argparse.ArgumentParser, *, default_start: str) ->
 def _add_export_parsers(export: argparse.ArgumentParser) -> None:
     """Attach the ``export`` subcommand tree, which owns most of the CLI surface."""
     export_sub = export.add_subparsers(dest='export_command')
+    _configure_logs(export_sub.add_parser('logs', help='Write log events for a time range as NDJSON.'))
+    _configure_tail(export_sub.add_parser('tail', help='Stream live log events as NDJSON (Ctrl+C to stop).'))
+    _configure_groups(export_sub.add_parser('groups', help='Write log group metadata as NDJSON.'))
+    _configure_summary(
+        export_sub.add_parser('summary', help='Roll matching log groups up into recurring error and warning patterns.')
+    )
+    _configure_insights(
+        export_sub.add_parser('insights', help='Run a CloudWatch Logs Insights query (billed per GB scanned).')
+    )
+    _configure_alarms(export_sub.add_parser('alarms', help='Write metric alarms, and their firing history, as NDJSON.'))
+    _configure_metrics(export_sub.add_parser('metrics', help='Write metric datapoints as NDJSON.'))
+    _configure_dashboards(export_sub.add_parser('dashboards', help='Write the account dashboard list as NDJSON.'))
+    _configure_dashboard(export_sub.add_parser('dashboard', help='Write one parsed dashboard structure as JSON.'))
 
-    export_logs = export_sub.add_parser('logs', help='Write log events for a time range as NDJSON.')
-    export_logs.add_argument('log_group', help='CloudWatch log group name (e.g. /aws/lambda/my-function)')
-    _add_aws_flags(export_logs)
-    _add_window_flags(export_logs, default_start=DEFAULT_WINDOW)
-    export_logs.add_argument(
+
+def _configure_logs(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('log_group', help='CloudWatch log group name (e.g. /aws/lambda/my-function)')
+    _add_aws_flags(parser)
+    _add_window_flags(parser, default_start=DEFAULT_WINDOW)
+    parser.add_argument(
         '--no-cache',
         dest='no_cache',
         action='store_true',
         help='Bypass the cache read (results are still written to the cache)',
     )
 
-    export_tail = export_sub.add_parser('tail', help='Stream live log events as NDJSON (Ctrl+C to stop).')
-    export_tail.add_argument('log_groups', nargs='+', help='One or more CloudWatch log group names (max 10)')
-    _add_aws_flags(export_tail)
-    export_tail.add_argument('--filter', dest='filter_pattern', default=None, help='CloudWatch Logs filter pattern')
-    export_tail.add_argument(
+
+def _configure_tail(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('log_groups', nargs='+', help='One or more CloudWatch log group names (max 10)')
+    _add_aws_flags(parser)
+    parser.add_argument('--filter', dest='filter_pattern', default=None, help='CloudWatch Logs filter pattern')
+    parser.add_argument(
         '--backfill',
         default=None,
         help='Emit historical events for this window (e.g. 15m) before streaming live',
     )
 
-    export_groups = export_sub.add_parser('groups', help='Write log group metadata as NDJSON.')
-    export_groups.add_argument('pattern', nargs='?', default=None, help='Name, prefix, or glob to match')
-    _add_aws_flags(export_groups)
 
-    export_summary = export_sub.add_parser(
-        'summary',
-        help='Roll matching log groups up into recurring error and warning patterns.',
-    )
-    export_summary.add_argument('patterns', nargs='*', help='Log group names or glob patterns (omit for every group)')
-    _add_aws_flags(export_summary)
-    _add_window_flags(export_summary, default_start=DEFAULT_WINDOW)
-    export_summary.add_argument(
+def _configure_groups(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('pattern', nargs='?', default=None, help='Name, prefix, or glob to match')
+    _add_aws_flags(parser)
+
+
+def _configure_summary(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('patterns', nargs='*', help='Log group names or glob patterns (omit for every group)')
+    _add_aws_flags(parser)
+    _add_window_flags(parser, default_start=DEFAULT_WINDOW)
+    parser.add_argument(
         '--level',
         choices=[level.name.lower() for level in Severity],
         default=Severity.WARNING.name.lower(),
         help='Minimum severity to include (default: warning)',
     )
-    export_summary.add_argument(
+    parser.add_argument(
         '--by',
         dest='granularity',
         choices=[value.value for value in Granularity],
         default=Granularity.HOUR.value,
         help='Time bucket for the per-period counts (default: hour)',
     )
-    export_summary.add_argument(
+    parser.add_argument(
         '--top',
         type=int,
         default=DEFAULT_PATTERN_LIMIT,
         help=f'Number of patterns to report (default: {DEFAULT_PATTERN_LIMIT})',
     )
-    export_summary.add_argument(
+    parser.add_argument(
         '--format',
         dest='output_format',
         choices=['md', 'json'],
         default='md',
         help='Markdown document or one JSON object (default: md)',
     )
-    export_summary.add_argument(
+    parser.add_argument(
         '--max-groups',
         type=int,
         default=DEFAULT_SUMMARY_MAX_GROUPS,
         help=f'Cap on groups fetched; the rest are named on stderr (default: {DEFAULT_SUMMARY_MAX_GROUPS})',
     )
-    export_summary.add_argument(
+    parser.add_argument(
         '--similarity',
         type=float,
         default=DEFAULT_SIMILARITY,
         help=f'Fuzzy merge threshold for near-identical shapes, 0 to disable (default: {DEFAULT_SIMILARITY})',
     )
-    export_summary.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
+    parser.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
 
-    export_insights = export_sub.add_parser(
-        'insights',
-        help='Run a CloudWatch Logs Insights query (billed per GB scanned).',
-    )
-    export_insights.add_argument('patterns', nargs='*', help='Log group names or glob patterns')
-    _add_aws_flags(export_insights)
-    export_insights.add_argument(
+
+def _configure_insights(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('patterns', nargs='*', help='Log group names or glob patterns')
+    _add_aws_flags(parser)
+    parser.add_argument(
         '--start',
         default=DEFAULT_WINDOW,
         help=f'Start of range: duration (15m, 2h, 3d) or ISO-8601 datetime (default: {DEFAULT_WINDOW})',
     )
-    export_insights.add_argument('--end', default=None, help='End of range: duration or ISO-8601 datetime')
-    export_insights.add_argument('--query', required=True, help='Logs Insights query string')
-    export_insights.add_argument(
+    parser.add_argument('--end', default=None, help='End of range: duration or ISO-8601 datetime')
+    parser.add_argument('--query', required=True, help='Logs Insights query string')
+    parser.add_argument(
         '--limit',
         type=int,
         default=INSIGHTS_DEFAULT_LIMIT,
         help=f'Maximum rows returned (default: {INSIGHTS_DEFAULT_LIMIT})',
     )
-    export_insights.add_argument(
+    parser.add_argument(
         '--format',
         dest='output_format',
         choices=['ndjson', 'md'],
         default='ndjson',
         help='One JSON object per row, or a markdown table (default: ndjson)',
     )
-    export_insights.add_argument(
+    parser.add_argument(
         '--max-groups',
         type=int,
         default=MAX_INSIGHTS_LOG_GROUPS,
         help=f'Cap on groups queried (default: {MAX_INSIGHTS_LOG_GROUPS}, the Insights maximum)',
     )
 
-    export_dashboards = export_sub.add_parser('dashboards', help='Write the account dashboard list as NDJSON.')
-    _add_aws_flags(export_dashboards)
 
-    export_dashboard = export_sub.add_parser('dashboard', help='Write one parsed dashboard structure as JSON.')
-    export_dashboard.add_argument('name', nargs='?', default=None, help='Dashboard name (omit with --file or --demo)')
-    _add_aws_flags(export_dashboard)
-    export_dashboard.add_argument(
+def _configure_alarms(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('prefix', nargs='?', default=None, help='Restrict to alarms whose name starts with this')
+    _add_aws_flags(parser)
+    parser.add_argument(
+        '--state',
+        action='append',
+        choices=list(ALARM_STATES),
+        default=None,
+        help='Restrict to a state; repeatable (default: every state)',
+    )
+    parser.add_argument(
+        '--history',
+        action='store_true',
+        help="Also count and list each alarm's state transitions in the window",
+    )
+    parser.add_argument(
+        '--start',
+        default=DEFAULT_HISTORY_WINDOW,
+        help=f'Start of the history window (default: {DEFAULT_HISTORY_WINDOW})',
+    )
+    parser.add_argument('--end', default=None, help='End of the history window')
+
+
+def _configure_metrics(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('--namespace', required=True, help='Metric namespace, e.g. AWS/ECS')
+    parser.add_argument('--metric', required=True, help='Metric name, e.g. MemoryUtilization')
+    parser.add_argument(
+        '--dimension',
+        action='append',
+        default=None,
+        metavar='NAME=VALUE',
+        help='Dimension filter; repeatable',
+    )
+    parser.add_argument('--stat', default='Average', help='Statistic, e.g. Average, Maximum, p99')
+    parser.add_argument('--period', type=int, default=None, help='Period in seconds (default: from config)')
+    _add_aws_flags(parser)
+    parser.add_argument(
+        '--start',
+        default=DEFAULT_DASHBOARD_WINDOW,
+        help=f'Start of range: duration or ISO-8601 datetime (default: {DEFAULT_DASHBOARD_WINDOW})',
+    )
+    parser.add_argument('--end', default=None, help='End of range: duration or ISO-8601 datetime')
+
+
+def _configure_dashboards(parser: argparse.ArgumentParser) -> None:
+    _add_aws_flags(parser)
+
+
+def _configure_dashboard(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('name', nargs='?', default=None, help='Dashboard name (omit with --file or --demo)')
+    _add_aws_flags(parser)
+    parser.add_argument(
         '--demo',
         dest='demo',
         action='store_true',
         help='Emit the synthetic demo dashboard (no AWS calls)',
     )
-    export_dashboard.add_argument(
+    parser.add_argument(
         '--file',
         dest='dashboard_file',
         type=Path,
@@ -990,6 +1056,113 @@ def _report_insights_cost(result: InsightsResult, *, group_count: int) -> None:
     )
 
 
+def _alarm_to_record(alarm: AlarmSummary) -> dict[str, object]:
+    return {
+        'name': alarm.name,
+        'state': alarm.state,
+        'state_updated': alarm.state_updated.isoformat() if alarm.state_updated is not None else None,
+        'state_reason': alarm.state_reason,
+        'description': alarm.description,
+        'namespace': alarm.namespace,
+        'metric_name': alarm.metric_name,
+        'dimensions': dict(alarm.dimensions),
+        'statistic': alarm.statistic,
+        'comparison': alarm.comparison,
+        'threshold': alarm.threshold,
+        'period_seconds': alarm.period_seconds,
+        'datapoints_to_alarm': alarm.datapoints_to_alarm,
+        'evaluation_periods': alarm.evaluation_periods,
+        'actions_enabled': alarm.actions_enabled,
+    }
+
+
+async def _export_alarms(pool: ClientProvider, args: argparse.Namespace, now: datetime) -> int:
+    try:
+        start_time, end_time = _window_from_args(args, now)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+    if _load_config_or_report(args.config_path) is None:
+        return 1
+    cloudwatch = await pool.client('cloudwatch')
+    alarms = [alarm async for alarm in describe_alarms(cloudwatch, name_prefix=args.prefix, states=args.state)]
+    for alarm in alarms:
+        record = _alarm_to_record(alarm)
+        if args.history:
+            transitions = [
+                transition
+                async for transition in describe_alarm_history(
+                    cloudwatch,
+                    alarm.name,
+                    start_time=start_time,
+                    end_time=end_time,
+                )
+            ]
+            record['transitions'] = len(transitions)
+            record['history'] = [
+                {'moment': transition.moment.isoformat(), 'summary': transition.summary} for transition in transitions
+            ]
+        _write_json_line(record)
+    if not alarms:
+        sys.stderr.write('No alarms matched\n')
+    return 0
+
+
+def _parse_dimensions(values: Sequence[str] | None) -> list[tuple[str, str]]:
+    """Parse repeated ``NAME=VALUE`` flags.
+
+    Raises:
+        ValueError: A value has no ``=``.
+    """
+    parsed: list[tuple[str, str]] = []
+    for value in values or []:
+        name, separator, dimension_value = value.partition('=')
+        if not separator or not name:
+            msg = f'--dimension expects NAME=VALUE, got {value!r}'
+            raise ValueError(msg)
+        parsed.append((name, dimension_value))
+    return parsed
+
+
+async def _export_metrics(pool: ClientProvider, args: argparse.Namespace, now: datetime) -> int:
+    try:
+        start_time, end_time = _window_from_args(args, now)
+        dimensions = _parse_dimensions(args.dimension)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+    if _load_config_or_report(args.config_path) is None:
+        return 1
+
+    # The console's metrics[] shorthand is flat: namespace, metric, then dimension pairs.
+    shorthand: list[Any] = [args.namespace, args.metric]
+    for name, value in dimensions:
+        shorthand.extend([name, value])
+    queries = build_metric_data_queries(
+        [shorthand],
+        widget_stat=args.stat,
+        widget_period=args.period,
+        default_period=DEFAULT_PERIOD_SECONDS,
+    )
+    series = await fetch_metric_data(await pool.client('cloudwatch'), queries, start_time, end_time)
+    if not any(item.values for item in series):
+        sys.stderr.write('No datapoints in the requested range\n')
+    for item in series:
+        _write_json_line(_metric_series_to_record(item))
+    return 0
+
+
+def _metric_series_to_record(series: MetricSeries) -> dict[str, object]:
+    return {
+        'id': series.id,
+        'label': series.label,
+        'datapoints': [
+            {'timestamp': timestamp.isoformat(), 'value': value}
+            for timestamp, value in zip(series.timestamps, series.values, strict=False)
+        ],
+    }
+
+
 async def _export_dashboards(pool: ClientProvider, args: argparse.Namespace) -> int:
     if _load_config_or_report(args.config_path) is None:
         return 1
@@ -1033,6 +1206,8 @@ async def _dispatch_export(
         'groups': lambda: _export_groups(pool, args),
         'summary': lambda: _export_summary(pool, args, now, fetch_events=fetch_events, executor=executor),
         'insights': lambda: _export_insights(pool, args, now),
+        'alarms': lambda: _export_alarms(pool, args, now),
+        'metrics': lambda: _export_metrics(pool, args, now),
         'dashboards': lambda: _export_dashboards(pool, args),
         'dashboard': lambda: _export_dashboard(pool, args),
     }

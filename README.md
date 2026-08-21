@@ -13,6 +13,7 @@ Run `tail-cw` with no arguments and you land in the log group browser. Everythin
 - Live tail through `StartLiveTail` (up to 10 groups) with a ring buffer, pause and resume, and bounded reconnect. `L` flips a historical search to live and back without losing the filter or window
 - One filter model that reads the same across the live stream, a historical fetch, and cached data
 - Every fetch cached as ZSTD Parquet and queried locally with DuckDB or Polars, so re-filtering and trace grouping are free after the first pull
+- `tail-cw export alarms` lists metric alarms with what they watch and how often they have changed state, so a flapping alarm is visible as a count rather than as a run of Slack messages. `tail-cw export metrics` pulls any metric's datapoints without needing a dashboard to hang them off
 - `tail-cw export insights` runs a Logs Insights query for the aggregation questions a download cannot answer cheaply. A week of one busy group counted per day takes about 7 seconds and scans ~1 GB, against roughly ten minutes to pull the same week through `FilterLogEvents`. Insights bills per gigabyte scanned where `FilterLogEvents` does not, so nothing routes through it unless you ask, and every run prints what it scanned
 - `tail-cw export summary` rolls many groups up into the recurring errors and warnings behind them, counted per hour or per day and written as markdown. It keys on the message body rather than the whole record, then fuzzy-merges shapes differing only in a literal phrase, which is what turns a few thousand distinct payloads into a couple of dozen readable rows
 - Dashboard import by name via `GetDashboard`, or from a local JSON file in the same schema, rendering metric widgets as charts, log widgets as Logs Insights queries, and text widgets as markdown
@@ -72,6 +73,8 @@ uv run tail-cw export tail /aws/lambda/my-fn             # NDJSON, flushed per l
 uv run tail-cw export groups '/aws/lambda/*'             # NDJSON group metadata
 uv run tail-cw export summary '/aws/*' --start 1h        # markdown rollup of errors and warnings
 uv run tail-cw export insights '/aws/*' --query '...'    # Logs Insights, billed per GB scanned
+uv run tail-cw export alarms irm-prod --history           # alarms with their firing history
+uv run tail-cw export metrics --namespace AWS/ECS --metric MemoryUtilization --dimension ServiceName=svc
 uv run tail-cw export dashboards                         # NDJSON dashboard list
 uv run tail-cw export dashboard my-service               # the parsed dashboard as JSON
 ```

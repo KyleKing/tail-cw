@@ -11,10 +11,12 @@ from typing import Any
 
 import pytest
 
+from tail_cw.aws.alarms import AlarmSummary, AlarmTransition
 from tail_cw.aws.client import LogEvent
 from tail_cw.aws.dashboards import Dashboard, DashboardSummary, TextWidget, WidgetLayout
 from tail_cw.aws.insights import InsightsQueryError, InsightsResult
 from tail_cw.aws.log_groups import LogGroupInfo
+from tail_cw.aws.metrics import MetricSeries
 from tail_cw.cache.storage import read_parquet_to_log_events
 from tail_cw.cli import (
     FetchRequest,
@@ -1256,3 +1258,122 @@ def test_run_cli_export_insights_reports_a_failed_query(tmp_path, capsys, monkey
 
     assert result == 1
     assert 'ended as Failed' in capsys.readouterr().err
+
+
+def _make_alarm(name: str = 'svc-high-memory', state: str = 'ALARM') -> AlarmSummary:
+    return AlarmSummary(
+        name=name,
+        state=state,
+        state_reason='Threshold Crossed',
+        state_updated=NOW,
+        description='memory over 85%',
+        namespace='AWS/ECS',
+        metric_name='MemoryUtilization',
+        dimensions=(('ClusterName', 'c1'), ('ServiceName', 's1')),
+        statistic='Average',
+        comparison='GreaterThanOrEqualToThreshold',
+        threshold=85.0,
+        period_seconds=120,
+        datapoints_to_alarm=2,
+        evaluation_periods=3,
+        actions_enabled=True,
+    )
+
+
+def test_run_cli_export_alarms_includes_transition_counts(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    monkeypatch.setattr('tail_cw.cli.describe_alarms', _async_iter_factory([_make_alarm()]))
+    monkeypatch.setattr(
+        'tail_cw.cli.describe_alarm_history',
+        _async_iter_factory(
+            [
+                AlarmTransition(alarm_name='svc-high-memory', moment=NOW, summary='OK to ALARM'),
+                AlarmTransition(alarm_name='svc-high-memory', moment=NOW, summary='ALARM to OK'),
+            ],
+        ),
+    )
+    argv = ['export', 'alarms', 'svc', '--history', '--config', str(_write_config_file(tmp_path))]
+
+    result = run_cli(argv, None, is_tty=False)
+
+    assert result == 0
+    record = json.loads(capsys.readouterr().out)
+    assert record['name'] == 'svc-high-memory'
+    assert record['dimensions'] == {'ClusterName': 'c1', 'ServiceName': 's1'}
+    assert record['threshold'] == pytest.approx(85.0)
+    assert record['transitions'] == 2
+    assert [item['summary'] for item in record['history']] == ['OK to ALARM', 'ALARM to OK']
+
+
+def test_run_cli_export_alarms_says_so_when_none_match(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    monkeypatch.setattr('tail_cw.cli.describe_alarms', _async_iter_factory([]))
+
+    result = run_cli(['export', 'alarms', '--config', str(_write_config_file(tmp_path))], None, is_tty=False)
+
+    assert result == 0
+    assert 'No alarms matched' in capsys.readouterr().err
+
+
+def test_run_cli_export_metrics_builds_a_dimensioned_query(tmp_path, capsys, monkeypatch):
+    captured: dict[str, object] = {}
+
+    async def fake_fetch(_client, queries, start_time, end_time):
+        captured.update({'queries': queries, 'start': start_time, 'end': end_time})
+        return [MetricSeries(id='m0', label='MemoryUtilization', timestamps=[NOW], values=[90.5])]
+
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    monkeypatch.setattr('tail_cw.cli.fetch_metric_data', fake_fetch)
+    argv = [
+        'export',
+        'metrics',
+        '--namespace',
+        'AWS/ECS',
+        '--metric',
+        'MemoryUtilization',
+        '--dimension',
+        'ClusterName=c1',
+        '--dimension',
+        'ServiceName=s1',
+        '--stat',
+        'Maximum',
+        '--period',
+        '300',
+        '--config',
+        str(_write_config_file(tmp_path)),
+    ]
+
+    result = run_cli(argv, None, is_tty=False)
+
+    assert result == 0
+    metric = captured['queries'][0]['MetricStat']  # type: ignore[index]
+    assert metric['Metric']['Namespace'] == 'AWS/ECS'
+    assert metric['Metric']['MetricName'] == 'MemoryUtilization'
+    assert metric['Metric']['Dimensions'] == [
+        {'Name': 'ClusterName', 'Value': 'c1'},
+        {'Name': 'ServiceName', 'Value': 's1'},
+    ]
+    assert (metric['Stat'], metric['Period']) == ('Maximum', 300)
+    record = json.loads(capsys.readouterr().out)
+    assert record['datapoints'] == [{'timestamp': NOW.isoformat(), 'value': pytest.approx(90.5)}]
+
+
+def test_run_cli_export_metrics_rejects_a_dimension_without_a_value(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    argv = [
+        'export',
+        'metrics',
+        '--namespace',
+        'AWS/ECS',
+        '--metric',
+        'MemoryUtilization',
+        '--dimension',
+        'ClusterName',
+        '--config',
+        str(_write_config_file(tmp_path)),
+    ]
+
+    result = run_cli(argv, None, is_tty=False)
+
+    assert result == 2
+    assert 'expects NAME=VALUE' in capsys.readouterr().err

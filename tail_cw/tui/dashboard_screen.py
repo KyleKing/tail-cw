@@ -39,7 +39,7 @@ from tail_cw.aws.dashboards import (
     candidate_log_groups,
     rank_dive_candidates,
 )
-from tail_cw.aws.metrics import MetricSeries, build_metric_data_queries
+from tail_cw.aws.metrics import DEFAULT_PERIOD_SECONDS, MetricSeries, build_metric_data_queries
 from tail_cw.charts import ChartKind
 from tail_cw.charts.palette import MetricRole, role_color, role_for, series_color
 from tail_cw.charts.sparkline import ReduceMode, build_compact, sparkline_text
@@ -47,7 +47,6 @@ from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.plot_widget import PlotChart
 from tail_cw.tui.shell import ShellCommand, ShellScreen
 
-_DEFAULT_PERIOD = 300
 _CELL_HEIGHT = 5
 _MAX_STAGED = 2
 _STAT_CYCLE = ('Average', 'Sum', 'Minimum', 'Maximum', 'p95')
@@ -372,7 +371,7 @@ class DashboardScreen(ShellScreen):
             widget.metrics,
             widget_stat=panel.stat_override or widget.stat,
             widget_period=panel.period_override or widget.period,
-            default_period=_DEFAULT_PERIOD,
+            default_period=DEFAULT_PERIOD_SECONDS,
         )
         if not queries:
             return
@@ -466,7 +465,7 @@ class DashboardScreen(ShellScreen):
             widget.metrics,
             widget_stat=panel.stat_override or widget.stat,
             widget_period=panel.period_override or widget.period,
-            default_period=_DEFAULT_PERIOD,
+            default_period=DEFAULT_PERIOD_SECONDS,
         )
         stat = next((q['MetricStat']['Metric'] for q in queries if 'MetricStat' in q), None)
         source = next(q['MetricStat'] for q in queries if 'MetricStat' in q) if stat else None
@@ -495,7 +494,7 @@ class DashboardScreen(ShellScreen):
         panel = self._focused_panel()
         if panel is None or not isinstance(panel.widget, MetricWidget):
             return
-        current = panel.period_override or panel.widget.period or _DEFAULT_PERIOD
+        current = panel.period_override or panel.widget.period or DEFAULT_PERIOD_SECONDS
         index = (_PERIOD_CYCLE.index(current) + 1) % len(_PERIOD_CYCLE) if current in _PERIOD_CYCLE else 1
         panel.period_override = _PERIOD_CYCLE[index]
         self._update_status(f'{panel.widget.title}: period -> {panel.period_override}s')
