@@ -93,12 +93,13 @@ def bucket_labels_for_window(start: datetime, end: datetime, granularity: Granul
     """Return every bucket label in a window, including those with no events.
 
     An empty bucket is a finding, so the caller can distinguish "nothing happened" from
-    "we did not look".
+    "we did not look". The range is half-open, so a window ending on a bucket boundary does
+    not pick up the empty bucket that starts there.
     """
     step = timedelta(days=1) if granularity is Granularity.DAY else timedelta(hours=1)
     labels: list[str] = []
     cursor = _floor(start, granularity)
-    while cursor <= end:
+    while cursor < end:
         labels.append(bucket_label(cursor, granularity))
         cursor += step
     return tuple(labels)

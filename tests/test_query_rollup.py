@@ -55,7 +55,7 @@ def test_roll_up_counts_by_pattern_group_and_bucket():
     assert pattern.first_seen == START + timedelta(minutes=5)
     assert pattern.last_seen == START + timedelta(hours=2, minutes=5)
     # The middle hour had none, and the window makes that visible rather than absent.
-    assert report.bucket_labels == ('2026-08-21T17:00Z', '2026-08-21T18:00Z', '2026-08-21T19:00Z', '2026-08-21T20:00Z')
+    assert report.bucket_labels == ('2026-08-21T17:00Z', '2026-08-21T18:00Z', '2026-08-21T19:00Z')
     assert dict(pattern.buckets) == {'2026-08-21T17:00Z': 1, '2026-08-21T19:00Z': 1}
 
 
@@ -110,11 +110,17 @@ def test_merge_similar_keys_leaves_keys_past_the_cap_unmerged():
     ('granularity', 'expected'),
     [
         (Granularity.DAY, ('2026-08-21',)),
-        (Granularity.HOUR, ('2026-08-21T17:00Z', '2026-08-21T18:00Z')),
+        (Granularity.HOUR, ('2026-08-21T17:00Z',)),
     ],
 )
 def test_bucket_labels_for_window_covers_the_whole_range(granularity, expected):
     assert bucket_labels_for_window(START, START + timedelta(hours=1), granularity) == expected
+
+
+def test_bucket_labels_for_window_includes_a_partly_covered_bucket():
+    labels = bucket_labels_for_window(START, START + timedelta(hours=1, minutes=30), Granularity.HOUR)
+
+    assert labels == ('2026-08-21T17:00Z', '2026-08-21T18:00Z')
 
 
 def test_render_markdown_reports_totals_and_what_was_left_out():
