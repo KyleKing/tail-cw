@@ -7,8 +7,7 @@ group events by trace, and create trace groups for visualization.
 from __future__ import annotations
 
 import contextlib
-import json
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +16,12 @@ from typing import Any, TypedDict
 from tail_cw.aws.client import LogEvent
 from tail_cw.query.engine import query_parquet_file_to_log_events
 from tail_cw.query.parser import combine_filters, parse_filter_pattern
+from tail_cw.query.severity import (
+    ERROR_KEYWORDS,
+    Severity,
+    event_severity,
+    iter_structured_event_data,
+)
 
 DEFAULT_TRACE_ID_FIELDS = [
     'trace_id',
@@ -29,11 +34,6 @@ DEFAULT_TRACE_ID_FIELDS = [
     'requestId',
 ]
 
-ERROR_KEYWORDS = {'error', 'fatal', 'critical', 'exception'}
-ERROR_LEVEL_FIELDS = {'level', 'severity', 'loglevel'}
-STATUS_FIELDS = {'status', 'status_code', 'statuscode'}
-MESSAGE_FIELDS = {'message', 'msg', 'error_message'}
-ERROR_STATUS_THRESHOLD = 500
 SPAN_ID_FIELDS = ['span_id', 'spanId']
 """Fields read as a span identity.
 
@@ -129,39 +129,12 @@ def extract_trace_id_from_event(
         >>> extract_trace_id_from_event(event)
         'xyz'
     """
-    for data in _iter_structured_event_data(event):
+    for data in iter_structured_event_data(event):
         trace_id = _search_for_trace_id(data, trace_id_fields)
         if trace_id:
             return trace_id
 
     return None
-
-
-def _load_json_dict(payload: str | None) -> dict[str, Any] | None:
-    """Safely load a JSON dict from payload.
-
-    Returns:
-        Parsed dict when payload is valid JSON, otherwise None.
-    """
-    if not payload:
-        return None
-
-    with contextlib.suppress(json.JSONDecodeError, TypeError):
-        parsed = json.loads(payload)
-        if isinstance(parsed, dict):
-            return parsed
-    return None
-
-
-def _iter_structured_event_data(event: LogEvent) -> Iterator[dict[str, Any]]:
-    """Yield structured representations of a log event."""
-    message_data = _load_json_dict(event.message)
-    if message_data:
-        yield message_data
-
-    parsed_attr = getattr(event, 'parsed', None)
-    if isinstance(parsed_attr, dict):
-        yield parsed_attr
 
 
 def _search_for_trace_id(data: Mapping[str, Any], field_names: Iterable[str]) -> str | None:
@@ -250,7 +223,7 @@ def extract_service_name(event: LogEvent) -> str:
     """
     service_fields = ['service_name', 'service', 'serviceName', 'app', 'application']
 
-    for data in _iter_structured_event_data(event):
+    for data in iter_structured_event_data(event):
         value = _find_first_matching_field(data, service_fields)
         if value:
             return value
@@ -264,67 +237,9 @@ def extract_service_name(event: LogEvent) -> str:
     return log_group
 
 
-def _message_contains_error_keyword(message: str) -> bool:
-    """Return True if the message contains an error keyword."""
-    message_lower = message.lower()
-    return any(keyword in message_lower for keyword in ERROR_KEYWORDS)
-
-
-def _structured_data_indicates_error(data: Mapping[str, Any]) -> bool:
-    """Inspect structured data for error indicators.
-
-    Returns:
-        True when error semantics are detected, otherwise False.
-    """
-    for key, value in data.items():
-        if not value:
-            continue
-
-        lowered_key = key.lower()
-        if lowered_key in ERROR_LEVEL_FIELDS and str(value).upper() in {'ERROR', 'FATAL', 'CRITICAL'}:
-            return True
-
-        if lowered_key in STATUS_FIELDS:
-            with contextlib.suppress(ValueError, TypeError):
-                if int(value) >= ERROR_STATUS_THRESHOLD:
-                    return True
-    return False
-
-
-def _structured_message_contains_error(data: Mapping[str, Any]) -> bool:
-    """Inspect structured message fields for error keywords.
-
-    Returns:
-        True when message-like fields contain error terms, otherwise False.
-    """
-    for key, value in data.items():
-        if key.lower() in MESSAGE_FIELDS and isinstance(value, str) and _message_contains_error_keyword(value):
-            return True
-    return False
-
-
 def is_error_event(event: LogEvent) -> bool:
-    """Determine if an event represents an error.
-
-    Checks message for error keywords and parsed JSON for level/status fields.
-
-    Args:
-        event: The log event.
-
-    Returns:
-        True if event is an error.
-    """
-    structured_found = False
-
-    for data in _iter_structured_event_data(event):
-        structured_found = True
-        if _structured_data_indicates_error(data) or _structured_message_contains_error(data):
-            return True
-
-    if structured_found:
-        return False
-
-    return _message_contains_error_keyword(event.message)
+    """Return True when the event classifies as an error."""
+    return event_severity(event) is Severity.ERROR
 
 
 def extract_span_metadata(event: LogEvent) -> SpanMetadata:
@@ -342,7 +257,7 @@ def extract_span_metadata(event: LogEvent) -> SpanMetadata:
         'duration_ms': None,
     }
 
-    for data in _iter_structured_event_data(event):
+    for data in iter_structured_event_data(event):
         if metadata['span_id'] is None:
             span_value = _find_first_matching_field(data, SPAN_ID_FIELDS)
             if span_value:

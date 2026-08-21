@@ -26,9 +26,20 @@ _ISO_TIMESTAMP_RE = re.compile(
     r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?',
 )
 _LEADING_TIMESTAMP_RE = re.compile(rf'^\s*{_ISO_TIMESTAMP_RE.pattern}\s*')
-_EPOCH_RE = re.compile(r'\b(?:\d{13}|\d{10})\b')
-_UUID_RE = re.compile(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', re.IGNORECASE)
-_HEX_RE = re.compile(r'\b(?=[0-9a-f]*[a-f])[0-9a-f]{8,}\b', re.IGNORECASE)
+# ``\b`` is the wrong boundary here: ``_`` is a word character, so a hex run in a
+# prefixed identifier (``cborg_b7deea1a``) never matches and the digit rule shreds it into
+# fragments that keep the id's letters, splitting one shape per entity.
+_NOT_ALNUM_BEFORE = r'(?<![0-9a-zA-Z])'
+_NOT_ALNUM_AFTER = r'(?![0-9a-zA-Z])'
+_EPOCH_RE = re.compile(rf'{_NOT_ALNUM_BEFORE}(?:\d{{13}}|\d{{10}}){_NOT_ALNUM_AFTER}')
+_UUID_RE = re.compile(
+    rf'{_NOT_ALNUM_BEFORE}[0-9a-f]{{8}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}-[0-9a-f]{{12}}{_NOT_ALNUM_AFTER}',
+    re.IGNORECASE,
+)
+_HEX_RE = re.compile(
+    rf'{_NOT_ALNUM_BEFORE}(?=[0-9a-f]*[a-f])[0-9a-f]{{8,}}{_NOT_ALNUM_AFTER}',
+    re.IGNORECASE,
+)
 _QUOTED_RE = re.compile(r'"[^"\n]*"|\'[^\'\n]*\'')
 _FLOAT_RE = re.compile(r'\d+\.\d+(?:[eE][+-]?\d+)?')
 _INT_RE = re.compile(r'\d+')
@@ -67,6 +78,47 @@ def normalize_message(message: str) -> str:
         return shape
 
     return _normalize_text(message)
+
+
+MESSAGE_BODY_FIELDS = ('event', 'message', 'msg', 'error_message', 'log')
+LOGGER_FIELDS = ('logger', 'logger_name', 'name')
+LEVEL_FIELDS = ('level', 'severity', 'loglevel')
+
+
+def message_shape_key(message: str) -> str:
+    """Reduce a message to the shape of the part that names what happened.
+
+    A structured record keys on its level, logger, and message body alone. Keying on the
+    whole record instead splits one recurring event into a shape per entity id and per
+    optional field, which is the difference between tens of rows and thousands.
+    """
+    if not is_jsonl_message(message):
+        return _normalize_text(message)
+    body = _LEADING_TIMESTAMP_RE.sub('', message, count=1)
+    try:
+        parsed = json.loads(body)
+    except json.JSONDecodeError:
+        return _normalize_text(message)
+    if not isinstance(parsed, dict):
+        return _normalize_text(message)
+    text = _first_string_field(parsed, MESSAGE_BODY_FIELDS)
+    if text is None:
+        return normalize_message(message)
+    prefix = [
+        str(value)
+        for value in (_first_string_field(parsed, LEVEL_FIELDS), _first_string_field(parsed, LOGGER_FIELDS))
+        if value
+    ]
+    return ' '.join([*prefix, _normalize_text(text)])
+
+
+def _first_string_field(data: dict[str, Any], names: Iterable[str]) -> str | None:
+    lowered = {key.lower(): value for key, value in data.items()}
+    for name in names:
+        value = lowered.get(name)
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 def cluster_messages(messages: Iterable[str], *, limit: int = 8) -> list[MessagePattern]:

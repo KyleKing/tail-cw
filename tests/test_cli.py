@@ -1127,3 +1127,77 @@ def test_run_cli_export_dashboard_bad_config(tmp_path, capsys):
 
     assert result == 1
     assert 'Configuration error' in capsys.readouterr().err
+
+
+class _SeverityFetcher:
+    """Yields one warning per group so a summary has something to roll up."""
+
+    def __init__(self, messages: dict[str, list[str]]) -> None:
+        self.messages = messages
+        self.calls: list[str] = []
+
+    async def __call__(self, _client, log_group, start_time, end_time, **kwargs) -> AsyncIterator[LogEvent]:
+        del start_time, end_time, kwargs
+        self.calls.append(log_group)
+        for index, message in enumerate(self.messages.get(log_group, [])):
+            yield LogEvent(
+                log_group=log_group,
+                log_stream='stream-1',
+                timestamp=NOW - timedelta(minutes=index + 1),
+                message=message,
+                event_id=f'{log_group}-{index:04d}',
+                ingestion_time=None,
+            )
+
+
+def _summary_argv(tmp_path: Path, *extra: str) -> list[str]:
+    return ['export', 'summary', '/aws/lambda/*', '--config', str(_write_config_file(tmp_path)), *extra]
+
+
+def _install_groups(monkeypatch, names: list[str]) -> None:
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    monkeypatch.setattr('tail_cw.cli.describe_log_groups', _async_iter_factory([_make_group(name) for name in names]))
+
+
+def test_run_cli_export_summary_writes_markdown(tmp_path, capsys, monkeypatch):
+    _install_groups(monkeypatch, ['/aws/lambda/one', '/aws/lambda/two', '/other'])
+    fetcher = _SeverityFetcher(
+        {
+            '/aws/lambda/one': ['{"level":"warning","logger":"a","event":"disk nearly full"}'] * 2,
+            '/aws/lambda/two': ['{"level":"info","logger":"a","event":"fine"}'],
+        },
+    )
+
+    result = run_cli(_summary_argv(tmp_path), None, fetch_events=fetcher, is_tty=False)
+
+    out = capsys.readouterr().out
+    assert result == 0
+    # The glob excluded /other, so it was never fetched.
+    assert sorted(fetcher.calls) == ['/aws/lambda/one', '/aws/lambda/two']
+    assert '# Warning-and-above patterns' in out
+    assert 'warning a disk nearly full' in out
+    assert 'fine' not in out
+
+
+def test_run_cli_export_summary_writes_json(tmp_path, capsys, monkeypatch):
+    _install_groups(monkeypatch, ['/aws/lambda/one'])
+    fetcher = _SeverityFetcher({'/aws/lambda/one': ['{"level":"error","logger":"a","event":"boom"}']})
+
+    result = run_cli(_summary_argv(tmp_path, '--format', 'json'), None, fetch_events=fetcher, is_tty=False)
+
+    assert result == 0
+    record = json.loads(capsys.readouterr().out)
+    assert record['severity_totals'] == {'error': 1}
+    assert record['patterns'][0]['count'] == 1
+    assert record['patterns'][0]['log_groups'] == {'/aws/lambda/one': 1}
+
+
+def test_run_cli_export_summary_names_the_groups_it_capped(tmp_path, capsys, monkeypatch):
+    _install_groups(monkeypatch, ['/aws/lambda/one', '/aws/lambda/two'])
+    fetcher = _SeverityFetcher({'/aws/lambda/one': ['{"level":"warning","logger":"a","event":"x"}']})
+
+    result = run_cli(_summary_argv(tmp_path, '--max-groups', '1'), None, fetch_events=fetcher, is_tty=False)
+
+    assert result == 0
+    assert fetcher.calls == ['/aws/lambda/one']
+    assert 'not fetched: /aws/lambda/two' in capsys.readouterr().err

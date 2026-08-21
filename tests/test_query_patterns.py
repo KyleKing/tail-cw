@@ -1,8 +1,10 @@
 """Tests for message pattern clustering."""
 
+import json
+
 import pytest
 
-from tail_cw.query.patterns import MessagePattern, cluster_messages, normalize_message
+from tail_cw.query.patterns import MessagePattern, cluster_messages, message_shape_key, normalize_message
 
 _UUID = '550e8400-e29b-41d4-a716-446655440000'
 
@@ -130,3 +132,45 @@ def test_cluster_messages_lambda_sample():
     )
     assert [pattern.count for pattern in patterns] == [3, 2, 2, 1, 1]
     assert 'START RequestId: <uuid> Version: $LATEST' in {pattern.key for pattern in patterns}
+
+
+@pytest.mark.parametrize(
+    ('message', 'expected'),
+    [
+        # A word boundary cannot fire after an underscore, so a prefixed id used to shred
+        # into fragments that kept its letters and split one shape per entity.
+        ('org cborg_b7deea1ad2a3ce4a5b6 seen', 'org cborg_<hex> seen'),
+        ('user cbuser_9c8c7e6eef5c4a3eadf2c1 seen', 'user cbuser_<hex> seen'),
+        ('at ts_1787152412762 seen', 'at ts_<ts> seen'),
+        (f'id id_{_UUID} seen', 'id id_<uuid> seen'),
+        # A hex run inside a longer word is still not an id.
+        ('notahexxb7deea1ad2a3ce', 'notahexxb<n>deea<n>ad<n>a<n>ce'),
+    ],
+)
+def test_normalize_message_collapses_prefixed_identifiers(message, expected):
+    assert normalize_message(message) == expected
+
+
+def test_message_shape_key_ignores_fields_outside_the_message_body():
+    shared = 'Skipping upsert for legacy custom field Solution Type'
+    first = json.dumps({'level': 'warning', 'logger': 'action', 'event': shared, 'org_id': 'cborg_aaaaaaaa1'})
+    second = json.dumps({'level': 'warning', 'logger': 'action', 'event': shared, 'user_id': 'cbuser_bbbbbbbb2'})
+
+    assert message_shape_key(first) == message_shape_key(second)
+    assert message_shape_key(first) == f'warning action {shared}'
+    # Keying on the whole record splits the two, which is the behavior being avoided.
+    assert normalize_message(first) != normalize_message(second)
+
+
+def test_message_shape_key_separates_different_loggers():
+    body = {'level': 'warning', 'event': 'same text'}
+    assert message_shape_key(json.dumps({**body, 'logger': 'a'})) != message_shape_key(
+        json.dumps({**body, 'logger': 'b'}),
+    )
+
+
+def test_message_shape_key_falls_back_to_text_without_a_body_field():
+    assert message_shape_key('WARNING: plain line 42') == 'WARNING: plain line <n>'
+    assert message_shape_key(json.dumps({'level': 'warning', 'count': 3})) == normalize_message(
+        json.dumps({'level': 'warning', 'count': 3}),
+    )

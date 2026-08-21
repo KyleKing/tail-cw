@@ -58,14 +58,31 @@ def _blocks_for(values: list[float], charset: str, *, lo: float, hi: float) -> s
     return ''.join(charset[max(0, min(last, round((value - lo) / span * last)))] for value in values)
 
 
-def sparkline_text(values: list[float], *, color: str, width: int, bars: bool = False) -> Text:
-    """Render values as a single-line block sparkline in the given color."""
+def sparkline_blocks(
+    values: list[float],
+    *,
+    width: int,
+    bars: bool = False,
+    lo: float | None = None,
+    hi: float | None = None,
+) -> str:
+    """Render values as a bare block sparkline.
+
+    The scale spans the data unless `lo` or `hi` pins it. Counts usually want ``lo=0``, so a
+    flat non-zero series does not render as the empty baseline.
+    """
     resampled = _resample(values, width)
     if not resampled:
-        return Text('', style=color)
+        return ''
     charset = _BAR_BLOCKS if bars else _BLOCKS
-    lo, hi = min(resampled), max(resampled)
-    return Text(_blocks_for(resampled, charset, lo=lo, hi=hi), style=color)
+    low = min(resampled) if lo is None else lo
+    high = max(resampled) if hi is None else hi
+    return _blocks_for(resampled, charset, lo=low, hi=high)
+
+
+def sparkline_text(values: list[float], *, color: str, width: int, bars: bool = False) -> Text:
+    """Render values as a single-line block sparkline in the given color."""
+    return Text(sparkline_blocks(values, width=width, bars=bars), style=color)
 
 
 def _percentile(sorted_values: list[float], percentile: float) -> float:

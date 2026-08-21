@@ -13,6 +13,7 @@ Run `tail-cw` with no arguments and you land in the log group browser. Everythin
 - Live tail through `StartLiveTail` (up to 10 groups) with a ring buffer, pause and resume, and bounded reconnect. `L` flips a historical search to live and back without losing the filter or window
 - One filter model that reads the same across the live stream, a historical fetch, and cached data
 - Every fetch cached as ZSTD Parquet and queried locally with DuckDB or Polars, so re-filtering and trace grouping are free after the first pull
+- `tail-cw export summary` rolls many groups up into the recurring errors and warnings behind them, counted per hour or per day and written as markdown. It keys on the message body rather than the whole record, then fuzzy-merges shapes differing only in a literal phrase, which is what turns a few thousand distinct payloads into a couple of dozen readable rows
 - Dashboard import by name via `GetDashboard`, or from a local JSON file in the same schema, rendering metric widgets as charts, log widgets as Logs Insights queries, and text widgets as markdown
 - Metric charts drawn natively with plotext (braille curves plus real text axes and legend), so nothing depends on a graphics protocol and there are no rendering artifacts
 - A no-scroll overview grid of color-coded sparklines (errors red, latency amber, traffic blue, saturation purple, availability green) with a focus stage; a multi-series metric compacts to a min-max band with a median line
@@ -68,6 +69,7 @@ For stdout instead of a terminal app, use `export`:
 uv run tail-cw export logs /aws/lambda/my-fn --start 2h  # NDJSON events
 uv run tail-cw export tail /aws/lambda/my-fn             # NDJSON, flushed per line
 uv run tail-cw export groups '/aws/lambda/*'             # NDJSON group metadata
+uv run tail-cw export summary '/aws/*' --start 1h        # markdown rollup of errors and warnings
 uv run tail-cw export dashboards                         # NDJSON dashboard list
 uv run tail-cw export dashboard my-service               # the parsed dashboard as JSON
 ```

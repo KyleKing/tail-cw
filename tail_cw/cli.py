@@ -37,6 +37,11 @@ from tail_cw.cache.storage import LogCache, generate_cache_key, read_parquet_to_
 from tail_cw.concurrency import blocking_pool, closing_stream, consume_in_thread, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
 from tail_cw.demo import demo_dashboard
+from tail_cw.query.engine import query_parquet_files_to_log_events
+from tail_cw.query.fuzzy import DEFAULT_SIMILARITY
+from tail_cw.query.report import render_markdown
+from tail_cw.query.rollup import DEFAULT_PATTERN_LIMIT, Granularity, RollupReport, roll_up
+from tail_cw.query.severity import Severity
 
 FetchEvents = Callable[..., AsyncIterator[LogEvent]]
 StreamEvents = Callable[..., AsyncIterator[LogEvent]]
@@ -44,6 +49,7 @@ ShellView = Literal['groups', 'logs', 'tail', 'dashboards', 'dashboard']
 
 DEFAULT_WINDOW = '1h'
 DEFAULT_DASHBOARD_WINDOW = '3h'
+DEFAULT_SUMMARY_MAX_GROUPS = 25
 
 _DURATION_RE = re.compile(r'(\d+)([dhm])')
 
@@ -213,6 +219,103 @@ def _add_window_flags(parser: argparse.ArgumentParser, *, default_start: str) ->
     parser.add_argument('--filter', dest='filter_pattern', default=None, help='CloudWatch Logs filter pattern')
 
 
+def _add_export_parsers(export: argparse.ArgumentParser) -> None:
+    """Attach the ``export`` subcommand tree, which owns most of the CLI surface."""
+    export_sub = export.add_subparsers(dest='export_command')
+
+    export_logs = export_sub.add_parser('logs', help='Write log events for a time range as NDJSON.')
+    export_logs.add_argument('log_group', help='CloudWatch log group name (e.g. /aws/lambda/my-function)')
+    _add_aws_flags(export_logs)
+    _add_window_flags(export_logs, default_start=DEFAULT_WINDOW)
+    export_logs.add_argument(
+        '--no-cache',
+        dest='no_cache',
+        action='store_true',
+        help='Bypass the cache read (results are still written to the cache)',
+    )
+
+    export_tail = export_sub.add_parser('tail', help='Stream live log events as NDJSON (Ctrl+C to stop).')
+    export_tail.add_argument('log_groups', nargs='+', help='One or more CloudWatch log group names (max 10)')
+    _add_aws_flags(export_tail)
+    export_tail.add_argument('--filter', dest='filter_pattern', default=None, help='CloudWatch Logs filter pattern')
+    export_tail.add_argument(
+        '--backfill',
+        default=None,
+        help='Emit historical events for this window (e.g. 15m) before streaming live',
+    )
+
+    export_groups = export_sub.add_parser('groups', help='Write log group metadata as NDJSON.')
+    export_groups.add_argument('pattern', nargs='?', default=None, help='Name, prefix, or glob to match')
+    _add_aws_flags(export_groups)
+
+    export_summary = export_sub.add_parser(
+        'summary',
+        help='Roll matching log groups up into recurring error and warning patterns.',
+    )
+    export_summary.add_argument('patterns', nargs='*', help='Log group names or glob patterns (omit for every group)')
+    _add_aws_flags(export_summary)
+    _add_window_flags(export_summary, default_start=DEFAULT_WINDOW)
+    export_summary.add_argument(
+        '--level',
+        choices=[level.name.lower() for level in Severity],
+        default=Severity.WARNING.name.lower(),
+        help='Minimum severity to include (default: warning)',
+    )
+    export_summary.add_argument(
+        '--by',
+        dest='granularity',
+        choices=[value.value for value in Granularity],
+        default=Granularity.HOUR.value,
+        help='Time bucket for the per-period counts (default: hour)',
+    )
+    export_summary.add_argument(
+        '--top',
+        type=int,
+        default=DEFAULT_PATTERN_LIMIT,
+        help=f'Number of patterns to report (default: {DEFAULT_PATTERN_LIMIT})',
+    )
+    export_summary.add_argument(
+        '--format',
+        dest='output_format',
+        choices=['md', 'json'],
+        default='md',
+        help='Markdown document or one JSON object (default: md)',
+    )
+    export_summary.add_argument(
+        '--max-groups',
+        type=int,
+        default=DEFAULT_SUMMARY_MAX_GROUPS,
+        help=f'Cap on groups fetched; the rest are named on stderr (default: {DEFAULT_SUMMARY_MAX_GROUPS})',
+    )
+    export_summary.add_argument(
+        '--similarity',
+        type=float,
+        default=DEFAULT_SIMILARITY,
+        help=f'Fuzzy merge threshold for near-identical shapes, 0 to disable (default: {DEFAULT_SIMILARITY})',
+    )
+    export_summary.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
+
+    export_dashboards = export_sub.add_parser('dashboards', help='Write the account dashboard list as NDJSON.')
+    _add_aws_flags(export_dashboards)
+
+    export_dashboard = export_sub.add_parser('dashboard', help='Write one parsed dashboard structure as JSON.')
+    export_dashboard.add_argument('name', nargs='?', default=None, help='Dashboard name (omit with --file or --demo)')
+    _add_aws_flags(export_dashboard)
+    export_dashboard.add_argument(
+        '--demo',
+        dest='demo',
+        action='store_true',
+        help='Emit the synthetic demo dashboard (no AWS calls)',
+    )
+    export_dashboard.add_argument(
+        '--file',
+        dest='dashboard_file',
+        type=Path,
+        default=None,
+        help='Load a local dashboard JSON file (same schema as a CloudWatch DashboardBody)',
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the tail-cw argument parser.
 
@@ -255,52 +358,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     export = subparsers.add_parser('export', help='Write CloudWatch data to stdout as NDJSON or JSON.')
-    export_sub = export.add_subparsers(dest='export_command')
+    _add_export_parsers(export)
 
-    export_logs = export_sub.add_parser('logs', help='Write log events for a time range as NDJSON.')
-    export_logs.add_argument('log_group', help='CloudWatch log group name (e.g. /aws/lambda/my-function)')
-    _add_aws_flags(export_logs)
-    _add_window_flags(export_logs, default_start=DEFAULT_WINDOW)
-    export_logs.add_argument(
-        '--no-cache',
-        dest='no_cache',
-        action='store_true',
-        help='Bypass the cache read (results are still written to the cache)',
-    )
-
-    export_tail = export_sub.add_parser('tail', help='Stream live log events as NDJSON (Ctrl+C to stop).')
-    export_tail.add_argument('log_groups', nargs='+', help='One or more CloudWatch log group names (max 10)')
-    _add_aws_flags(export_tail)
-    export_tail.add_argument('--filter', dest='filter_pattern', default=None, help='CloudWatch Logs filter pattern')
-    export_tail.add_argument(
-        '--backfill',
-        default=None,
-        help='Emit historical events for this window (e.g. 15m) before streaming live',
-    )
-
-    export_groups = export_sub.add_parser('groups', help='Write log group metadata as NDJSON.')
-    export_groups.add_argument('pattern', nargs='?', default=None, help='Name, prefix, or glob to match')
-    _add_aws_flags(export_groups)
-
-    export_dashboards = export_sub.add_parser('dashboards', help='Write the account dashboard list as NDJSON.')
-    _add_aws_flags(export_dashboards)
-
-    export_dashboard = export_sub.add_parser('dashboard', help='Write one parsed dashboard structure as JSON.')
-    export_dashboard.add_argument('name', nargs='?', default=None, help='Dashboard name (omit with --file or --demo)')
-    _add_aws_flags(export_dashboard)
-    export_dashboard.add_argument(
-        '--demo',
-        dest='demo',
-        action='store_true',
-        help='Emit the synthetic demo dashboard (no AWS calls)',
-    )
-    export_dashboard.add_argument(
-        '--file',
-        dest='dashboard_file',
-        type=Path,
-        default=None,
-        help='Load a local dashboard JSON file (same schema as a CloudWatch DashboardBody)',
-    )
     return parser
 
 
@@ -716,6 +775,129 @@ async def _export_groups(pool: ClientProvider, args: argparse.Namespace) -> int:
     return 0
 
 
+async def _resolve_summary_groups(
+    logs: Any,
+    patterns: Sequence[str],
+    presets: Mapping[str, Sequence[str]],
+) -> list[str]:
+    """Resolve patterns to group names, deduplicated and in pattern order."""
+    groups = [group async for group in describe_log_groups(logs)]
+    expanded = expand_presets(patterns, presets) if patterns else []
+    if not expanded:
+        return [group.name for group in groups]
+    resolved: dict[str, None] = {}
+    for pattern in expanded:
+        for group in resolve_group_pattern(pattern, groups):
+            resolved.setdefault(group.name, None)
+    return list(resolved)
+
+
+def _summary_to_record(report: RollupReport, *, window_label: str, source: str) -> dict[str, object]:
+    return {
+        'window': window_label,
+        'source': source,
+        'granularity': report.granularity.value,
+        'scanned': report.scanned,
+        'matched': report.matched,
+        'distinct_shapes': report.distinct_shapes,
+        'distinct_patterns': report.distinct_patterns,
+        'bucket_labels': list(report.bucket_labels),
+        'severity_totals': {severity.name.lower(): count for severity, count in report.severity_totals},
+        'patterns': [
+            {
+                'key': pattern.key,
+                'example': pattern.example,
+                'severity': pattern.severity.name.lower(),
+                'count': pattern.count,
+                'first_seen': pattern.first_seen.isoformat(),
+                'last_seen': pattern.last_seen.isoformat(),
+                'merged_shapes': pattern.merged_shapes,
+                'log_groups': dict(pattern.log_groups),
+                'buckets': dict(pattern.buckets),
+            }
+            for pattern in report.patterns
+        ],
+    }
+
+
+async def _export_summary(
+    pool: ClientProvider,
+    args: argparse.Namespace,
+    now: datetime,
+    *,
+    fetch_events: FetchEvents | None,
+    executor: ThreadPoolExecutor,
+) -> int:
+    try:
+        start_time, end_time = _window_from_args(args, now)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+    config = _load_config_or_report(args.config_path)
+    if config is None:
+        return 1
+    logs = await pool.client('logs')
+    names = await _resolve_summary_groups(logs, args.patterns, config.presets)
+    if not names:
+        sys.stderr.write('No log groups matched\n')
+        return 1
+    if len(names) > args.max_groups:
+        dropped = names[args.max_groups :]
+        sys.stderr.write(
+            f'Capped at {args.max_groups} of {len(names)} matching groups; not fetched: {", ".join(dropped)}\n',
+        )
+        names = names[: args.max_groups]
+
+    requests = [
+        FetchRequest(
+            log_group=name,
+            start_time=start_time,
+            end_time=end_time,
+            filter_pattern=args.filter_pattern,
+            profile=args.profile,
+            region=args.region,
+        )
+        for name in names
+    ]
+    paths = await resolve_parquet_paths(
+        logs,
+        requests,
+        config,
+        use_cache=not args.no_cache,
+        fetch_events=fetch_events,
+        executor=executor,
+    )
+    if not paths:
+        sys.stderr.write('No events found for the requested range\n')
+        return 0
+
+    report = await run_blocking(
+        executor,
+        lambda: roll_up(
+            query_parquet_files_to_log_events(paths),
+            window=(start_time, end_time),
+            granularity=Granularity(args.granularity),
+            min_severity=Severity[args.level.upper()],
+            limit=args.top,
+            similarity=args.similarity if args.similarity > 0 else None,
+        ),
+    )
+    window_label = f'{start_time.isoformat()} \u2192 {end_time.isoformat()}'
+    source = f'{len(paths)} of {len(names)} groups with events'
+    if args.output_format == 'json':
+        _write_json_line(_summary_to_record(report, window_label=window_label, source=source))
+        return 0
+    sys.stdout.write(
+        render_markdown(
+            report,
+            title=f'{args.level.capitalize()}-and-above patterns',
+            window_label=window_label,
+            source=source,
+        ),
+    )
+    return 0
+
+
 async def _export_dashboards(pool: ClientProvider, args: argparse.Namespace) -> int:
     if _load_config_or_report(args.config_path) is None:
         return 1
@@ -744,6 +926,30 @@ async def _export_dashboard(pool: ClientProvider, args: argparse.Namespace) -> i
     return 0
 
 
+async def _dispatch_export(
+    pool: ClientProvider,
+    args: argparse.Namespace,
+    now: datetime,
+    *,
+    executor: ThreadPoolExecutor,
+    fetch_events: FetchEvents | None,
+    stream_events: StreamEvents | None,
+) -> int:
+    match args.export_command:
+        case 'logs':
+            return await _export_logs(pool, args, now, fetch_events=fetch_events, executor=executor)
+        case 'tail':
+            return await _export_tail(pool, args, now, fetch_events=fetch_events, stream_events=stream_events)
+        case 'groups':
+            return await _export_groups(pool, args)
+        case 'summary':
+            return await _export_summary(pool, args, now, fetch_events=fetch_events, executor=executor)
+        case 'dashboards':
+            return await _export_dashboards(pool, args)
+        case _:
+            return await _export_dashboard(pool, args)
+
+
 async def _run_export_command(
     args: argparse.Namespace,
     now: datetime,
@@ -752,28 +958,19 @@ async def _run_export_command(
     fetch_events: FetchEvents | None,
     stream_events: StreamEvents | None,
 ) -> int:
-    if args.export_command not in {'logs', 'tail', 'groups', 'dashboards', 'dashboard'}:
+    if args.export_command not in {'logs', 'tail', 'groups', 'summary', 'dashboards', 'dashboard'}:
         parser.print_help(sys.stderr)
         return 2
     with blocking_pool() as executor:
         async with client_pool(profile_name=args.profile, region_name=args.region) as pool:
-            match args.export_command:
-                case 'logs':
-                    return await _export_logs(pool, args, now, fetch_events=fetch_events, executor=executor)
-                case 'tail':
-                    return await _export_tail(
-                        pool,
-                        args,
-                        now,
-                        fetch_events=fetch_events,
-                        stream_events=stream_events,
-                    )
-                case 'groups':
-                    return await _export_groups(pool, args)
-                case 'dashboards':
-                    return await _export_dashboards(pool, args)
-                case _:
-                    return await _export_dashboard(pool, args)
+            return await _dispatch_export(
+                pool,
+                args,
+                now,
+                executor=executor,
+                fetch_events=fetch_events,
+                stream_events=stream_events,
+            )
 
 
 def run_cli(
