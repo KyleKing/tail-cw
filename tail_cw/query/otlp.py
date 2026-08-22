@@ -6,6 +6,11 @@ mapping from a log line to a span is the constraint here: a line carries one
 timestamp, and services log when work finishes, so a span covers
 ``[timestamp - duration, timestamp]`` when the record names a duration and is
 instantaneous when it does not.
+
+Identity follows the same rule. Every line a service logs inside one span
+carries that span's id, so those lines are the span's events rather than 72
+spans sharing an id, which is what a viewer would otherwise show as one span
+repeated. A line carrying no span id at all becomes a span of its own.
 """
 
 from __future__ import annotations
@@ -33,19 +38,31 @@ def trace_groups_to_otlp(groups: Sequence[TraceGroup]) -> dict[str, Any]:
     Spans are grouped into one ``resourceSpans`` entry per service, which is
     what a viewer reads as the swimlane.
     """
-    by_service: dict[str, list[TraceSpan]] = {}
+    by_service: dict[str, list[list[TraceSpan]]] = {}
     for group in groups:
-        for span in group.spans:
-            by_service.setdefault(span.service_name, []).append(span)
+        for lines in _cluster_by_span(group.spans):
+            by_service.setdefault(lines[0].service_name, []).append(lines)
     return {
         'resourceSpans': [
             {
                 'resource': {'attributes': [_attribute('service.name', service)]},
-                'scopeSpans': [{'scope': {'name': SCOPE_NAME}, 'spans': [_span(span) for span in spans]}],
+                'scopeSpans': [{'scope': {'name': SCOPE_NAME}, 'spans': [_span(lines) for lines in clusters]}],
             }
-            for service, spans in by_service.items()
+            for service, clusters in by_service.items()
         ],
     }
+
+
+def _cluster_by_span(spans: Sequence[TraceSpan]) -> list[list[TraceSpan]]:
+    """Group the lines that share one span id, keeping id-less lines separate."""
+    clustered: dict[tuple[str, str], list[TraceSpan]] = {}
+    singles: list[list[TraceSpan]] = []
+    for span in spans:
+        if span.span_id:
+            clustered.setdefault((span.service_name, span.span_id), []).append(span)
+        else:
+            singles.append([span])
+    return [*clustered.values(), *singles]
 
 
 def trace_error_summary(group: TraceGroup) -> str:
@@ -58,22 +75,39 @@ def trace_error_summary(group: TraceGroup) -> str:
     )
 
 
-def _span(span: TraceSpan) -> dict[str, Any]:
-    end_nanos = int(span.log_event.timestamp.timestamp() * 1_000_000_000)
-    duration_nanos = int((span.duration_ms or 0.0) * _NANOS_PER_MS)
-    body = load_json_dict(span.log_event.message) or {}
+def _span(lines: Sequence[TraceSpan]) -> dict[str, Any]:
+    """Render one span from the lines logged inside it, longest work first."""
+    lead = max(lines, key=lambda line: line.duration_ms or 0.0)
+    body = load_json_dict(lead.log_event.message) or {}
+    intervals = [_interval(line) for line in lines]
     rendered = {
-        'traceId': _hex_id(span.trace_id, width=_TRACE_ID_HEX),
-        'spanId': _span_id(span),
-        'name': _span_name(body, span),
-        'startTimeUnixNano': str(end_nanos - duration_nanos),
-        'endTimeUnixNano': str(end_nanos),
-        'attributes': list(_attributes(body, span.log_event)),
-        'status': {'code': STATUS_CODE_ERROR if span.is_error else STATUS_CODE_UNSET},
+        'traceId': _hex_id(lead.trace_id, width=_TRACE_ID_HEX),
+        'spanId': _span_id(lead),
+        'name': _span_name(body, lead),
+        'startTimeUnixNano': str(min(start for start, _ in intervals)),
+        'endTimeUnixNano': str(max(end for _, end in intervals)),
+        'attributes': list(_attributes(body, lead.log_event)),
+        'status': {'code': STATUS_CODE_ERROR if any(line.is_error for line in lines) else STATUS_CODE_UNSET},
     }
-    if span.parent_span_id:
-        rendered['parentSpanId'] = _hex_id(span.parent_span_id, width=_SPAN_ID_HEX)
+    if lead.parent_span_id:
+        rendered['parentSpanId'] = _hex_id(lead.parent_span_id, width=_SPAN_ID_HEX)
+    if len(lines) > 1:
+        rendered['events'] = [_event(line) for line in lines]
     return rendered
+
+
+def _interval(span: TraceSpan) -> tuple[int, int]:
+    end_nanos = int(span.log_event.timestamp.timestamp() * 1_000_000_000)
+    return end_nanos - int((span.duration_ms or 0.0) * _NANOS_PER_MS), end_nanos
+
+
+def _event(span: TraceSpan) -> dict[str, Any]:
+    body = load_json_dict(span.log_event.message) or {}
+    return {
+        'name': _span_name(body, span),
+        'timeUnixNano': str(int(span.log_event.timestamp.timestamp() * 1_000_000_000)),
+        'attributes': list(_attributes(body, span.log_event)),
+    }
 
 
 def _span_name(body: Mapping[str, Any], span: TraceSpan) -> str:

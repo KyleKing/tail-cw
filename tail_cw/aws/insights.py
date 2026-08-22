@@ -89,12 +89,13 @@ class ScanEstimate:
         return self.gigabytes * DOLLARS_PER_GB
 
     def label(self) -> str:
-        """One line naming the estimate, its cost, and why it reads low."""
+        """One line naming the estimate, its cost, and how far off it can be."""
         missing = f', {self.unknown_groups} of them reporting no size' if self.unknown_groups else ''
         return (
             f'Estimate ~{self.gigabytes:.3f} GB scanned across {self.group_count} '
             f'group{"s" if self.group_count != 1 else ""}{missing}, roughly ${self.dollars:.3f}. '
-            'Stored bytes are compressed and Insights bills uncompressed, so this reads low.'
+            "Order of magnitude only: it spreads the group's stored bytes evenly over its "
+            'retention, so a group whose traffic grew reads low and a quiet one reads high.'
         )
 
 
@@ -105,6 +106,11 @@ def estimate_scan(groups: Sequence[LogGroupInfo], *, window: timedelta, now: dat
     bytes by the span they accumulated over and multiplies by the window. A
     group that never expires is measured from its creation time, and one
     reporting neither gets :data:`ASSUMED_RETENTION_DAYS`.
+
+    Measured against three production groups on 2026-08-22, the result was out
+    by up to 8x in both directions: compression pushes it low, and averaging
+    over a lifetime pushes it high for a group that has quietened down. It is
+    worth showing as a scale, and not worth trusting as a number.
     """
     window_days = max(window.total_seconds() / 86400.0, 0.0)
     total = 0.0

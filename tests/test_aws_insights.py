@@ -175,9 +175,9 @@ def test_estimate_scan(groups, window, expected_gb, expected_unknown):
     assert estimate.group_count == len(groups)
 
 
-def test_scan_estimate_label_prices_the_window_and_says_it_reads_low():
+def test_scan_estimate_label_prices_the_window_and_owns_its_error():
     label = estimate_scan([_group()], window=timedelta(days=2), now=END).label()
 
     assert '~2.000 GB' in label
     assert '$0.010' in label
-    assert 'reads low' in label
+    assert 'Order of magnitude only' in label

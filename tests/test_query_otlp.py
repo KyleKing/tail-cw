@@ -114,3 +114,33 @@ def test_the_summary_names_the_first_service_to_fail():
 
 def test_the_summary_says_so_when_nothing_failed():
     assert 'no errors' in trace_error_summary(_groups(make_event(_record(event='fine')))[0])
+
+
+def test_lines_sharing_a_span_id_become_one_span_with_events():
+    """A service logs many lines inside one span; 72 spans sharing an id is not a trace."""
+    lines = [
+        make_event(
+            _record(span_id='4d5e6f708192a3b4', event=f'step {index}', duration_ms=index * 10),
+            timestamp=BASE_TIME + timedelta(seconds=index),
+        )
+        for index in range(3)
+    ]
+
+    spans = _spans(trace_groups_to_otlp(_groups(*lines)))
+
+    assert len(spans) == 1
+    assert [event['name'] for event in spans[0]['events']] == ['step 0', 'step 1', 'step 2']
+    assert spans[0]['name'] == 'step 2', 'the longest piece of work names the span'
+    elapsed_ms = (int(spans[0]['endTimeUnixNano']) - int(spans[0]['startTimeUnixNano'])) / 1_000_000
+    assert elapsed_ms == pytest.approx(2000.0), 'the span covers the earliest line to the latest'
+
+
+def test_lines_with_no_span_id_stay_separate_spans():
+    lines = [
+        make_event(_record(event=f'step {index}'), timestamp=BASE_TIME + timedelta(seconds=index)) for index in range(3)
+    ]
+
+    spans = _spans(trace_groups_to_otlp(_groups(*lines)))
+
+    assert len(spans) == 3
+    assert all('events' not in span for span in spans)
