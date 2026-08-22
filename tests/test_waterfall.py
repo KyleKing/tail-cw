@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Label
 
 from tail_cw.aws.xray import XRaySpan, XRayTrace
@@ -13,8 +14,19 @@ from tail_cw.cli import Session
 from tail_cw.config import TailCWConfig
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.shell import ShellServices, TailCWApp
+from tail_cw.tui.span_detail import SpanDetailScreen, span_lines
 from tail_cw.tui.views import build_screen
-from tail_cw.tui.waterfall_screen import WaterfallScreen, duration_label, row_style, trace_headline
+from tail_cw.tui.waterfall_screen import (
+    FAULT_MARKER,
+    MAX_NAME_WIDTH,
+    MIN_BAR_WIDTH,
+    MIN_NAME_WIDTH,
+    WaterfallScreen,
+    column_widths,
+    duration_label,
+    row_style,
+    trace_headline,
+)
 from tail_cw.waterfall import indented_name, render_bar, slowest_chain, waterfall_rows
 from tests.tui_support import running
 
@@ -158,7 +170,7 @@ def test_durations_switch_units_at_a_second() -> None:
 def test_the_headline_names_the_widest_span_and_any_truncation() -> None:
     trace = _trace(_span('root', length_ms=400), _span('q', parent='root', length_ms=20), limit_exceeded=True)
 
-    assert trace_headline(trace) == '2 spans · 1 services · 0 errors · widest root at 400ms · truncated by X-Ray'
+    assert trace_headline(trace) == '2 spans · 1 service · 0 errors · widest root at 400ms · truncated by X-Ray'
     assert 'no segments' in trace_headline(_trace())
 
 
@@ -223,3 +235,81 @@ async def test_without_credentials_the_screen_says_so() -> None:
     async with running(app, settled=True) as pilot:
         del pilot
         assert 'X-Ray is unavailable' in _status(app)
+
+
+@pytest.mark.parametrize('total', [80, 100, 120, 180, 250])
+def test_the_columns_always_add_up_and_the_timeline_takes_the_rest(total: int) -> None:
+    """A fixed 38-wide name left an 80-column terminal 12 columns of timeline."""
+    name, service, bar = column_widths(total)
+
+    assert name + service + bar <= total, 'a row that overflows wraps and ruins the alignment'
+    assert bar >= MIN_BAR_WIDTH
+    assert name >= MIN_NAME_WIDTH
+
+
+def test_the_timeline_grows_with_the_terminal_and_the_name_stops() -> None:
+    narrow_name, _, narrow_bar = column_widths(80)
+    wide_name, _, wide_bar = column_widths(240)
+
+    assert wide_bar > narrow_bar * 3, 'the bar is the point of the view, so it takes the space'
+    assert wide_name == MAX_NAME_WIDTH, 'a name past this reads no better for being wider'
+    assert narrow_name < wide_name
+
+
+async def test_enter_opens_the_span_record_the_row_has_no_columns_for() -> None:
+    """A binding is not covered until a test presses the key."""
+    faulted = _span('bad', parent='root', start_ms=10, length_ms=90, fault=True)
+    trace = _trace(_span('root', length_ms=400), faulted)
+
+    async def fetch(_trace_id: str) -> XRayTrace:
+        return trace
+
+    app = _app(ShellServices(fetch_xray_trace=fetch))
+    async with running(app, settled=True) as pilot:
+        table = app.screen.query_one('#waterfall', DataTable)
+        table.move_cursor(row=1)
+        await pilot.press('enter')
+        await pilot.pause()
+
+        assert isinstance(app.screen, SpanDetailScreen)
+        rendered = dict(span_lines(faulted))
+        assert rendered['flags'] == 'fault'
+        assert rendered['span'] == 'bad'
+
+        await pilot.press('escape')
+        await pilot.pause()
+        assert isinstance(app.screen, WaterfallScreen)
+
+
+def test_the_span_record_skips_what_the_document_omits() -> None:
+    """A screen of blanks reads as missing data rather than as absence."""
+    bare = dict(span_lines(_span('plain')))
+    full = dict(
+        span_lines(
+            _span('rich', inferred=True, fault=True),
+        ),
+    )
+
+    assert 'statement' not in bare
+    assert 'flags' not in bare
+    assert 'inferred' in full
+    assert 'duration' in bare
+
+
+async def test_a_faulted_span_is_marked_and_not_only_coloured() -> None:
+    """Under NO_COLOR the red row renders dim, making the failure the quietest row."""
+    trace = _trace(_span('root', length_ms=400), _span('bad', parent='root', start_ms=10, length_ms=90, fault=True))
+
+    async def fetch(_trace_id: str) -> XRayTrace:
+        return trace
+
+    app = _app(ShellServices(fetch_xray_trace=fetch))
+    async with running(app, settled=True) as pilot:
+        del pilot
+        table = app.screen.query_one('#waterfall', DataTable)
+        markers = [str(table.get_cell_at(Coordinate(row, 0))) for row in range(table.row_count)]
+        names = [str(table.get_cell_at(Coordinate(row, 1))) for row in range(table.row_count)]
+
+    assert markers == ['', FAULT_MARKER]
+    assert names[1].startswith('  '), 'its own column, so the indentation still shows the nesting'
+    assert 'bad' in names[1]

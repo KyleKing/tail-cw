@@ -156,6 +156,9 @@ class ShellScreen(Screen[None]):
     #breadcrumb {
         dock: top;
         height: 1;
+        /* Full width, or the dock reserves only the text and the next widget flows into
+           the rest of row 0: the histogram row landed beside the breadcrumb. */
+        width: 100%;
         background: $panel;
         color: $text;
         padding: 0 1;

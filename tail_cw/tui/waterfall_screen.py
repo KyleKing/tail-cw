@@ -13,18 +13,49 @@ from collections.abc import Sequence
 from typing import ClassVar
 
 from rich.text import Text
+from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widgets import DataTable, Label
 
 from tail_cw.aws.xray import XRaySpan, XRayTrace
 from tail_cw.tui.shell import ShellScreen
+from tail_cw.tui.span_detail import SpanDetailScreen
 from tail_cw.waterfall import WaterfallRow, indented_name, render_bar, waterfall_rows
 
-BAR_WIDTH = 34
-NAME_WIDTH = 38
-SERVICE_WIDTH = 18
+FAULT_MARKER = '✗'
+"""Marks a faulted span, in a column of its own like the log table's severity glyph.
+
+Colour alone cannot carry this: under ``NO_COLOR`` the red row renders as dim, which
+makes the one span that failed the least prominent thing on the screen. Its own column
+rather than a prefix on the name, because a prefix displaces the indentation and a
+nested span then reads as a root.
+"""
+
+MIN_BAR_WIDTH = 12
+MIN_NAME_WIDTH = 16
+MAX_NAME_WIDTH = 38
+MAX_SERVICE_WIDTH = 18
+DURATION_WIDTH = 9
+_MARKER_WIDTH = 1
+_TABLE_PADDING = 10
+"""Cell padding and the cursor gutter the DataTable spends outside the four columns."""
 _MS_PER_SECOND = 1000.0
+
+
+def column_widths(total: int) -> tuple[int, int, int]:
+    """Split ``total`` terminal columns into the span, service, and timeline widths.
+
+    The bar is the point of this view, so it takes whatever the others do not need, and
+    the others shrink before it does. At 80 columns a fixed 38-wide name and 18-wide
+    service left the timeline 12 columns, which cannot tell two sibling calls apart.
+    """
+    fixed = _TABLE_PADDING + _MARKER_WIDTH + DURATION_WIDTH
+    spare = max(0, total - fixed - MIN_BAR_WIDTH)
+    name = max(MIN_NAME_WIDTH, min(MAX_NAME_WIDTH, spare // 2))
+    service = max(0, min(MAX_SERVICE_WIDTH, spare - name))
+    bar = max(MIN_BAR_WIDTH, total - fixed - name - service)
+    return name, service, bar
 
 
 def duration_label(span: XRaySpan) -> str:
@@ -52,6 +83,10 @@ def row_style(row: WaterfallRow) -> str:
     return ''
 
 
+def _plural(count: int, noun: str) -> str:
+    return f'{count} {noun}' if count == 1 else f'{count} {noun}s'
+
+
 def trace_headline(trace: XRayTrace) -> str:
     """One line naming the trace, for the status bar under the table."""
     if not trace.spans:
@@ -59,8 +94,8 @@ def trace_headline(trace: XRayTrace) -> str:
     widest = max(trace.spans, key=lambda span: span.duration_ms or 0.0)
     truncated = ' · truncated by X-Ray' if trace.limit_exceeded else ''
     return (
-        f'{len(trace.spans)} spans · {len(trace.service_names)} services · '
-        f'{trace.error_count} errors · widest {widest.name} at {duration_label(widest)}{truncated}'
+        f'{_plural(len(trace.spans), "span")} · {_plural(len(trace.service_names), "service")} · '
+        f'{_plural(trace.error_count, "error")} · widest {widest.name} at {duration_label(widest)}{truncated}'
     )
 
 
@@ -84,6 +119,7 @@ class WaterfallScreen(ShellScreen):
     BINDINGS: ClassVar[Sequence[Binding]] = [
         Binding('r', 'reload', 'Reload'),
         Binding('s', 'toggle_inferred', 'Inferred'),
+        Binding('enter', 'show_span', 'Span detail'),
     ]
 
     def __init__(self, trace_id: str) -> None:
@@ -102,7 +138,7 @@ class WaterfallScreen(ShellScreen):
         """Draw the breadcrumb, prepare the columns, then fetch the trace."""
         super().on_mount()
         table = self.query_one('#waterfall', DataTable)
-        table.add_columns('span', 'service', 'duration', 'timeline')
+        table.add_columns('!', 'span', 'service', 'duration', 'timeline')
         # A table with no focus swallows j, k, and the bindings the footer advertises.
         table.focus()
         self.action_reload()
@@ -110,6 +146,24 @@ class WaterfallScreen(ShellScreen):
     def action_reload(self) -> None:
         """Fetch the trace again."""
         self.run_worker(self._load(), name='waterfall', group='waterfall', exclusive=True)
+
+    @on(DataTable.RowSelected, '#waterfall')
+    def on_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Open the detail for the row Enter was pressed on.
+
+        DataTable binds Enter itself, so the screen's own binding never sees the key and
+        the footer's hint would otherwise do nothing. The log view solved this first.
+        """
+        event.stop()
+        self.action_show_span()
+
+    def action_show_span(self) -> None:
+        """Show what the row could not fit: the statement, the fault, the annotations."""
+        rows = self._visible_rows()
+        table = self.query_one('#waterfall', DataTable)
+        if not rows or not (0 <= table.cursor_row < len(rows)):
+            return
+        self.app.push_screen(SpanDetailScreen(rows[table.cursor_row].span))
 
     def action_toggle_inferred(self) -> None:
         """Hide or show the segments X-Ray synthesized rather than received."""
@@ -141,13 +195,16 @@ class WaterfallScreen(ShellScreen):
         table = self.query_one('#waterfall', DataTable)
         table.clear()
         rows = self._visible_rows()
+        name_width, service_width, bar_width = column_widths(self.size.width)
         for row in rows:
             style = row_style(row)
+            marker = FAULT_MARKER if row.span.is_fault or row.span.is_error else ''
             table.add_row(
-                Text(indented_name(row, width=NAME_WIDTH), style=style),
-                Text(row.span.service_name[:SERVICE_WIDTH], style=style),
+                Text(marker, style=style or 'red'),
+                Text(indented_name(row, width=name_width), style=style),
+                Text(row.span.service_name[:service_width], style=style),
                 Text(duration_label(row.span), style=style, justify='right'),
-                Text(render_bar(row, width=BAR_WIDTH), style=style or 'cyan'),
+                Text(render_bar(row, width=bar_width), style=style or 'cyan'),
             )
         if self._trace is None:
             self._set_status(f'{self._trace_id}: nothing loaded')

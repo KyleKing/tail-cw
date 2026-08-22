@@ -59,11 +59,13 @@ _COLUMNS = (
 MAX_ROSTER_FIELDS = 12
 """Fields listed per group. A wide record has more names than a preview pane can hold."""
 
-_IA_SUFFIX = '  IA'
+_IA_MARKER = '~'
 """Marks an Infrequent Access group, which ``StartLiveTail`` refuses outright.
 
-On the name rather than in a column of its own: the table already loses Created at 160
-columns beside the preview pane, and Standard would leave the column blank for every row.
+In the marker column rather than appended to the name or given a column of its own. A
+suffix on the name reads as a misaligned Stored value (the capture showed
+``demo/archive  IA  7.5 GB``), and a column of its own would be blank for every row in a
+Standard-only account while the table already loses Created beside the preview pane.
 """
 
 
@@ -359,12 +361,17 @@ class GroupsScreen(ShellScreen):
     def _marker(self, name: str) -> str:
         if name in self._selected:
             return SELECTED_MARKER
-        return RECENT_MARKER if name in self._recent else ''
+        if name in self._recent:
+            return RECENT_MARKER
+        return _IA_MARKER if name in self._infrequent_access() else ''
+
+    def _infrequent_access(self) -> set[str]:
+        return {info.name for info in self._groups if not info.supports_live_tail}
 
     def _row_cells(self, info: LogGroupInfo) -> tuple[str, str, str, str, str]:
         return (
             self._marker(info.name),
-            info.name if info.supports_live_tail else f'{info.name}{_IA_SUFFIX}',
+            info.name,
             humanize_bytes(info.stored_bytes),
             format_retention(info.retention_days),
             format_created(info.created),
@@ -376,14 +383,17 @@ class GroupsScreen(ShellScreen):
         self._picker.table.update_cell(name, 'marker', self._marker(name))
 
     def _update_status(self) -> None:
-        self._picker.set_status(
-            selection_status(
-                visible=len(self._visible),
-                total=len(self._groups),
-                selected=len(self._selected),
-                cap=MAX_SELECTED_GROUPS,
-            )
+        status = selection_status(
+            visible=len(self._visible),
+            total=len(self._groups),
+            selected=len(self._selected),
+            cap=MAX_SELECTED_GROUPS,
         )
+        # A bare glyph with no legend is a status code nobody can read, and the legend is
+        # only worth its room when one of the visible groups actually carries it.
+        if any(not info.supports_live_tail for info in self._visible):
+            status = f'{status}  ·  {_IA_MARKER} Infrequent Access, no live tail'
+        self._picker.set_status(status)
 
     def _request_preview(self) -> None:
         name = self.highlighted_group()

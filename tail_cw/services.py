@@ -35,12 +35,16 @@ from tail_cw.demo import (
     demo_count_events,
     demo_dashboard,
     demo_fetch_metrics,
+    demo_log_events,
     demo_log_volume,
     demo_resolve_logs,
+    demo_window,
+    demo_xray_trace,
 )
-from tail_cw.preview import GroupPreview, bucket_event_counts, build_group_preview
+from tail_cw.preview import Activity, GroupPreview, bucket_event_counts, build_group_preview
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.expression import parse_query
+from tail_cw.query.patterns import cluster_messages
 from tail_cw.query.rollup import RollupReport, roll_up
 from tail_cw.query.severity import Severity
 from tail_cw.query.trace import TraceGroup, query_traces_from_parquet_files
@@ -114,17 +118,43 @@ def _demo_services() -> ShellServices:
         log_volume=lambda group, start, end: _ready(demo_log_volume(group, start, end)),
         resolve_logs=lambda groups, start, end: _ready(_demo_resolve_logs(groups, start, end)),
         count_events=lambda group, start, end: _ready(demo_count_events(group, start, end)),
-        list_groups=lambda: _ready(
-            [
-                LogGroupInfo(
-                    name=DEMO_LOG_GROUP,
-                    arn=f'arn:demo:{DEMO_LOG_GROUP}',
-                    stored_bytes=None,
-                    retention_days=None,
-                    created=None,
-                )
-            ]
+        list_groups=lambda: _ready(_demo_groups()),
+        preview_group=lambda group: _ready(_demo_preview(group)),
+        fetch_xray_trace=lambda trace_id: _ready(demo_xray_trace(trace_id)),
+    )
+
+
+def _demo_groups() -> list[LogGroupInfo]:
+    """Two groups, one of them Infrequent Access so the marker is visible offline."""
+    return [
+        LogGroupInfo(
+            name=DEMO_LOG_GROUP,
+            arn=f'arn:demo:{DEMO_LOG_GROUP}',
+            stored_bytes=412_000_000,
+            retention_days=30,
+            created=None,
         ),
+        LogGroupInfo(
+            name='demo/archive',
+            arn='arn:demo:demo/archive',
+            stored_bytes=8_100_000_000,
+            retention_days=None,
+            created=None,
+            log_group_class='INFREQUENT_ACCESS',
+        ),
+    ]
+
+
+def _demo_preview(group: str) -> GroupPreview:
+    start, end = demo_window()
+    events = demo_log_events(start, end)
+    return GroupPreview(
+        log_group=group,
+        event_count=len(events),
+        window_seconds=int((end - start).total_seconds()),
+        patterns=cluster_messages([event.message for event in events]),
+        activity=Activity.MEASURED,
+        last_event=max((event.timestamp for event in events), default=None),
     )
 
 

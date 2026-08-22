@@ -20,7 +20,8 @@ from tail_cw.aws.dashboards import Dashboard
 from tail_cw.aws.events import LogEvent
 from tail_cw.cli import FetchRequest, Session, ShellSeed
 from tail_cw.config import TailCWConfig
-from tail_cw.demo import DEMO_LOG_GROUP
+from tail_cw.demo import DEMO_LOG_GROUP, DEMO_TRACE_ID
+from tail_cw.query.patterns import field_roster
 from tail_cw.services import (
     _build_app,
     _demo_resolve_logs,
@@ -32,6 +33,7 @@ from tail_cw.services import (
 )
 from tail_cw.tui.navigation import ViewKind
 from tail_cw.tui.shell import ShellServices, TailCWApp
+from tail_cw.waterfall import slowest_chain
 
 NOW = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC)
 
@@ -189,10 +191,12 @@ def test_demo_services_are_callable():
     assert populated == {
         'count_events',
         'fetch_metrics',
+        'fetch_xray_trace',
         'list_dashboards',
         'list_groups',
         'load_dashboard',
         'log_volume',
+        'preview_group',
         'resolve_logs',
         'roll_up_logs',
     }
@@ -200,11 +204,38 @@ def test_demo_services_are_callable():
 
 
 async def test_demo_services_list_groups_resolves_the_demo_group():
+    """Two groups, and the second is Infrequent Access so the offline demo shows the marker."""
     services = _demo_services()
 
     assert services.list_groups is not None
     groups = await services.list_groups()
-    assert [info.name for info in groups] == [DEMO_LOG_GROUP]
+    assert [info.name for info in groups] == [DEMO_LOG_GROUP, 'demo/archive']
+    assert [info.supports_live_tail for info in groups] == [True, False]
+
+
+async def test_the_demo_trace_has_the_shape_a_waterfall_needs():
+    """One root, real nesting, an inferred segment, and a fault, so the view can be seen offline."""
+    services = _demo_services()
+    assert services.fetch_xray_trace is not None
+
+    trace = await services.fetch_xray_trace(DEMO_TRACE_ID)
+
+    assert len([span for span in trace.spans if span.parent_span_id is None]) == 1
+    known = {span.span_id for span in trace.spans}
+    assert all(span.parent_span_id in known for span in trace.spans if span.parent_span_id)
+    assert any(span.is_inferred for span in trace.spans)
+    assert any(span.is_fault for span in trace.spans)
+    assert slowest_chain(trace)[0] == 'a1a1a1a1a1a1a1a1'
+
+
+async def test_the_demo_preview_carries_the_fields_the_roster_lists():
+    services = _demo_services()
+    assert services.preview_group is not None
+
+    preview = await services.preview_group(DEMO_LOG_GROUP)
+
+    assert preview.event_count > 0
+    assert {usage.path for usage in field_roster(preview.patterns)} >= {'level', 'path', 'status'}
 
 
 def test_demo_resolve_logs_writes_parquet_files():

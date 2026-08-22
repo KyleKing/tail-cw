@@ -449,14 +449,32 @@ def parse_extended_filter(pattern: str) -> FilterNode:
                 value=val,
             )
 
-    # No operator, assume equality
-    # Strip surrounding quotes if present
-    if value.startswith('"') and value.endswith('"'):
-        value = value[1:-1]
+    return _bare_equality(field_path, value)
 
+
+def _bare_equality(field_path: list[str], value: str) -> FilterNode:
+    """Build the ``field:value`` comparison, numerically when the value is a bare number.
+
+    Comparing a number as a string fails outright against an integer column ("cannot
+    compare string with numeric type") while the numeric comparison works against both,
+    so the number is the reading that can succeed. Quote the value to force a string
+    comparison.
+    """
+    quoted = value.startswith('"') and value.endswith('"')
+    if quoted:
+        return FilterNode(
+            node_type=FilterNodeType.JSON_FIELD_EQUALS,
+            field_path=field_path,
+            value=value[1:-1],
+        )
+    try:
+        float(value)
+    except ValueError:
+        return FilterNode(node_type=FilterNodeType.JSON_FIELD_EQUALS, field_path=field_path, value=value)
     return FilterNode(
-        node_type=FilterNodeType.JSON_FIELD_EQUALS,
+        node_type=FilterNodeType.JSON_FIELD_NUMERIC,
         field_path=field_path,
+        operator='=',
         value=value,
     )
 

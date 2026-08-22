@@ -179,11 +179,26 @@ If you introduce or modify Textual UI code:
         Escape alone is not that key on a view that can be the opening view, because
         `nav_pop` has nothing to pop there, so the screen overrides it to cancel first and go
         back on the second press
-    - A status line takes `Text`, never a bare string.
-        Error text is not ours: every Polars failure names its file as
-        `[/path.parquet]`, which Rich parses as a closing tag and raises `MarkupError`
-        from inside `update`, so the error handler took the app down on every failed
-        search
+    - A docked widget with no explicit `width` reserves only its own text, and the next
+        widget flows into the rest of that row.
+        The breadcrumb is docked, so the histogram row landed beside it until `#breadcrumb`
+        got `width: 100%`.
+        A screenshot caught this; a Pilot test asserting on rendered text never would
+- Never let colour be the only carrier of meaning.
+    Under `NO_COLOR` a red row renders *dim*, so the one span that failed became the
+    quietest thing on screen.
+    Pair it with a glyph in a column of its own, like the log table's severity mark, and
+    not with a prefix on an indented name: a prefix displaces the indentation and a nested
+    row then reads as a root
+- Size a table's columns from the terminal, not from constants.
+    The waterfall's fixed 38-wide name and 18-wide service left an 80-column terminal 12
+    columns of timeline, which cannot tell two sibling calls apart.
+    `column_widths` is a pure function so the split is testable at every width
+- A status line takes `Text`, never a bare string.
+    Error text is not ours: every Polars failure names its file as
+    `[/path.parquet]`, which Rich parses as a closing tag and raises `MarkupError`
+    from inside `update`, so the error handler took the app down on every failed
+    search
     - Never handle `on_descendant_blur` to restore focus.
         It fires when another control opens
         and steals the focus straight back; watch the one widget you mean

@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from textual.widgets import DataTable
+from textual.widgets import DataTable, Label
 
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.cli import Session
@@ -610,3 +610,34 @@ def test_the_preview_lists_the_fields_a_filter_could_use():
     assert 'fields:' in rendered
     assert 'level 100%' in rendered
     assert 'user.id 67%' in rendered
+
+
+async def test_the_infrequent_access_marker_comes_with_a_legend():
+    """A bare glyph is a status code nobody can read."""
+    groups = [
+        LogGroupInfo(name='/std', arn='a', stored_bytes=None, retention_days=None, created=None),
+        LogGroupInfo(
+            name='/ia',
+            arn='b',
+            stored_bytes=None,
+            retention_days=None,
+            created=None,
+            log_group_class='INFREQUENT_ACCESS',
+        ),
+    ]
+
+    async def list_groups() -> list[LogGroupInfo]:
+        return groups
+
+    app = _app(ShellServices(list_groups=list_groups))
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, GroupsScreen)
+        await pilot.pause()
+
+        markers = [row[0] for row in _rows(screen)]
+        assert markers == ['', '~'], 'the marker sits in the marker column, not on the name'
+        status = screen._picker.query_one('#picker_status', Label)
+        assert '~ Infrequent Access, no live tail' in str(status.render())
+        assert [row[1] for row in _rows(screen)] == ['/std', '/ia'], 'the name stays the name'

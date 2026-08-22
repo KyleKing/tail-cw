@@ -126,7 +126,7 @@ def test_a_json_tree_keeps_its_own_and_or_and_parentheses() -> None:
     """CloudWatch has real && and || inside braces, unlike its text patterns."""
     portable = portable_filter_pattern(parse_query('level:error AND (status:>=500 OR status:404)'))
 
-    assert portable.pattern == '{ ($.level = "error") && (($.status >= 500) || ($.status = "404")) }'
+    assert portable.pattern == '{ ($.level = "error") && (($.status >= 500) || ($.status = 404)) }'
 
 
 @pytest.mark.parametrize(
@@ -144,3 +144,21 @@ def test_what_cloudwatch_would_get_wrong_is_refused_by_name(text: str, expected_
 
     assert portable.pattern is None
     assert expected_in_reason in portable.reason.lower()
+
+
+def test_a_bare_number_compares_numerically_so_it_can_match_an_integer_field() -> None:
+    """As a string it failed outright: "cannot compare string with numeric type (i64)"."""
+    numeric = parse_query('status:503')
+
+    assert numeric.node_type is FilterNodeType.JSON_FIELD_NUMERIC
+    assert numeric.operator == '='
+    assert numeric.value == '503'
+    assert portable_filter_pattern(numeric).pattern == '{ $.status = 503 }'
+
+
+def test_quoting_the_number_forces_the_string_comparison_back() -> None:
+    quoted = parse_query('status:"503"')
+
+    assert quoted.node_type is FilterNodeType.JSON_FIELD_EQUALS
+    assert quoted.value == '503'
+    assert parse_query('level:error').node_type is FilterNodeType.JSON_FIELD_EQUALS

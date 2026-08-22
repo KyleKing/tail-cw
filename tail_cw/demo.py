@@ -21,6 +21,7 @@ from typing import Any
 from tail_cw.aws.dashboards import Dashboard, parse_dashboard_body
 from tail_cw.aws.events import LogEvent
 from tail_cw.aws.metrics import MetricSeries
+from tail_cw.aws.xray import XRaySpan, XRayTrace
 from tail_cw.cache.storage import write_log_events_to_parquet
 
 _STEP = timedelta(minutes=5)
@@ -192,7 +193,8 @@ def demo_fetch_metrics(
     return series
 
 
-def _demo_log_events(start: datetime, end: datetime) -> list[LogEvent]:
+def demo_log_events(start: datetime, end: datetime) -> list[LogEvent]:
+    """Build the synthetic request log the offline demo reads."""
     timestamps = _timestamps(start, end)
     events: list[LogEvent] = []
     for index, moment in enumerate(timestamps):
@@ -220,13 +222,13 @@ def _demo_log_events(start: datetime, end: datetime) -> list[LogEvent]:
 def demo_resolve_logs(_log_group: str, start: datetime, end: datetime) -> Path | None:
     """Write seed log events to a Parquet file and return its path."""
     output = Path(tempfile.gettempdir()) / 'tail-cw-demo-logs.parquet'
-    write_log_events_to_parquet(_demo_log_events(start, end), output)
+    write_log_events_to_parquet(demo_log_events(start, end), output)
     return output
 
 
 def demo_count_events(_log_group: str, start: datetime, end: datetime) -> int:
     """Count the synthetic ERROR-level events in the window, for the dive-candidate preview."""
-    return sum(1 for event in _demo_log_events(start, end) if '"level":"ERROR"' in event.message)
+    return sum(1 for event in demo_log_events(start, end) if '"level":"ERROR"' in event.message)
 
 
 def demo_log_volume(_source: str, start: datetime, end: datetime) -> list[float]:
@@ -239,3 +241,89 @@ def demo_window(now: datetime | None = None) -> tuple[datetime, datetime]:
     """Return a fixed 6-hour demo window ending at ``now`` (default: current time)."""
     end = now if now is not None else datetime.now(tz=UTC)
     return end - timedelta(hours=6), end
+
+
+DEMO_TRACE_ID = '1-6a89adb9-b279784d231d504c96c8815f'
+"""The trace ``:xray`` draws offline. X-Ray shaped, so the pivot accepts it."""
+
+
+def demo_xray_trace(trace_id: str, *, now: datetime | None = None) -> XRayTrace:
+    """Build one synthetic trace with the shape a real one has.
+
+    Deep enough to exercise the waterfall's geometry: a root that most of the time sits
+    inside, two sibling calls where only one is slow, an inferred database segment, and a
+    fault at the bottom.
+    """
+    origin = (now or datetime.now(tz=UTC)).replace(microsecond=0)
+
+    def span(
+        span_id: str,
+        name: str,
+        *,
+        parent: str | None,
+        offset_ms: int,
+        length_ms: int,
+        service: str = 'web-api',
+        inferred: bool = False,
+        fault: bool = False,
+        sql: str | None = None,
+    ) -> XRaySpan:
+        start = origin + timedelta(milliseconds=offset_ms)
+        return XRaySpan(
+            trace_id=trace_id,
+            span_id=span_id,
+            parent_span_id=parent,
+            name=name,
+            start_time=start,
+            end_time=start + timedelta(milliseconds=length_ms),
+            service_name=service,
+            origin='Database::SQL' if inferred else None,
+            namespace='remote' if sql else None,
+            is_fault=fault,
+            is_error=False,
+            is_throttle=False,
+            is_inferred=inferred,
+            http_status=503 if fault else None,
+            sql_url=sql,
+            error_message='connection reset by peer' if fault else None,
+            annotations=(),
+        )
+
+    return XRayTrace(
+        trace_id=trace_id,
+        duration_seconds=1.24,
+        limit_exceeded=False,
+        spans=(
+            span('a1a1a1a1a1a1a1a1', 'POST /v1/orders', parent=None, offset_ms=0, length_ms=1240),
+            span('b2b2b2b2b2b2b2b2', 'auth.verify_token', parent='a1a1a1a1a1a1a1a1', offset_ms=6, length_ms=48),
+            span('c3c3c3c3c3c3c3c3', 'orders.load_customer', parent='a1a1a1a1a1a1a1a1', offset_ms=60, length_ms=94),
+            span(
+                'd4d4d4d4d4d4d4d4',
+                'query SelectCustomer',
+                parent='c3c3c3c3c3c3c3c3',
+                offset_ms=64,
+                length_ms=86,
+                sql='SELECT * FROM customer WHERE id = $1',
+            ),
+            span(
+                'e5e5e5e5e5e5e5e5',
+                'pool.acquire',
+                parent='d4d4d4d4d4d4d4d4',
+                offset_ms=64,
+                length_ms=1,
+                service='Database::SQL',
+                inferred=True,
+            ),
+            span('f6f6f6f6f6f6f6f6', 'orders.reserve_stock', parent='a1a1a1a1a1a1a1a1', offset_ms=160, length_ms=1010),
+            span(
+                '0707070707070707',
+                'inventory.reserve',
+                parent='f6f6f6f6f6f6f6f6',
+                offset_ms=170,
+                length_ms=995,
+                service='inventory',
+                fault=True,
+            ),
+            span('1818181818181818', 'orders.emit_event', parent='a1a1a1a1a1a1a1a1', offset_ms=1180, length_ms=52),
+        ),
+    )
