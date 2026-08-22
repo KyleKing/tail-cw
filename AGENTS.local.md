@@ -255,6 +255,20 @@ References:
     They are the same 32 digits, and the leading eight are the epoch, which is also how
     `as_xray_trace_id` tells an X-Ray id from any other 32-digit hex id.
     A pivot that checks for the dashes rejects every real log line
+- A filter is local by default and portable only sometimes.
+    `portable_filter_pattern` decides, and its refusals are load-bearing: CloudWatch
+    *ignores* its `?` any-of terms when they are mixed with anything else instead of
+    rejecting the pattern, so sending a mixed expression returns the wrong events with no
+    error.
+    Never widen what it translates without checking that CloudWatch can mean it exactly
+- A native engine panic (`pyo3_runtime.PanicException`) derives from `BaseException`, so
+    every `except Exception` in the tool looks past it.
+    `query_parquet_file` converts it to `EnginePanicError`; keep new Polars and DuckDB
+    calls behind that boundary, or convert them the same way
+- Runtime type checking is opt-in through `RUNTIME_TYPE_CHECKING_MODE`, which pytest sets
+    and the installed binary does not.
+    So beartype catches an annotation violation (an `int` where a `float` is declared) in
+    the suite and never in a real run: the test is the only place that check exists
 - Trace heuristics should inspect structured fields (levels, status, message bodies)
     before falling back to free-text keyword scans to avoid misclassifying IDs like
     `trace-error` as failures.
