@@ -18,7 +18,7 @@ from tail_cw.aws.events import LogEvent
 from tail_cw.aws.insights import InsightsQueryError, InsightsResult
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.aws.metrics import MetricDefinition, MetricSeries
-from tail_cw.aws.xray import XRayTrace, XRayTraceSummary
+from tail_cw.aws.xray import TraceSummaryPage, XRayTrace, XRayTraceSummary
 from tail_cw.cache.storage import read_parquet_to_log_events
 from tail_cw.cli import (
     FetchRequest,
@@ -1578,26 +1578,35 @@ def _make_xray_summary(trace_id: str, *, duration: float) -> XRayTraceSummary:
 def test_run_cli_export_xray_writes_one_row_per_trace_and_honours_the_limit(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
     summaries = [_make_xray_summary(f'1-0000000{index}-{index:032x}', duration=index / 10) for index in range(5)]
-    monkeypatch.setattr('tail_cw.cli.get_trace_summaries', _async_iter_factory(summaries))
+    page = TraceSummaryPage(summaries=tuple(summaries), traces_processed=400_000)
+    monkeypatch.setattr('tail_cw.cli.iter_trace_summary_pages', _async_iter_factory([page]))
     argv = ['export', 'xray', '--limit', '2', '--config', str(_write_config_file(tmp_path))]
 
     result = run_cli(argv, None, is_tty=False)
 
+    captured = capsys.readouterr()
     assert result == 0
-    rows = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    rows = [json.loads(line) for line in captured.out.splitlines()]
     assert [row['trace_id'] for row in rows] == [summaries[0].trace_id, summaries[1].trace_id]
     assert rows[0]['services'] == ['irm-api']
     assert rows[0]['start_time'] == NOW.isoformat()
+    assert 'Stopped at --limit 2' in captured.err
+    assert '2 traces written, 400000 scanned, about $0.20' in captured.err, (
+        'a filter expression does not reduce what X-Ray scans, so the cost has to be said out loud'
+    )
 
 
 def test_run_cli_export_xray_says_so_when_the_window_is_empty(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
-    monkeypatch.setattr('tail_cw.cli.get_trace_summaries', _async_iter_factory([]))
+    empty = TraceSummaryPage(summaries=(), traces_processed=12)
+    monkeypatch.setattr('tail_cw.cli.iter_trace_summary_pages', _async_iter_factory([empty]))
 
     result = run_cli(['export', 'xray', '--config', str(_write_config_file(tmp_path))], None, is_tty=False)
 
+    captured = capsys.readouterr()
     assert result == 1
-    assert 'No X-Ray traces' in capsys.readouterr().err
+    assert 'No X-Ray traces' in captured.err
+    assert '12 scanned' in captured.err, 'a query that matched nothing was still billed for the scan'
 
 
 def test_run_cli_export_xray_trace_names_the_ids_xray_has_no_segments_for(tmp_path, capsys, monkeypatch):

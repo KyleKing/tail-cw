@@ -22,6 +22,8 @@ DEFAULT_WINDOW = '1h'
 DEFAULT_DASHBOARD_WINDOW = '3h'
 DEFAULT_SUMMARY_MAX_GROUPS = 25
 INSIGHTS_DEFAULT_LIMIT = 1000
+XRAY_DEFAULT_LIMIT = 1000
+"""A three-hour production window held 442,828 traces, so an uncapped sweep is not a default."""
 DEFAULT_HISTORY_WINDOW = '7d'
 
 
@@ -177,7 +179,12 @@ def _configure_xray(parser: argparse.ArgumentParser) -> None:
         action='store_true',
         help='Ask X-Ray for a representative sample rather than every trace',
     )
-    parser.add_argument('--limit', type=int, default=None, help='Stop after this many traces')
+    parser.add_argument(
+        '--limit',
+        type=int,
+        default=XRAY_DEFAULT_LIMIT,
+        help=f'Stop after this many traces (default: {XRAY_DEFAULT_LIMIT}; X-Ray bills every trace it scans)',
+    )
 
 
 def _configure_xray_trace(parser: argparse.ArgumentParser) -> None:

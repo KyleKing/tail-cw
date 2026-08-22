@@ -50,7 +50,7 @@ from tail_cw.aws.metrics import (
     fetch_metric_data,
     list_metric_definitions,
 )
-from tail_cw.aws.xray import XRayTraceSummary, batch_get_traces, get_trace_summaries
+from tail_cw.aws.xray import XRayTraceSummary, batch_get_traces, iter_trace_summary_pages, scan_cost_usd
 from tail_cw.cache.storage import LogCache, generate_cache_key
 from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import closing_stream, consume_in_thread, fetch_pool, run_blocking
@@ -970,23 +970,44 @@ async def _export_xray(pool: ClientProvider, args: argparse.Namespace, now: date
         sys.stderr.write(f'{err}\n')
         return 2
     xray = await pool.client('xray')
-    written = 0
-    summaries = get_trace_summaries(
+    pages = iter_trace_summary_pages(
         xray,
         start_time=start_time,
         end_time=end_time,
         filter_expression=args.filter_expression,
         sampling=args.sampling,
     )
-    async for summary in summaries:
-        _write_json_line(_xray_summary_to_record(summary))
-        written += 1
-        if args.limit is not None and written >= args.limit:
+    written = 0
+    processed = 0
+    async for page in pages:
+        processed += page.traces_processed
+        for summary in page.summaries:
+            _write_json_line(_xray_summary_to_record(summary))
+            written += 1
+            if written >= args.limit:
+                break
+        if written >= args.limit:
+            sys.stderr.write(f'Stopped at --limit {args.limit}; widen it or narrow --start to see more\n')
             break
+    _report_xray_cost(processed, written=written)
     if written == 0:
         sys.stderr.write(f'No X-Ray traces in {_window_label(start_time, end_time)}\n')
         return 1
     return 0
+
+
+def _report_xray_cost(processed: int, *, written: int) -> None:
+    """Name what the scan cost, because a filter expression does not reduce it.
+
+    X-Ray bills every trace it looks at, matched or not, so a wide window is expensive
+    however narrow the expression is. Only a shorter window is cheaper.
+    """
+    if processed <= 0:
+        return
+    sys.stderr.write(
+        f'{written} traces written, {processed} scanned, about ${scan_cost_usd(processed):.2f} '
+        f'past the free million a month\n',
+    )
 
 
 async def _export_xray_trace(pool: ClientProvider, args: argparse.Namespace) -> int:

@@ -8,6 +8,11 @@ they answer the question log lines cannot.
 
 ``GetTraceSummaries`` is the discovery call and returns no timing detail per span;
 ``BatchGetTraces`` returns the documents and takes five trace ids per request.
+
+Both are billed per trace, at :data:`COST_PER_MILLION_TRACES` with the first million a
+month free. A filter expression does not make a query cheaper: ``TracesProcessedCount``
+is documented as "the total number of traces processed, including traces that did not
+match the specified filter expression", so only a shorter window reduces the bill.
 """
 
 from __future__ import annotations
@@ -23,6 +28,10 @@ TRACE_IDS_PER_REQUEST = 5
 """``BatchGetTraces`` rejects a longer list."""
 
 DEFAULT_TRACE_CONCURRENCY = 4
+COST_PER_MILLION_TRACES = 0.50
+"""USD per million traces scanned or retrieved, past the free million a month."""
+
+_TRACES_PER_MILLION = 1_000_000
 _MILLISECONDS_PER_SECOND = 1000.0
 _SERVICE_NAME_KEYS = ('otel.resource.service.name', 'service.name')
 
@@ -141,6 +150,25 @@ class XRayTrace:
         """Distinct services in first-seen order."""
         seen = dict.fromkeys(span.service_name for span in self.spans)
         return tuple(seen)
+
+
+@dataclass(frozen=True)
+class TraceSummaryPage:
+    """One page of summaries and what X-Ray charged to find it.
+
+    Attributes:
+        summaries: The traces on this page that matched.
+        traces_processed: Traces X-Ray scanned to build the page, matched or not. This
+            is the billed quantity, so it is worth reporting even when the page is empty.
+    """
+
+    summaries: tuple[XRayTraceSummary, ...]
+    traces_processed: int
+
+
+def scan_cost_usd(traces_processed: int) -> float:
+    """What a scan of this many traces costs, ignoring the monthly free million."""
+    return traces_processed / _TRACES_PER_MILLION * COST_PER_MILLION_TRACES
 
 
 def _epoch_to_datetime(value: Any) -> datetime | None:
@@ -334,6 +362,42 @@ def _start_time(value: Any) -> datetime | None:
     return _epoch_to_datetime(value)
 
 
+async def iter_trace_summary_pages(
+    client: Any,
+    *,
+    start_time: datetime,
+    end_time: datetime,
+    filter_expression: str | None = None,
+    sampling: bool = False,
+) -> AsyncIterator[TraceSummaryPage]:
+    """Stream trace summaries a page at a time, newest page first as X-Ray returns them.
+
+    Pages rather than records, because the cost of the query is reported per page and a
+    caller that walks away early needs to know what it already spent.
+
+    Args:
+        client: An open X-Ray client, from :meth:`ClientPool.client`.
+        start_time: Window start.
+        end_time: Window end.
+        filter_expression: An X-Ray filter expression, such as ``service("api")`` or
+            ``responsetime > 3``. Server-side, so it narrows what comes back over the
+            wire, but not what the query is billed for.
+        sampling: Ask X-Ray for a representative sample instead of every trace.
+
+    Yields:
+        TraceSummaryPage records in the order the API returns them.
+    """
+    kwargs: dict[str, Any] = {'StartTime': start_time, 'EndTime': end_time, 'Sampling': sampling}
+    if filter_expression:
+        kwargs['FilterExpression'] = filter_expression
+    paginator = client.get_paginator('get_trace_summaries')
+    async for page in paginator.paginate(**kwargs):
+        yield TraceSummaryPage(
+            summaries=tuple(_to_summary(summary) for summary in page.get('TraceSummaries', [])),
+            traces_processed=int(page.get('TracesProcessedCount', 0)),
+        )
+
+
 async def get_trace_summaries(
     client: Any,
     *,
@@ -342,26 +406,21 @@ async def get_trace_summaries(
     filter_expression: str | None = None,
     sampling: bool = False,
 ) -> AsyncIterator[XRayTraceSummary]:
-    """Stream trace summaries for a window, newest page first as X-Ray returns them.
-
-    Args:
-        client: An open X-Ray client, from :meth:`ClientPool.client`.
-        start_time: Window start.
-        end_time: Window end.
-        filter_expression: An X-Ray filter expression, such as ``service("api")`` or
-            ``responsetime > 3``. Applied server-side, so it costs nothing to narrow.
-        sampling: Ask X-Ray for a representative sample instead of every trace.
+    """Flatten :func:`iter_trace_summary_pages` for a caller that does not track cost.
 
     Yields:
         XRayTraceSummary records in the order the API returns them.
     """
-    kwargs: dict[str, Any] = {'StartTime': start_time, 'EndTime': end_time, 'Sampling': sampling}
-    if filter_expression:
-        kwargs['FilterExpression'] = filter_expression
-    paginator = client.get_paginator('get_trace_summaries')
-    async for page in paginator.paginate(**kwargs):
-        for summary in page.get('TraceSummaries', []):
-            yield _to_summary(summary)
+    pages = iter_trace_summary_pages(
+        client,
+        start_time=start_time,
+        end_time=end_time,
+        filter_expression=filter_expression,
+        sampling=sampling,
+    )
+    async for page in pages:
+        for summary in page.summaries:
+            yield summary
 
 
 async def _traces_for_chunk(client: Any, trace_ids: Sequence[str]) -> list[XRayTrace]:
