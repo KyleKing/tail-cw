@@ -52,7 +52,7 @@ from tail_cw.aws.metrics import (
 )
 from tail_cw.cache.storage import LogCache, generate_cache_key
 from tail_cw.cache.window import Segment, plan_segments
-from tail_cw.concurrency import blocking_pool, closing_stream, consume_in_thread, run_blocking
+from tail_cw.concurrency import closing_stream, consume_in_thread, fetch_pool, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
 from tail_cw.demo import demo_dashboard
 from tail_cw.history import HistoryKind, append, make_entry
@@ -1216,7 +1216,9 @@ async def _run_export_command(
     if args.export_command is None:
         parser.print_help(sys.stderr)
         return 2
-    with blocking_pool() as executor:
+    # One pool for the whole export path, sized for the fetch: a CLI export runs one
+    # blocking call at a time, so nothing here can starve a query the way the TUI can.
+    with fetch_pool() as executor:
         async with client_pool(profile_name=args.profile, region_name=args.region) as pool:
             return await _dispatch_export(
                 pool,

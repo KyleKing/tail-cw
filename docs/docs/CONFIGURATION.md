@@ -135,10 +135,9 @@ the directory.
     interface responsive when exploring large datasets.
 - **Concurrent segments**: `FilterLogEvents` paginates one page per round trip, so a
     window fetched as concurrent segments finishes several times sooner (a cold hour of a
-    100k-events-per-hour group went from 21.6s to 8.7s at four).
-    Raising it above four buys nothing today, because each in-flight segment holds one of
-    the four blocking-pool threads until its Parquet write returns, and past eight
-    CloudWatch starts throttling.
+    100k-events-per-hour group went from 21.6s to 8.7s at four, and 12% again at eight).
+    Past eight CloudWatch starts throttling, and the event loop's worst-case lag grows, so
+    eight is the default and the ceiling worth keeping.
     Lower it to one when you need the account's `FilterLogEvents` quota for something else.
 
 ## Troubleshooting

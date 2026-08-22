@@ -86,6 +86,15 @@ What follows is what they measured, because half the numbers were wrong.
     Four concurrent segments take a cold hour from 21.6s to 8.7s end to end, byte for byte
     identical output, and the ceiling is `[fetch].max_concurrent_segments`
     ([ADR 0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md))
+- **the segment writers got their own pool, and the second speedup did not materialise.**
+    Sharing one pool with the query layer meant a four-group fetch filled it and a search
+    waited, which is the reason to split it.
+    The raw-network probe suggested another third was available at eight segments (2.90s
+    against 4.50s at four), and end to end with the Parquet writes included it was 12%
+    (6.4s against 7.3s over three runs each), while event-loop lag p99 went from about 9ms
+    to 13-22ms.
+    Eight is the default anyway, because the worst lag stays inside a frame, but the number
+    to quote is 12% rather than a third
 - **the scan estimate is measured now, and it is close.** Three `FilterLogEvents` samples
     spread across the query's own window give a bytes-per-second rate per group, and the
     stored-bytes average is only the fallback for a group that logged nothing measurable.
@@ -112,11 +121,7 @@ What follows is what they measured, because half the numbers were wrong.
 
 ### Still open, and worth doing next
 
-- **segment concurrency above four needs its own pool.** Each in-flight segment holds one
-    of the four blocking-pool threads until its write returns, and that pool's width is also
-    the DuckDB thread divisor.
-    Eight concurrent segments measured 2.90s against 4.50s at four, so there is roughly
-    another third to take
+Nothing from the 2026-08-21 audit. The next work is M3 below.
 
 ## Then: M3 investigation tools
 

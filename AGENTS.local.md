@@ -139,8 +139,12 @@ If you introduce or modify Textual UI code:
     - A fetch's fan-out is bounded by one semaphore per command, built inside the loop and
         shared across every log group, because each in-flight segment holds a blocking-pool
         thread until its Parquet write returns.
-        `[fetch].max_concurrent_segments` defaults to `DEFAULT_BLOCKING_WORKERS` for that
-        reason; raising it without widening the pool does nothing.
+        `[fetch].max_concurrent_segments` defaults to `DEFAULT_FETCH_WORKERS`, the width of
+        that pool.
+    - There are two blocking pools, and the difference matters: `blocking_pool` is narrow
+        because DuckDB and Polars are CPU work, `fetch_pool` is wider because a segment
+        writer spends its life on the network.
+        Do not put query work on the fetch pool in the TUI, where the two run at once.
     - Never declare an `asyncio.Semaphore`, `Lock`, or `Event` at module level.
         They bind to the first event loop that touches them.
         Build them inside the running loop.

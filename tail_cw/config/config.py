@@ -17,7 +17,7 @@ from typing import Any, Final
 
 from platformdirs import user_cache_dir, user_config_dir
 
-from tail_cw.concurrency import DEFAULT_BLOCKING_WORKERS
+from tail_cw.concurrency import DEFAULT_FETCH_WORKERS
 from tail_cw.query.trace import DEFAULT_TRACE_ID_FIELDS
 
 DEFAULT_CONFIG_FILENAME: Final = 'config.toml'
@@ -59,11 +59,11 @@ class FetchConfig:
         max_concurrent_segments: Segment fetches in flight at once, counted
             across every log group in one command. ``FilterLogEvents`` paginates
             serially, so a window split across concurrent segments is several
-            times faster; the default matches the blocking pool's width because
-            each in-flight segment holds one of its threads until it finishes.
+            times faster; the default matches the fetch pool's width because each
+            in-flight segment holds one of its threads until it finishes.
     """
 
-    max_concurrent_segments: int = DEFAULT_BLOCKING_WORKERS
+    max_concurrent_segments: int = DEFAULT_FETCH_WORKERS
 
 
 @dataclass(slots=True)
@@ -352,7 +352,7 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'eviction_policy = "least-recently-stored"\n\n'
             '[fetch]\n'
             '# Segment fetches in flight at once, across every log group.\n'
-            f'max_concurrent_segments = {DEFAULT_BLOCKING_WORKERS}\n\n'
+            f'max_concurrent_segments = {DEFAULT_FETCH_WORKERS}\n\n'
             '[insights]\n'
             '# Estimated GB a query may scan before it asks for confirmation.\n'
             'confirm_above_gb = 1.0\n\n'

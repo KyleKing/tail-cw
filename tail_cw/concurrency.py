@@ -39,6 +39,9 @@ R = TypeVar('R')
 DEFAULT_BLOCKING_WORKERS = 4
 """Concurrent DuckDB/Polars calls to allow. Above this, oversubscription stalls the loop."""
 
+DEFAULT_FETCH_WORKERS = 8
+"""Concurrent segment fetches to allow, each holding one thread while it waits on AWS."""
+
 DEFAULT_BRIDGE_BATCH = 1000
 """Items pulled per loop round-trip, and so the granularity of cancellation."""
 
@@ -69,7 +72,31 @@ def blocking_pool(max_workers: int = DEFAULT_BLOCKING_WORKERS) -> Iterator[Threa
     Yields:
         The pool, shut down when the block exits.
     """
-    pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='tail-cw-blocking')
+    with _named_pool('tail-cw-blocking', max_workers) as pool:
+        yield pool
+
+
+@contextmanager
+def fetch_pool(max_workers: int = DEFAULT_FETCH_WORKERS) -> Iterator[ThreadPoolExecutor]:
+    """Open the pool that Parquet writes for in-flight segment fetches run on.
+
+    Separate from :func:`blocking_pool` because the two are bounded by different
+    things. A query is CPU work inside DuckDB or Polars, so its pool stays narrow.
+    A segment writer spends nearly all of its life waiting on the network (99% of a
+    cold hour, measured), so a wider pool costs little and buys concurrent round
+    trips. Sharing one pool made the two compete: four groups fetching filled it
+    and a search waited for the fetch.
+
+    Yields:
+        The pool, shut down when the block exits.
+    """
+    with _named_pool('tail-cw-fetch', max_workers) as pool:
+        yield pool
+
+
+@contextmanager
+def _named_pool(prefix: str, max_workers: int) -> Iterator[ThreadPoolExecutor]:
+    pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix=prefix)
     try:
         yield pool
     finally:

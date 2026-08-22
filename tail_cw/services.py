@@ -27,7 +27,7 @@ from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups
 from tail_cw.aws.metrics import MetricSeries, fetch_metric_data
 from tail_cw.cache.storage import read_parquet_to_log_events
 from tail_cw.cli import FetchRequest, Session, ShellSeed, dispatch, resolve_parquet_paths
-from tail_cw.concurrency import blocking_pool, run_blocking, take
+from tail_cw.concurrency import blocking_pool, fetch_pool, run_blocking, take
 from tail_cw.config import TailCWConfig
 from tail_cw.demo import (
     DEMO_LOG_GROUP,
@@ -131,8 +131,13 @@ def _cache_services(
     session: Session,
     pool: ClientProvider,
     executor: ThreadPoolExecutor,
+    fetch_executor: ThreadPoolExecutor,
 ) -> tuple[ResolveLogs, LogVolume, CountEvents, LoadTraces]:
-    """Build the services that end in blocking Parquet work on ``executor``."""
+    """Build the services that end in blocking Parquet work.
+
+    Query work goes to ``executor`` and segment writes to ``fetch_executor``, so a
+    fetch filling its own pool cannot make a search wait.
+    """
 
     async def resolve_logs(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
         requests = [
@@ -149,7 +154,7 @@ def _cache_services(
             await pool.client('logs'),
             requests,
             config,
-            executor=executor,
+            executor=fetch_executor,
         )
 
     async def log_volume(log_group: str, start: datetime, end: datetime) -> list[float]:
@@ -230,8 +235,15 @@ def _live_services(
     session: Session,
     pool: ClientProvider,
     executor: ThreadPoolExecutor,
+    fetch_executor: ThreadPoolExecutor,
 ) -> ShellServices:
-    resolve_logs, log_volume, count_events, load_traces = _cache_services(config, session, pool, executor)
+    resolve_logs, log_volume, count_events, load_traces = _cache_services(
+        config,
+        session,
+        pool,
+        executor,
+        fetch_executor,
+    )
     list_alarms, run_insights, sample_rates = _cloudwatch_services(pool)
 
     async def list_groups() -> list[LogGroupInfo]:
@@ -316,9 +328,9 @@ async def _run_shell_async(config: TailCWConfig, session: Session, seed: ShellSe
     if seed.demo:
         await _build_app(config, session, seed, _demo_services()).run_async()
         return
-    with blocking_pool() as executor:
+    with blocking_pool() as executor, fetch_pool(config.fetch.max_concurrent_segments) as fetch_executor:
         async with client_pool(profile_name=session.profile, region_name=session.region) as pool:
-            services = _live_services(config, session, pool, executor)
+            services = _live_services(config, session, pool, executor, fetch_executor)
             await _build_app(config, session, seed, services).run_async()
 
 

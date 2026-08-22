@@ -52,8 +52,8 @@ class _FakePool:
 
 def _live(config: TailCWConfig, session: Session) -> tuple[ShellServices, _FakePool]:
     pool = _FakePool()
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        return _live_services(config, session, pool, executor), pool
+    with ThreadPoolExecutor(max_workers=1) as executor, ThreadPoolExecutor(max_workers=1) as fetch_executor:
+        return _live_services(config, session, pool, executor, fetch_executor), pool
 
 
 def test_main_function_exists():
@@ -261,6 +261,30 @@ async def test_live_services_count_events_caps_the_scan():
     assert services.count_events is not None
     with patch('tail_cw.services.fetch_log_events', fake_fetch):
         assert await services.count_events('/g', session.start, session.end) == 3
+
+
+async def test_a_fetch_and_a_query_do_not_share_a_thread_pool(tmp_path):
+    """Four groups fetching filled the shared pool, and a search then waited for the fetch."""
+    session = _make_session()
+    config = TailCWConfig()
+    config.cache.cache_dir = tmp_path / 'cache'
+    pool = _FakePool()
+    seen: dict[str, object] = {}
+
+    async def fake_resolve(_client, _requests, _config, **kwargs):
+        seen['fetch'] = kwargs['executor']
+        return []
+
+    with ThreadPoolExecutor(max_workers=1) as queries, ThreadPoolExecutor(max_workers=1) as fetches:
+        services = _live_services(config, session, pool, queries, fetches)
+        assert services.resolve_logs is not None
+        assert services.load_traces is not None
+        with patch('tail_cw.services.resolve_parquet_paths', fake_resolve):
+            await services.resolve_logs(['/one'], session.start, session.end)
+        await services.load_traces([], None, [], None)
+
+        assert seen['fetch'] is fetches
+        assert queries is not fetches
 
 
 async def test_live_services_resolve_logs_builds_one_request_per_group(tmp_path):

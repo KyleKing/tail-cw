@@ -104,16 +104,24 @@ at four.
 Past eight it reverses (a second run measured 6.73s at 32 against 3.35s at 16), which
 reads as retry backoff, so the ceiling stays configurable and low.
 
-`[fetch].max_concurrent_segments` defaults to the blocking pool's width, because each
+Segment writes run on their own pool (`fetch_pool`, eight threads), not the query pool.
+The two are bounded by different things: a query is CPU work inside DuckDB or Polars and
+its pool stays narrow, while a segment writer waits on the network for nearly all of its
+life.
+Sharing one pool made them compete, because four groups fetching filled it and a search
+then waited for the fetch.
+`[fetch].max_concurrent_segments` defaults to the fetch pool's width, since each
 in-flight segment holds one of its threads from its first page until its Parquet write
 returns.
-Raising it above that width buys nothing without widening the pool, and widening the
-pool
-changes the DuckDB thread divisor in `cpu_budget.py`, so the two numbers are one
-constant
-(`DEFAULT_BLOCKING_WORKERS`) rather than two that can drift.
-Lifting the ceiling further means giving segment writes their own pool, which is
-defensible (they are network-bound, unlike queries) and is not done yet.
+
+Eight rather than four is worth less than the network probe implied.
+Measured end to end with the writes included, a cold hour took 6.4s at eight against
+7.3s
+at four over three runs each, a 12% gain rather than the third the raw-network numbers
+suggested, and event-loop lag p99 rose from about 9ms to between 13ms and 22ms.
+The worst case stayed around 30ms at either setting, inside one frame, which is why
+eight
+stands.
 
 The limiter is one semaphore per command, shared across every log group in it, so a
 ten-group fetch cannot open ten times the ceiling.
