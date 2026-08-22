@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from tail_cw.aws.events import to_utc, to_utc_or_none
+
 STATE_TRANSITION = 'StateUpdate'
 ALARM_STATES = ('OK', 'ALARM', 'INSUFFICIENT_DATA')
 
@@ -70,7 +72,7 @@ def _to_alarm_summary(alarm: dict[str, Any]) -> AlarmSummary:
         name=alarm['AlarmName'],
         state=alarm.get('StateValue', 'INSUFFICIENT_DATA'),
         state_reason=alarm.get('StateReason', ''),
-        state_updated=alarm.get('StateUpdatedTimestamp'),
+        state_updated=to_utc_or_none(alarm.get('StateUpdatedTimestamp')),
         description=alarm.get('AlarmDescription', ''),
         namespace=alarm.get('Namespace'),
         metric_name=alarm.get('MetricName'),
@@ -146,6 +148,6 @@ async def describe_alarm_history(
         for item in page.get('AlarmHistoryItems', []):
             yield AlarmTransition(
                 alarm_name=item.get('AlarmName', alarm_name),
-                moment=item['Timestamp'],
+                moment=to_utc(item['Timestamp']),
                 summary=item.get('HistorySummary', ''),
             )

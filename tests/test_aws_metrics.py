@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -154,6 +154,21 @@ async def test_fetch_paginates_and_concatenates_visible_series() -> None:
     assert len(series) == 1
     assert series[0].values == [100.0, 99.0]
     assert series[0].timestamps == [ts1, ts2]
+
+
+async def test_datapoints_arrive_in_utc_whatever_zone_botocore_parsed_them_in() -> None:
+    """Every response timestamp arrives stamped with the machine's local zone, from botocore."""
+    local = timezone(timedelta(hours=-5))
+    start = datetime(2026, 7, 24, 0, 0, tzinfo=local)
+    pages: list[dict[str, Any]] = [
+        {'MetricDataResults': [{'Id': 'e1', 'Label': 'Avail', 'Timestamps': [start], 'Values': [1.0]}]},
+    ]
+    queries: list[dict[str, Any]] = [{'Id': 'e1', 'Expression': 'x', 'ReturnData': True}]
+
+    series = await fetch_metric_data(_FakeCloudWatch(pages), queries, start, start + timedelta(minutes=5))
+
+    assert [moment.utcoffset() for moment in series[0].timestamps] == [timedelta(0)]
+    assert series[0].timestamps == [start], 'the instant must not move, only the zone it prints in'
 
 
 async def test_fetch_rejects_empty_queries() -> None:

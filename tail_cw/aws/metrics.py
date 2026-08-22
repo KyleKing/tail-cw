@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from tail_cw.aws.events import to_utc
+
 DEFAULT_STAT = 'Average'
 DITTO = '.'
 DITTO_ALL = '...'
@@ -218,7 +220,7 @@ async def fetch_metric_data(
                 timestamps[result_id] = []
                 values[result_id] = []
                 labels[result_id] = result.get('Label', result_id)
-            timestamps[result_id].extend(result.get('Timestamps', []))
+            timestamps[result_id].extend(to_utc(moment) for moment in result.get('Timestamps', []))
             values[result_id].extend(result.get('Values', []))
         next_token = response.get('NextToken')
         if next_token is None:

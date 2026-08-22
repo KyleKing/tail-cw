@@ -86,6 +86,13 @@ What follows is what they measured, because half the numbers were wrong.
     Four concurrent segments take a cold hour from 21.6s to 8.7s end to end, byte for byte
     identical output, and the ceiling is `[fetch].max_concurrent_segments`
     ([ADR 0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md))
+- **every surface emits UTC now.** The local-time bug was wider than `export metrics`:
+    botocore stamps the machine's zone on every timestamp it parses, so alarm state changes
+    and alarm history read local too, while everything derived from epoch milliseconds read
+    UTC.
+    `to_utc` at the three response boundaries fixes all of them, and
+    `tests/test_aws_alarms.py` is new because that module's response parsing had no test at
+    all
 
 ### Still open, and worth doing next
 
@@ -101,9 +108,6 @@ What follows is what they measured, because half the numbers were wrong.
 - **the estimate could be measured rather than averaged.** `DescribeLogStreams` or a small
     `FilterLogEvents` sample would give a recent rate instead of a lifetime average, at the
     cost of a request before the query
-- **`export metrics` emits local time** while every other surface emits UTC.
-    One tool, two
-    conventions
 
 ## Then: M3 investigation tools
 

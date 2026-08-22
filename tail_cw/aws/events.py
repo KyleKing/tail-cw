@@ -35,3 +35,19 @@ class LogEvent:
 def epoch_ms_to_datetime(epoch_ms: int) -> datetime:
     """Convert epoch milliseconds, which is what CloudWatch returns, to a UTC datetime."""
     return datetime.fromtimestamp(epoch_ms / 1000.0, tz=UTC)
+
+
+def to_utc(moment: datetime) -> datetime:
+    """Normalize a datetime botocore parsed for us.
+
+    botocore attaches the machine's local zone to every timestamp it parses, so a
+    response field used as-is prints a local offset while every epoch-derived
+    field in tail-cw prints UTC: one tool, two conventions, and only under a shell
+    whose ``TZ`` is not UTC.
+    """
+    return moment.astimezone(UTC)
+
+
+def to_utc_or_none(moment: datetime | None) -> datetime | None:
+    """Normalize a botocore timestamp that the API may omit."""
+    return None if moment is None else to_utc(moment)
