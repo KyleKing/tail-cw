@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
+from time import monotonic
 from typing import Any, ClassVar
 
 from textual import events, on
@@ -42,6 +43,8 @@ from tail_cw.tui.trace_viewer import TraceViewerScreen
 LiveStreamFactory = Callable[[], AsyncIterator[LogEvent]]
 
 _LIVE_FLUSH_INTERVAL_SECONDS = 0.25
+_LOAD_TICK_SECONDS = 1.0
+_LOADING_STATUS = 'Loading events, esc to stop'
 _HALF_PAGE = 10
 _ROW_RESERVE = 4
 """Cells the elastic column cannot use: the cursor gutter and the scrollbar.
@@ -154,6 +157,8 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._live_paused = False
         self._live_sampled = False
         self._live_event_count = 0
+        self._load_timer: Timer | None = None
+        self._loading_since: float | None = None
 
     @property
     def _config(self) -> TailCWConfig:
@@ -319,7 +324,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         if resolve is None:
             self._update_status('No log source available')
             return
-        self._update_status('Loading events...')
+        self._start_loading_clock()
         session = self.shell.session
         self.run_worker(
             self._resolve_window(resolve, session.start, session.end),
@@ -328,13 +333,52 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             exclusive=True,
         )
 
+    def _start_loading_clock(self) -> None:
+        """Count the wait out loud, and say how to leave.
+
+        A cold multi-group window takes tens of seconds, and a status line that
+        says only "Loading" for that long is indistinguishable from a hang. Escape
+        pops the screen, which closes it and cancels this worker with it.
+        """
+        self._stop_loading_clock()
+        self._loading_since = monotonic()
+        self._update_status(_LOADING_STATUS)
+        self._load_timer = self.set_interval(_LOAD_TICK_SECONDS, self._tick_loading_clock)
+
+    def _tick_loading_clock(self) -> None:
+        if self._loading_since is None:
+            return
+        elapsed = int(monotonic() - self._loading_since)
+        self._update_status(f'{_LOADING_STATUS} · {elapsed}s')
+
+    def action_nav_pop(self) -> None:
+        """Stop an in-flight load; a second press goes back.
+
+        The log view is reachable as the opening view, where there is no screen
+        to pop, so a cold multi-group fetch had no way out at all.
+        """
+        if self._loading_since is None:
+            super().action_nav_pop()
+            return
+        self.workers.cancel_group(self, 'resolve_logs')
+        self._stop_loading_clock()
+        self._update_status('Load stopped, r to try again')
+
+    def _stop_loading_clock(self) -> None:
+        if self._load_timer is not None:
+            self._load_timer.stop()
+            self._load_timer = None
+        self._loading_since = None
+
     async def _resolve_window(self, resolve: ResolveLogs, start: datetime, end: datetime) -> None:
         try:
             paths = await resolve(tuple(self._log_groups), start, end)
         except Exception as err:
+            self._stop_loading_clock()
             self.notify(f'Failed to load logs: {err}', severity='error')
             self._update_status(f'Load error: {err}')
             return
+        self._stop_loading_clock()
         self.set_parquet_sources(paths)
 
     def set_parquet_sources(self, paths: Sequence[Path]) -> None:

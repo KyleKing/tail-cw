@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime, timedelta
@@ -322,6 +323,49 @@ async def test_missing_parquet_paths_report_no_events():
 
         assert app.screen.query_one('#log_table', DataTable).row_count == 0
         assert 'No events found' in str(app.screen.query_one('#status', Label).render())
+
+
+@pytest.mark.asyncio
+async def test_a_slow_load_says_how_long_it_has_waited_and_how_to_stop():
+    """A status line reading only "Loading" for forty seconds is indistinguishable from a hang."""
+    release = asyncio.Event()
+
+    async def slow_resolve(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
+        del groups, start, end
+        await release.wait()
+        return []
+
+    app = _make_app(services=ShellServices(resolve_logs=slow_resolve))
+
+    async with running(app) as pilot:
+        await pilot.pause()
+        status = app.screen.query_one('#status', Label)
+        assert 'esc to stop' in str(status.render())
+
+        await pilot.press('escape')
+        await pilot.pause()
+
+        assert [worker for worker in app.workers if worker.group == 'resolve_logs' and worker.is_running] == []
+        assert 'Load stopped' in str(status.render())
+        release.set()
+
+
+@pytest.mark.asyncio
+async def test_escape_still_goes_back_when_nothing_is_loading(tmp_path: Path):
+    """Cancelling must not cost the view its Back key once the load has finished."""
+    path = _write_parquet(_make_test_log_events(5), tmp_path / 'events.parquet')
+    app = _make_app(services=_resolving_to([path]))
+
+    async with running(app) as pilot:
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        depth = len(app.screen_stack)
+
+        await pilot.press('escape')
+        await pilot.pause()
+
+        assert len(app.screen_stack) == depth, 'the log view is the root here, so Back has nowhere to go'
+        assert 'Load stopped' not in str(app.screen.query_one('#status', Label).render())
 
 
 @pytest.mark.asyncio

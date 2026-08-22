@@ -94,6 +94,14 @@ What follows is what they measured, because half the numbers were wrong.
     One sample was not enough: a single group measured between 5,773 and 14,900 bytes a
     second inside one hour, so sampling one end of the window read it 1.68x high.
     The preflight costs three requests per group, about 6s for an 18-group account
+- **a slow load counts out loud, and escape stops it.** A cold multi-group window took
+    tens of seconds behind a status line reading "Loading events...", which is
+    indistinguishable from a hang (heuristic 1 and 3 in
+    [the critique](tui-critique-2026-08-21.md)).
+    It now ticks the elapsed seconds and names its own way out, and escape cancels the
+    worker instead of only popping the screen, which mattered because the log view is
+    reachable as the opening view where there is no screen to pop.
+    A second escape goes back as before
 - **every surface emits UTC now.** The local-time bug was wider than `export metrics`:
     botocore stamps the machine's zone on every timestamp it parses, so alarm state changes
     and alarm history read local too, while everything derived from epoch milliseconds read
@@ -109,10 +117,6 @@ What follows is what they measured, because half the numbers were wrong.
     the DuckDB thread divisor.
     Eight concurrent segments measured 2.90s against 4.50s at four, so there is roughly
     another third to take
-- **cancelling an in-flight fetch.** A two-minute multi-group fetch reports no progress
-    and
-    the footer offers no way out (heuristic 1 and 3 in
-    [the critique](tui-critique-2026-08-21.md))
 
 ## Then: M3 investigation tools
 

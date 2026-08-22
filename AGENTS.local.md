@@ -171,6 +171,10 @@ If you introduce or modify Textual UI code:
         selector, and an inherited rule loses the tie
     - A hidden `Input` left in the focus chain takes the initial focus and swallows every
         keystroke the footer advertises, so `HiddenInput` flips `can_focus` with `display`
+    - A long-running worker needs a visible clock and a key that stops it.
+        Escape alone is not that key on a view that can be the opening view, because
+        `nav_pop` has nothing to pop there, so the screen overrides it to cancel first and go
+        back on the second press
     - Never handle `on_descendant_blur` to restore focus.
         It fires when another control opens
         and steals the focus straight back; watch the one widget you mean
