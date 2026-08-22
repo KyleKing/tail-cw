@@ -308,24 +308,43 @@ async def _resolve_into_cache(
     use_cache: bool,
     fetch_events: FetchEvents | None,
     executor: ThreadPoolExecutor | None,
+    limiter: asyncio.Semaphore,
 ) -> list[Path]:
+    """Resolve every segment of one window, several at a time, in window order."""
     effective_fetch = fetch_events if fetch_events is not None else fetch_log_events
-    paths = []
-    # Segments run one at a time. FilterLogEvents is quota-limited per account and
-    # the fan-out across log groups already saturates it.
-    for segment in plan_segments(request.start_time, request.end_time, now=now):
-        path = await _resolve_segment(
-            client,
-            request,
-            segment,
-            cache,
-            use_cache=use_cache,
-            fetch_events=effective_fetch,
-            executor=executor,
-        )
+
+    async def resolve(segment: Segment) -> Path | None:
+        async with limiter:
+            return await _resolve_segment(
+                client,
+                request,
+                segment,
+                cache,
+                use_cache=use_cache,
+                fetch_events=effective_fetch,
+                executor=executor,
+            )
+
+    async with asyncio.TaskGroup() as group:
+        tasks = [
+            group.create_task(resolve(segment))
+            for segment in plan_segments(request.start_time, request.end_time, now=now)
+        ]
+    paths: list[Path] = []
+    for task in tasks:
+        path = task.result()
         if path is not None and path not in paths:
             paths.append(path)
     return paths
+
+
+def _segment_limiter(config: TailCWConfig) -> asyncio.Semaphore:
+    """Bound segment fetches for one command, across every log group in it.
+
+    Built here rather than held at module level, so it binds to the loop that is
+    running rather than to whichever one imported this module first.
+    """
+    return asyncio.Semaphore(max(1, config.fetch.max_concurrent_segments))
 
 
 async def resolve_parquet_path(
@@ -351,6 +370,7 @@ async def resolve_parquet_path(
             use_cache=use_cache,
             fetch_events=fetch_events,
             executor=executor,
+            limiter=_segment_limiter(config),
         )
 
 
@@ -374,13 +394,16 @@ async def resolve_parquet_paths(
     directory delete each other's not-yet-referenced Parquet files during orphan
     cleanup, which silently drops groups from the result.
 
-    Fetches all start together; the Parquet writes queue on ``executor``, which is
-    where the real bound sits. A failure cancels the siblings rather than leaving
-    them to finish writing into a cache nobody will read.
+    Every segment of every request competes for the same
+    ``[fetch].max_concurrent_segments`` slots, because each one in flight holds a
+    thread of ``executor`` until it finishes writing. A failure cancels the
+    siblings rather than leaving them to finish writing into a cache nobody will
+    read.
     """
     if not requests:
         return []
     resolved_now = now if now is not None else datetime.now(UTC)
+    limiter = _segment_limiter(config)
     with open_log_cache(config) as cache:
 
         async def resolve(request: FetchRequest) -> list[Path]:
@@ -392,6 +415,7 @@ async def resolve_parquet_paths(
                 use_cache=use_cache,
                 fetch_events=fetch_events,
                 executor=executor,
+                limiter=limiter,
             )
 
         async with asyncio.TaskGroup() as group:

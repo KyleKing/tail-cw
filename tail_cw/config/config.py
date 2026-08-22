@@ -17,6 +17,7 @@ from typing import Any, Final
 
 from platformdirs import user_cache_dir, user_config_dir
 
+from tail_cw.concurrency import DEFAULT_BLOCKING_WORKERS
 from tail_cw.query.trace import DEFAULT_TRACE_ID_FIELDS
 
 DEFAULT_CONFIG_FILENAME: Final = 'config.toml'
@@ -48,6 +49,21 @@ class CacheConfig:
     size_limit_mb: int = 1000
     default_ttl_seconds: int | None = None
     eviction_policy: str = 'least-recently-stored'
+
+
+@dataclass(slots=True)
+class FetchConfig:
+    """How much of one window tail-cw asks CloudWatch for at once.
+
+    Attributes:
+        max_concurrent_segments: Segment fetches in flight at once, counted
+            across every log group in one command. ``FilterLogEvents`` paginates
+            serially, so a window split across concurrent segments is several
+            times faster; the default matches the blocking pool's width because
+            each in-flight segment holds one of its threads until it finishes.
+    """
+
+    max_concurrent_segments: int = DEFAULT_BLOCKING_WORKERS
 
 
 @dataclass(slots=True)
@@ -156,6 +172,7 @@ class TailCWConfig:
 
     Attributes:
         cache: Cache persistence configuration.
+        fetch: How many segment fetches run at once.
         insights: Guards on billed Logs Insights queries.
         message: Which record fields the log table reads as the phrase.
         preview: Log group preview sampling configuration.
@@ -166,6 +183,7 @@ class TailCWConfig:
     """
 
     cache: CacheConfig = field(default_factory=CacheConfig)
+    fetch: FetchConfig = field(default_factory=FetchConfig)
     insights: InsightsConfig = field(default_factory=InsightsConfig)
     message: MessageConfig = field(default_factory=MessageConfig)
     preview: PreviewConfig = field(default_factory=PreviewConfig)
@@ -265,6 +283,7 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
         raise
 
     cache_kwargs = _load_section(data.get('cache'), CacheConfig)
+    fetch_kwargs = _load_section(data.get('fetch'), FetchConfig)
     insights_kwargs = _load_section(data.get('insights'), InsightsConfig)
     message_kwargs = _load_section(data.get('message'), MessageConfig)
     preview_kwargs = _load_section(data.get('preview'), PreviewConfig)
@@ -281,6 +300,7 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
 
     config = TailCWConfig(
         cache=CacheConfig(**cache_kwargs),
+        fetch=FetchConfig(**fetch_kwargs),
         insights=InsightsConfig(**insights_kwargs),
         message=MessageConfig(**message_kwargs),
         preview=PreviewConfig(**preview_kwargs),
@@ -330,6 +350,9 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'size_limit_mb = 1000\n'
             'default_ttl_seconds = 3600  # 1 hour\n'
             'eviction_policy = "least-recently-stored"\n\n'
+            '[fetch]\n'
+            '# Segment fetches in flight at once, across every log group.\n'
+            f'max_concurrent_segments = {DEFAULT_BLOCKING_WORKERS}\n\n'
             '[insights]\n'
             '# Estimated GB a query may scan before it asks for confirmation.\n'
             'confirm_above_gb = 1.0\n\n'

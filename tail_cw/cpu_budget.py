@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import os
 
+from tail_cw.concurrency import DEFAULT_BLOCKING_WORKERS
+
 CPU_FRACTION_ENV = 'TAIL_CW_CPU_FRACTION'
 MAX_THREADS_ENV = 'TAIL_CW_MAX_THREADS'
 POLARS_THREADS_ENV = 'POLARS_MAX_THREADS'
 DEFAULT_CPU_FRACTION = 0.4
-_BLOCKING_POOL_WIDTH = 4
 
 
 def cpu_count() -> int:
@@ -52,7 +53,7 @@ def duckdb_threads() -> int:
     once, so the budget is divided by the pool width to keep the total inside it. Polars needs
     no such division: its pool is process-wide.
     """
-    return max(1, max_threads() // _BLOCKING_POOL_WIDTH)
+    return max(1, max_threads() // DEFAULT_BLOCKING_WORKERS)
 
 
 def apply_native_thread_limits() -> None:

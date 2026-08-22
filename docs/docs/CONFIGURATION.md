@@ -30,6 +30,7 @@ Retrieve this location programmatically via `tail_cw.config.get_default_cache_di
 ## Configuration Sections
 
 - `[cache]` controls cache storage limits and eviction behaviour.
+- `[fetch]` sets how many segments of a window are fetched at once.
 - `[insights]` sets the estimated scan size a Logs Insights query may reach before it
     asks for confirmation.
 - `[message]` names the record fields the log table reads as the human-readable phrase,
@@ -47,6 +48,9 @@ Retrieve this location programmatically via `tail_cw.config.get_default_cache_di
 size_limit_mb = 1024
 default_ttl_seconds = 3600                # 1 hour
 eviction_policy = "least-recently-stored"
+
+[fetch]
+max_concurrent_segments = 4 # segments in flight at once, across every log group
 
 [insights]
 confirm_above_gb = 1.0 # estimated GB before a query needs --yes or a keypress
@@ -127,6 +131,13 @@ the directory.
     machines.
 - **Search limit**: limit the number of rows collected from Parquet queries to keep the
     interface responsive when exploring large datasets.
+- **Concurrent segments**: `FilterLogEvents` paginates one page per round trip, so a
+    window fetched as concurrent segments finishes several times sooner (a cold hour of a
+    100k-events-per-hour group went from 21.6s to 8.7s at four).
+    Raising it above four buys nothing today, because each in-flight segment holds one of
+    the four blocking-pool threads until its Parquet write returns, and past eight
+    CloudWatch starts throttling.
+    Lower it to one when you need the account's `FilterLogEvents` quota for something else.
 
 ## Troubleshooting
 

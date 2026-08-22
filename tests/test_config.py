@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from tail_cw.concurrency import DEFAULT_BLOCKING_WORKERS
 from tail_cw.config import (
     CacheConfig,
     PreviewConfig,
@@ -206,6 +207,7 @@ def test_create_default_config_file(tmp_path: Path):
 
     data = tomllib.loads(config_path.read_text(encoding='utf-8'))
     assert 'cache' in data
+    assert data['fetch']['max_concurrent_segments'] == DEFAULT_BLOCKING_WORKERS
     assert 'preview' in data
     assert 'tui' in data
     assert 'trace' in data

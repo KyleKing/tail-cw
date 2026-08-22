@@ -152,8 +152,11 @@ The cost of the dual dispatch tables is bounded because both consume the same AS
 ## Tradeoffs
 
 - Segmenting multiplies the API calls for one window (twelve for an hour).
-    They run one at a time per request, because FilterLogEvents is quota-limited per account
-    and the fan-out across log groups already saturates it
+    That is what makes the window fast rather than slow: `FilterLogEvents` paginates one
+    page
+    per round trip, so the segments run several at a time and a cold hour halves
+    ([ADR 0011](0011-async-aws-io-and-blocking-work.md) carries the measurements and the
+    ceiling)
 - A JSON event's text does not round-trip byte for byte: whitespace, key order, and
     explicit nulls are lost.
     Everything that reads an event sees valid compact JSON, and no field value is lost

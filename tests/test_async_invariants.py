@@ -20,7 +20,7 @@ import pytest
 from tail_cw.aws.events import LogEvent
 from tail_cw.cli import FetchRequest, resolve_parquet_paths
 from tail_cw.concurrency import DEFAULT_BLOCKING_WORKERS, blocking_pool
-from tail_cw.config import CacheConfig, TailCWConfig
+from tail_cw.config import CacheConfig, FetchConfig, TailCWConfig
 
 PACKAGE = Path(__file__).resolve().parent.parent / 'tail_cw'
 NOW = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
@@ -175,8 +175,30 @@ async def test_resolve_parquet_paths_fetches_every_group_concurrently(tmp_path: 
     assert len(paths) == count
 
 
-async def test_segments_of_one_request_are_fetched_one_at_a_time(tmp_path: Path) -> None:
-    """FilterLogEvents is quota-limited per account; the fan-out across groups already saturates it."""
+async def test_segments_of_one_request_overlap(tmp_path: Path) -> None:
+    """FilterLogEvents paginates serially, so an hour walked one segment at a time costs 4x."""
+    barrier = _Barrier(DEFAULT_BLOCKING_WORKERS)
+
+    async def fetch(_client: object, log_group: str, *_args: object, **_kwargs: object) -> AsyncIterator[LogEvent]:
+        await barrier.wait()
+        yield _event(log_group)
+
+    config = TailCWConfig(cache=CacheConfig(cache_dir=tmp_path / 'cache'))
+    with blocking_pool(max_workers=DEFAULT_BLOCKING_WORKERS) as pool:
+        paths = await resolve_parquet_paths(
+            object(),
+            _requests(1, window=timedelta(hours=1)),
+            config,
+            fetch_events=fetch,
+            executor=pool,
+        )
+
+    assert len(paths) > DEFAULT_BLOCKING_WORKERS, 'an hour-long window should split into several segments'
+
+
+async def test_segment_concurrency_stays_inside_its_configured_ceiling(tmp_path: Path) -> None:
+    """Each in-flight segment holds a thread of the blocking pool, so the ceiling has to hold."""
+    ceiling = 2
     active = 0
     peak = 0
 
@@ -190,18 +212,21 @@ async def test_segments_of_one_request_are_fetched_one_at_a_time(tmp_path: Path)
         finally:
             active -= 1
 
-    config = TailCWConfig(cache=CacheConfig(cache_dir=tmp_path / 'cache'))
-    with blocking_pool(max_workers=2) as pool:
+    config = TailCWConfig(
+        cache=CacheConfig(cache_dir=tmp_path / 'cache'),
+        fetch=FetchConfig(max_concurrent_segments=ceiling),
+    )
+    with blocking_pool(max_workers=ceiling) as pool:
         paths = await resolve_parquet_paths(
             object(),
-            _requests(1, window=timedelta(hours=1)),
+            _requests(2, window=timedelta(hours=1)),
             config,
             fetch_events=fetch,
             executor=pool,
         )
 
-    assert len(paths) > 1, 'an hour-long window should split into several segments'
-    assert peak == 1
+    assert len(paths) > ceiling
+    assert peak == ceiling, f'{peak} segments were in flight against a ceiling of {ceiling}'
 
 
 async def test_resolve_parquet_paths_cancels_siblings_when_one_fails(tmp_path: Path) -> None:

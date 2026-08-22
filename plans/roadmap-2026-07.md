@@ -74,8 +74,26 @@ What follows is what they measured, because half the numbers were wrong.
     comment, and the fix was not reused.
     Look for the reference implementation first
 
+### Shipped 2026-08-22, and what it measured
+
+- **a window's segments now overlap.** The cold-fetch cost was assumed to be AWS and
+    checked instead: of a 19.87s hour, 19.73s was spent awaiting `FilterLogEvents` pages,
+    0.13s building records, and the loop never stalled past 28ms.
+    `FilterLogEvents` paginates one page per round trip, and the segments the cache already
+    plans were being walked one at a time under a comment claiming the per-account quota was
+    already saturated.
+    It is not, for a single group.
+    Four concurrent segments take a cold hour from 21.6s to 8.7s end to end, byte for byte
+    identical output, and the ceiling is `[fetch].max_concurrent_segments`
+    ([ADR 0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md))
+
 ### Still open, and worth doing next
 
+- **segment concurrency above four needs its own pool.** Each in-flight segment holds one
+    of the four blocking-pool threads until its write returns, and that pool's width is also
+    the DuckDB thread divisor.
+    Eight concurrent segments measured 2.90s against 4.50s at four, so there is roughly
+    another third to take
 - **cancelling an in-flight fetch.** A two-minute multi-group fetch reports no progress
     and
     the footer offers no way out (heuristic 1 and 3 in

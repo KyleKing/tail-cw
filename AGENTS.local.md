@@ -136,6 +136,11 @@ If you introduce or modify Textual UI code:
         A thread is still required underneath, and hiding the hop makes it easy to lose.
     - Concurrent work uses `asyncio.TaskGroup`, not `asyncio.gather`; `gather` leaves siblings
         running when one fails.
+    - A fetch's fan-out is bounded by one semaphore per command, built inside the loop and
+        shared across every log group, because each in-flight segment holds a blocking-pool
+        thread until its Parquet write returns.
+        `[fetch].max_concurrent_segments` defaults to `DEFAULT_BLOCKING_WORKERS` for that
+        reason; raising it without widening the pool does nothing.
     - Never declare an `asyncio.Semaphore`, `Lock`, or `Event` at module level.
         They bind to the first event loop that touches them.
         Build them inside the running loop.

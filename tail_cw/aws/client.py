@@ -114,7 +114,9 @@ async def fetch_log_events(
         client: An open CloudWatch Logs client, from :meth:`ClientPool.client`.
         log_group_name: CloudWatch log group name to query.
         start_time: Start of time range (inclusive). Must be timezone-aware.
-        end_time: End of time range (inclusive). Must be timezone-aware.
+        end_time: End of time range (exclusive), which is how CloudWatch treats
+            it, so adjacent windows do not double-count a boundary event. Must be
+            timezone-aware.
         filter_pattern: Optional CloudWatch Logs filter pattern for server-side
             filtering. See AWS documentation for filter syntax.
         log_stream_names: Optional list of log stream names to filter. If None,

@@ -85,6 +85,40 @@ callers, and its width is chosen rather than inherited from the CPU count.
 [pola-rs/polars#18718](https://github.com/pola-rs/polars/issues/18718) reports that it
 blocks the event loop, and has been open since September 2024.
 
+### How wide a fetch fans out (added 2026-08-22)
+
+`FilterLogEvents` paginates serially: one `nextToken` at a time, one page per round
+trip.
+Instrumenting a cold hour of `irm-ecs-api-prod` showed where that lands, 108,491 events
+over 33 pages: 19.73s of a 19.87s wall clock was spent awaiting pages, 0.13s building
+records, and the loop never stalled longer than 28ms.
+So the cost is round trips, and nothing about it is CPU or GIL bound.
+
+The window is already cut into segments for caching, and running them concurrently is
+what shortens the wall clock.
+Measured against the same group, splitting one hour into concurrent sub-windows gave
+16.69s serial, 7.90s at two, 4.50s at four, and 2.90s at eight, with the event count
+identical every time and no throttling.
+End to end through `export logs`, writes included, a cold hour went from 21.63s to 8.71s
+at four.
+Past eight it reverses (a second run measured 6.73s at 32 against 3.35s at 16), which
+reads as retry backoff, so the ceiling stays configurable and low.
+
+`[fetch].max_concurrent_segments` defaults to the blocking pool's width, because each
+in-flight segment holds one of its threads from its first page until its Parquet write
+returns.
+Raising it above that width buys nothing without widening the pool, and widening the
+pool
+changes the DuckDB thread divisor in `cpu_budget.py`, so the two numbers are one
+constant
+(`DEFAULT_BLOCKING_WORKERS`) rather than two that can drift.
+Lifting the ceiling further means giving segment writes their own pool, which is
+defensible (they are network-bound, unlike queries) and is not done yet.
+
+The limiter is one semaphore per command, shared across every log group in it, so a
+ten-group fetch cannot open ten times the ceiling.
+It is built inside the running loop rather than at module level, per the rule below.
+
 ### The cancellation contract
 
 Cancelling an async task does not interrupt a thread that task started.
@@ -144,3 +178,7 @@ siblings running when one fails.
     Swallowing it converts a cancelled write into a silently truncated one
 - The Parquet write path is bounded by the four-worker pool rather than by AWS.
     Fetches all start together and the writes queue, which is where the real limit now sits
+- Segment order no longer matches completion order, so anything that needs the window in
+    order has to sort by segment rather than by arrival.
+    `_resolve_into_cache` returns paths in window order for this reason, and a cold hour
+    was checked byte for byte against a serial fetch (106,015 events, identical output)

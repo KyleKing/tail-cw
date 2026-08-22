@@ -8,6 +8,7 @@ details.
 
 from tail_cw.config.config import (
     CacheConfig,
+    FetchConfig,
     InsightsConfig,
     MessageConfig,
     PreviewConfig,
@@ -22,6 +23,7 @@ from tail_cw.config.config import (
 
 __all__ = [
     'CacheConfig',
+    'FetchConfig',
     'InsightsConfig',
     'MessageConfig',
     'PreviewConfig',
