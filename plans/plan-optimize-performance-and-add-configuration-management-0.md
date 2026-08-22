@@ -1,20 +1,51 @@
-I have created the following plan after thorough exploration and analysis of the codebase. Follow the below plan verbatim. Trust the files and references. Do not re-verify what's written in the plan. Explore only when absolutely necessary. First implement all the proposed file changes and then I'll review all the changes together at the end.
+I have created the following plan after thorough exploration and analysis of the
+codebase.
+Follow the below plan verbatim. Trust the files and references.
+Do not re-verify what's written in the plan.
+Explore only when absolutely necessary. First implement all the proposed file changes
+and then I'll review all the changes together at the end.
 
 ### Observations
 
-The project has a solid foundation with Parquet storage (storage.py), TUI with incremental loading (app.py), and dual-backend querying (engine.py). Current hardcoded values: row_group_size=100_000, compression_level=3, chunk_threshold=5000, chunk_size=1000, infer_schema_length=1000. The TUI already uses workers for search and incremental loading. No configuration system exists. The project uses corallium for file utilities, beartype for runtime type checking, and follows strict typing conventions. Tests use fix_test_cache fixture with TEST_TMP_CACHE path.
+The project has a solid foundation with Parquet storage (storage.py), TUI with
+incremental loading (app.py), and dual-backend querying (engine.py).
+Current hardcoded values: row_group_size=100_000, compression_level=3,
+chunk_threshold=5000, chunk_size=1000, infer_schema_length=1000.
+The TUI already uses workers for search and incremental loading.
+No configuration system exists. The project uses corallium for file utilities, beartype
+for runtime type checking, and follows strict typing conventions.
+Tests use fix_test_cache fixture with TEST_TMP_CACHE path.
 
 ### Approach
 
-Create a configuration system using TOML (stdlib `tomllib` for Python 3.11+) with XDG-compliant paths via `platformdirs`. Optimize Parquet writing with configurable row group size and compression. Add progress indicators using Textual's worker message pattern for AWS downloads and cache operations. Enhance DataTable with windowed/paged loading using existing incremental pattern. Leverage Polars' built-in parallelism by providing schema hints and optimizing `scan_ndjson` parameters. All configuration values will have sensible defaults and be optional parameters to maintain backward compatibility.
+Create a configuration system using TOML (stdlib `tomllib` for Python 3.11+) with
+XDG-compliant paths via `platformdirs`.
+Optimize Parquet writing with configurable row group size and compression.
+Add progress indicators using Textual's worker message pattern for AWS downloads and
+cache operations.
+Enhance DataTable with windowed/paged loading using existing incremental pattern.
+Leverage Polars' built-in parallelism by providing schema hints and optimizing
+`scan_ndjson` parameters.
+All configuration values will have sensible defaults and be optional parameters to
+maintain backward compatibility.
 
 ### Reasoning
 
-I explored the codebase structure, examined current hardcoded values (row_group_size=100_000, compression_level=3, chunk_threshold=5000, chunk_size=1000), researched TOML configuration best practices with XDG paths and platformdirs, studied Textual's progress indicator patterns (LoadingIndicator, ProgressBar, worker messages), investigated Polars streaming and parallel JSONL parsing capabilities, and confirmed that the project uses Python >=3.11 with strict typing and functions-over-classes approach. The current implementation already has incremental loading for large datasets and Polars streaming, so optimizations will focus on making these configurable and adding progress feedback.
+I explored the codebase structure, examined current hardcoded values
+(row_group_size=100_000, compression_level=3, chunk_threshold=5000, chunk_size=1000),
+researched TOML configuration best practices with XDG paths and platformdirs, studied
+Textual's progress indicator patterns (LoadingIndicator, ProgressBar, worker messages),
+investigated Polars streaming and parallel JSONL parsing capabilities, and confirmed
+that the project uses Python >=3.11 with strict typing and functions-over-classes
+approach.
+The current implementation already has incremental loading for large datasets and Polars
+streaming, so optimizations will focus on making these configurable and adding progress
+feedback.
 
 ## Mermaid Diagram
 
-sequenceDiagram participant User participant main participant Config participant LogTailApp participant LogCache participant Polars participant Worker
+sequenceDiagram participant User participant main participant Config participant
+LogTailApp participant LogCache participant Polars participant Worker
 
 ```
 User->>main: Run tail-cw
@@ -75,9 +106,13 @@ LogCache-->>User: Cache write complete
 
 Create the configuration module with the following components:
 
-1. **Import statements**: Import `from __future__ import annotations`, `dataclasses.dataclass`, `dataclasses.field`, `pathlib.Path`, `sys`, `platformdirs` for XDG paths.
+1. **Import statements**: Import `from __future__ import annotations`,
+    `dataclasses.dataclass`, `dataclasses.field`, `pathlib.Path`, `sys`, `platformdirs` for
+    XDG paths.
 
-1. **Add platformdirs dependency**: Note that `platformdirs` needs to be added to pyproject.toml dependencies (minimal, widely-used library for cross-platform directory resolution).
+1. **Add platformdirs dependency**: Note that `platformdirs` needs to be added to
+    pyproject.toml dependencies (minimal, widely-used library for cross-platform directory
+    resolution).
 
 1. **CacheConfig dataclass**: Define configuration for cache behavior:
 
@@ -89,7 +124,8 @@ Create the configuration module with the following components:
 
 1. **ParquetConfig dataclass**: Define Parquet writing configuration:
 
-    - `row_group_size: int = 100_000` - Rows per row group (balance between query performance and memory)
+    - `row_group_size: int = 100_000` - Rows per row group (balance between query performance
+        and memory)
     - `compression_level: int = 3` - ZSTD compression level (1-22, 3 is balanced)
     - `infer_schema_length: int = 1000` - Number of rows for schema inference
     - Add docstring with performance notes
@@ -105,7 +141,8 @@ Create the configuration module with the following components:
 
 1. **TraceConfig dataclass**: Define trace ID extraction configuration:
 
-    - `trace_id_fields: list[str]` - Field names to search (default from DEFAULT_TRACE_ID_FIELDS)
+    - `trace_id_fields: list[str]` - Field names to search (default from
+        DEFAULT_TRACE_ID_FIELDS)
     - Use `field(default_factory=...)` for mutable default
     - Add docstring
 
@@ -121,7 +158,8 @@ Create the configuration module with the following components:
 
     - Returns: `Path` - Path to config file (e.g., ~/.config/tail-cw/config.toml)
     - Implementation:
-        - Use `platformdirs.user_config_dir('tail-cw', ensure_exists=True)` to get config directory
+        - Use `platformdirs.user_config_dir('tail-cw', ensure_exists=True)` to get config
+            directory
         - Return `config_dir / 'config.toml'`
     - Add docstring explaining XDG compliance
 
@@ -185,11 +223,14 @@ Create the configuration module with the following components:
     trace_id_fields = ["trace_id", "traceId", "x-trace-id"]
     ```
 
-1. **Type hints**: Ensure all functions have complete type hints compatible with mypy strict mode.
+1. **Type hints**: Ensure all functions have complete type hints compatible with mypy
+    strict mode.
 
-1. **Docstrings**: Follow Google docstring convention with Args, Returns, Examples sections.
+1. **Docstrings**: Follow Google docstring convention with Args, Returns, Examples
+    sections.
 
-1. **Error handling**: Raise specific exceptions (ValueError for invalid config, OSError for file errors) with clear messages.
+1. **Error handling**: Raise specific exceptions (ValueError for invalid config, OSError
+    for file errors) with clear messages.
 
 ### pyproject.toml(MODIFY)
 
@@ -201,9 +242,11 @@ Add `platformdirs` to the project dependencies:
 
 1. Place it after `corallium>=2.0.1` in alphabetical order.
 
-1. No changes needed to dependency-groups since this is a core dependency used by the config module.
+1. No changes needed to dependency-groups since this is a core dependency used by the
+    config module.
 
-Note: `platformdirs` is a minimal, widely-used library (used by pip, virtualenv, etc.) with no dependencies of its own.
+Note: `platformdirs` is a minimal, widely-used library (used by pip, virtualenv, etc.)
+with no dependencies of its own.
 
 ### tail_cw/cache/storage.py(MODIFY)
 
@@ -225,7 +268,8 @@ Update cache storage to accept configuration and support progress callbacks:
 
 1. **Update `write_log_events_to_parquet` implementation**:
 
-    - After writing NDJSON, call progress_callback if provided: `progress_callback(total_events, total_events, 'Converting to Parquet...')`
+    - After writing NDJSON, call progress_callback if provided:
+        `progress_callback(total_events, total_events, 'Converting to Parquet...')`
     - Use the new `row_group_size` and `infer_schema_length` parameters in `sink_parquet` call
     - Update docstring to document new parameters
 
@@ -252,13 +296,16 @@ Update cache storage to accept configuration and support progress callbacks:
     - Store as instance attributes: `self._row_group_size`, `self._infer_schema_length`
     - Update docstring
 
-1. **Update `LogCache.write` to use instance config**: Pass `self._row_group_size` and `self._infer_schema_length` to `write_log_events_to_parquet` if not explicitly provided.
+1. **Update `LogCache.write` to use instance config**: Pass `self._row_group_size` and
+    `self._infer_schema_length` to `write_log_events_to_parquet` if not explicitly provided.
 
-1. **Backward compatibility**: All new parameters are optional with sensible defaults, so existing code continues to work.
+1. **Backward compatibility**: All new parameters are optional with sensible defaults, so
+    existing code continues to work.
 
 1. **Type hints**: Update all signatures with new parameters.
 
-1. **Docstrings**: Update all affected docstrings with new parameter descriptions and examples.
+1. **Docstrings**: Update all affected docstrings with new parameter descriptions and
+    examples.
 
 ### tail_cw/aws/client.py(MODIFY)
 
@@ -284,7 +331,8 @@ Add progress callback support to AWS log fetching:
         - `if progress_callback and event_count % 100 == 0: progress_callback(event_count, f'Fetched {event_count} events...')`
     - Update docstring to document new parameter
 
-1. **Backward compatibility**: The progress_callback parameter is optional, so existing code continues to work.
+1. **Backward compatibility**: The progress_callback parameter is optional, so existing
+    code continues to work.
 
 1. **Type hints**: Update signature with new parameter.
 
@@ -337,7 +385,9 @@ Integrate configuration and add progress indicators:
 
     - `def on_progress_update(self, message: ProgressUpdate) -> None:`
         - Update status label with progress information
-        - Format message based on whether total is known: `f'{message.status} ({message.current}/{message.total})'` or `f'{message.status} ({message.current} events)'`
+        - Format message based on whether total is known:
+            `f'{message.status} ({message.current}/{message.total})'` or
+            `f'{message.status} ({message.current} events)'`
     - Add docstring
 
 1. **Add helper method for posting progress**: Add convenience method:
@@ -356,9 +406,11 @@ Integrate configuration and add progress indicators:
     - Set `self._table.loading = True` at start (already done)
     - Ensure it's set to False after loading completes
 
-1. **Update docstrings**: Update class and method docstrings to mention configuration support.
+1. **Update docstrings**: Update class and method docstrings to mention configuration
+    support.
 
-1. **Backward compatibility**: Config parameter is optional with sensible defaults loaded automatically.
+1. **Backward compatibility**: Config parameter is optional with sensible defaults loaded
+    automatically.
 
 1. **Type hints**: Update all signatures with new parameters.
 
@@ -374,7 +426,8 @@ Update entry point to load configuration:
     - Pass config to LogTailApp: `app = LogTailApp(config=config)`
     - Update docstring to mention configuration loading
 
-1. **Add comment**: Note that CLI argument parsing for config path override will be added in future (keep TODO comment).
+1. **Add comment**: Note that CLI argument parsing for config path override will be added
+    in future (keep TODO comment).
 
 1. **Error handling**: Wrap config loading in try-except to catch and report config errors:
 
@@ -398,7 +451,8 @@ Create package initialization file to export the public config API:
 
     - `['TailCWConfig', 'CacheConfig', 'ParquetConfig', 'TUIConfig', 'TraceConfig', 'load_config', 'get_default_config_path', 'get_default_cache_dir', 'create_default_config_file']`
 
-Note: The actual implementation will be in `tail_cw/config/config.py` to keep the module organized.
+Note: The actual implementation will be in `tail_cw/config/config.py` to keep the module
+organized.
 
 ### tail_cw/config(NEW)
 
@@ -406,9 +460,14 @@ Create the config subdirectory under tail_cw/ to house configuration-related mod
 
 ### tail_cw/config/config.py(NEW)
 
-This is the actual implementation file for the configuration system. The content is the same as described in the first file change for `/Users/kyleking/Developer/kyleking/tail-cw/tail_cw/config.py`, but placed in the proper module structure as `tail_cw/config/config.py`.
+This is the actual implementation file for the configuration system.
+The content is the same as described in the first file change for
+`/Users/kyleking/Developer/kyleking/tail-cw/tail_cw/config.py`, but placed in the proper
+module structure as `tail_cw/config/config.py`.
 
-All implementation details remain the same: dataclasses for configuration sections, TOML loading with tomllib, XDG path resolution with platformdirs, default config file creation, and comprehensive error handling.
+All implementation details remain the same: dataclasses for configuration sections, TOML
+loading with tomllib, XDG path resolution with platformdirs, default config file
+creation, and comprehensive error handling.
 
 ### tests/test_config.py(NEW)
 
@@ -418,7 +477,8 @@ References:
 
 Create comprehensive unit tests for the configuration module:
 
-1. **Import statements**: Import `pytest`, `Path` from pathlib, `tempfile`, all config classes and functions from `tail_cw.config`.
+1. **Import statements**: Import `pytest`, `Path` from pathlib, `tempfile`, all config
+    classes and functions from `tail_cw.config`.
 
 1. **Test `test_default_config_values`**: Test default configuration:
 
@@ -522,26 +582,30 @@ Create comprehensive unit tests for the configuration module:
 
 1. **Test organization**: Group related tests with descriptive names.
 
-1. **Follow project conventions**: No type annotations on test functions, use assert statements.
+1. **Follow project conventions**: No type annotations on test functions, use assert
+    statements.
 
 ### tests/test_cache.py(MODIFY)
 
 Add tests for new cache configuration and progress callback features:
 
-1. **Test `test_write_log_events_to_parquet_custom_row_group_size`**: Test custom row group size:
+1. **Test `test_write_log_events_to_parquet_custom_row_group_size`**: Test custom row group
+    size:
 
     - Create events
     - Write with `row_group_size=50_000`
     - Verify Parquet file is created
     - Read back and verify data integrity
 
-1. **Test `test_write_log_events_to_parquet_custom_infer_schema_length`**: Test custom schema inference:
+1. **Test `test_write_log_events_to_parquet_custom_infer_schema_length`**: Test custom
+    schema inference:
 
     - Create events with varied schema
     - Write with `infer_schema_length=100`
     - Verify Parquet file is created
 
-1. **Test `test_write_log_events_to_parquet_with_progress_callback`**: Test progress reporting:
+1. **Test `test_write_log_events_to_parquet_with_progress_callback`**: Test progress
+    reporting:
 
     - Create progress tracking list
     - Define callback that appends to list
@@ -562,9 +626,11 @@ Add tests for new cache configuration and progress callback features:
     - Write events with callback
     - Assert callback was called
 
-1. **Update existing tests**: Ensure existing tests still pass with new optional parameters.
+1. **Update existing tests**: Ensure existing tests still pass with new optional
+    parameters.
 
-1. **Follow project conventions**: No type annotations on test functions, use assert statements.
+1. **Follow project conventions**: No type annotations on test functions, use assert
+    statements.
 
 ### tests/test_aws_client.py(MODIFY)
 
@@ -592,7 +658,8 @@ Add tests for progress callback feature:
 
 1. **Update existing tests**: Ensure existing tests still pass with new optional parameter.
 
-1. **Follow project conventions**: No type annotations on test functions, use assert statements.
+1. **Follow project conventions**: No type annotations on test functions, use assert
+    statements.
 
 ### tests/test_tui_app.py(MODIFY)
 
@@ -639,7 +706,8 @@ Add tests for configuration integration and progress indicators:
 
 1. **Update existing tests**: Ensure existing tests still pass with config changes.
 
-1. **Follow project conventions**: No type annotations on test functions, use assert statements.
+1. **Follow project conventions**: No type annotations on test functions, use assert
+    statements.
 
 ### tests/test_main.py(MODIFY)
 
@@ -663,7 +731,8 @@ Add tests for configuration loading in main entry point:
 
 1. **Update existing tests**: Ensure existing tests still pass with config loading.
 
-1. **Follow project conventions**: No type annotations on test functions, use assert statements.
+1. **Follow project conventions**: No type annotations on test functions, use assert
+    statements.
 
 ### docs/docs/CONFIGURATION.md(NEW)
 

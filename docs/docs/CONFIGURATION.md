@@ -1,6 +1,9 @@
 # Configuration Guide
 
-This guide explains how to customise tail-cw using its TOML-based configuration system. The application automatically loads configuration from an XDG-compliant location on start-up, allowing you to tune performance and user experience without modifying source code.
+This guide explains how to customise tail-cw using its TOML-based configuration system.
+The application automatically loads configuration from an XDG-compliant location on
+start-up, allowing you to tune performance and user experience without modifying source
+code.
 
 ## Overview
 
@@ -16,9 +19,13 @@ This guide explains how to customise tail-cw using its TOML-based configuration 
 | Linux / macOS | `~/.config/tail-cw/config.toml` |
 | Windows       | `%APPDATA%\tail-cw\config.toml` |
 
-Use `tail_cw.config.get_default_config_path()` to resolve the exact location on the current platform. The helper will create the containing directory if it does not exist.
+Use `tail_cw.config.get_default_config_path()` to resolve the exact location on the
+current platform.
+The helper will create the containing directory if it does not exist.
 
-Cache files created by the application are stored separately in the XDG cache directory (`~/.cache/tail-cw` on Linux/macOS, `%LOCALAPPDATA%\tail-cw` on Windows). Retrieve this location programmatically via `tail_cw.config.get_default_cache_dir()`.
+Cache files created by the application are stored separately in the XDG cache directory
+(`~/.cache/tail-cw` on Linux/macOS, `%LOCALAPPDATA%\tail-cw` on Windows).
+Retrieve this location programmatically via `tail_cw.config.get_default_cache_dir()`.
 
 ## Configuration Sections
 
@@ -59,16 +66,25 @@ trace_id_fields = ["trace_id", "traceId", "context.trace_id"]
 
 ## Creating a Configuration File
 
-1. Run `from tail_cw.config import create_default_config_file; create_default_config_file()` in a Python REPL to scaffold a documented template in the default location.
-1. Alternatively, copy the example configuration above into the default path and adjust values as needed.
+1. Run
+    `from tail_cw.config import create_default_config_file; create_default_config_file()` in
+    a Python REPL to scaffold a documented template in the default location.
+1. Alternatively, copy the example configuration above into the default path and adjust
+    values as needed.
 
-The helper performs an atomic write and sets restrictive permissions on POSIX systems to keep credentials and preferences private.
+The helper performs an atomic write and sets restrictive permissions on POSIX systems to
+keep credentials and preferences private.
 
 ## Presets and Recents
 
-A preset names a set of log groups you open together. Reference it with `@name` anywhere a log group pattern is accepted, so `tail-cw tail @api` and the shell's `:logs @api` both expand to the configured list. Naming a preset that does not exist is an error rather than an empty selection: the CLI writes the available names to stderr and exits 2, and the TUI warns.
+A preset names a set of log groups you open together.
+Reference it with `@name` anywhere a log group pattern is accepted, so
+`tail-cw tail @api` and the shell's `:logs @api` both expand to the configured list.
+Naming a preset that does not exist is an error rather than an empty selection: the CLI
+writes the available names to stderr and exits 2, and the TUI warns.
 
-Group selections are also remembered per AWS profile, most recent first, in `recents.json` under the user data directory:
+Group selections are also remembered per AWS profile, most recent first, in
+`recents.json` under the user data directory:
 
 | Platform | Default path                                         |
 | -------- | ---------------------------------------------------- |
@@ -76,25 +92,49 @@ Group selections are also remembered per AWS profile, most recent first, in `rec
 | macOS    | `~/Library/Application Support/tail-cw/recents.json` |
 | Windows  | `%LOCALAPPDATA%\tail-cw\recents.json`                |
 
-The browser sorts remembered groups to the top so the ones you actually use surface first. Recents are kept per profile because log groups belong to an account. The file is a convenience only: deleting it loses the ordering and nothing else, a corrupt file is ignored rather than failing start-up, and reading history never creates the directory.
+The browser sorts remembered groups to the top so the ones you actually use surface
+first.
+Recents are kept per profile because log groups belong to an account.
+The file is a convenience only: deleting it loses the ordering and nothing else, a
+corrupt file is ignored rather than failing start-up, and reading history never creates
+the directory.
 
 ## Performance Tuning
 
-- **Row group size**: larger values improve Parquet scan throughput at the cost of additional memory during writes. Reduce the value when writing on memory constrained machines.
-- **Compression level**: higher ZSTD levels produce smaller files but increase CPU usage. Level 3 is a balanced default; try values between 1 and 6 when iterating.
-- **Schema inference length**: increase when NDJSON payloads contain highly variable structures so late fields are discovered during conversion.
-- **TUI chunk threshold / size**: lower thresholds trigger incremental loading sooner, which can help when working with deep scrollback buffers.
-- **Live buffer limit**: bounds memory during `tail-cw tail` sessions; older events are evicted from the in-memory ring buffer once the limit is reached. Increase it for longer in-session scrollback, decrease it on memory constrained machines.
-- **Search limit**: limit the number of rows collected from Parquet queries to keep the interface responsive when exploring large datasets.
+- **Row group size**: larger values improve Parquet scan throughput at the cost of
+    additional memory during writes.
+    Reduce the value when writing on memory constrained machines.
+- **Compression level**: higher ZSTD levels produce smaller files but increase CPU usage.
+    Level 3 is a balanced default; try values between 1 and 6 when iterating.
+- **Schema inference length**: increase when NDJSON payloads contain highly variable
+    structures so late fields are discovered during conversion.
+- **TUI chunk threshold / size**: lower thresholds trigger incremental loading sooner,
+    which can help when working with deep scrollback buffers.
+- **Live buffer limit**: bounds memory during `tail-cw tail` sessions; older events are
+    evicted from the in-memory ring buffer once the limit is reached.
+    Increase it for longer in-session scrollback, decrease it on memory constrained
+    machines.
+- **Search limit**: limit the number of rows collected from Parquet queries to keep the
+    interface responsive when exploring large datasets.
 
 ## Troubleshooting
 
-- **Invalid TOML**: errors indicate a parsing problem. Validate the file with a TOML linter or remove recent edits.
-- **Permission errors**: ensure the user running tail-cw can read the config directory and write to the cache directory.
-- **Cache directory missing**: override `cache_dir` in the `[cache]` section or verify that `get_default_cache_dir()` points to a writable location.
-- **Group previews cost too many API calls**: each preview is one `FilterLogEvents` call per group, cached for `ttl_seconds`. Raise the TTL to walk a long list more cheaply, or lower `sample_limit` to read less per group.
+- **Invalid TOML**: errors indicate a parsing problem.
+    Validate the file with a TOML linter or remove recent edits.
+- **Permission errors**: ensure the user running tail-cw can read the config directory and
+    write to the cache directory.
+- **Cache directory missing**: override `cache_dir` in the `[cache]` section or verify
+    that `get_default_cache_dir()` points to a writable location.
+- **Group previews cost too many API calls**: each preview is one `FilterLogEvents` call
+    per group, cached for `ttl_seconds`.
+    Raise the TTL to walk a long list more cheaply, or lower `sample_limit` to read less per
+    group.
 
 ## Advanced Topics
 
-- **Environment overrides**: future releases may allow environment variables to override individual settings for temporary tuning.
-- **Profiles**: support for multiple configuration profiles (e.g. per project) is under consideration. Until then, script switching by copying template files into place before launching tail-cw.
+- **Environment overrides**: future releases may allow environment variables to override
+    individual settings for temporary tuning.
+- **Profiles**: support for multiple configuration profiles (e.g. per project) is under
+    consideration.
+    Until then, script switching by copying template files into place before launching
+    tail-cw.
