@@ -50,7 +50,13 @@ and [AGENTS.md](AGENTS.md) for where to start.
     A week of one busy group counted per day takes about 7 seconds and scans ~1 GB, against
     roughly ten minutes to pull the same week through `FilterLogEvents`.
     Insights bills per gigabyte scanned where `FilterLogEvents` does not, so nothing routes
-    through it unless you ask, and every run prints what it scanned
+    through it unless you ask, and every run prints what it scanned.
+    A scan estimate comes first, from stored bytes over retention, and a query estimated
+    above `[insights].confirm_above_gb` needs `--yes` in the CLI or a keypress in the TUI
+- `:trace <id>` in the TUI and `tail-cw export trace <id>` both take an identifier pasted
+    out of an alarm, collect its spans across every selected group, and either open the
+    trace view or write OTLP JSON for a viewer that draws waterfalls
+    ([ADR 0012](docs/docs/adr/0012-export-traces-instead-of-drawing-them.md))
 - `tail-cw export summary` rolls many groups up into the recurring errors and warnings
     behind them, counted per hour or per day and written as markdown.
     It keys on the message body rather than the whole record, then fuzzy-merges shapes
@@ -166,6 +172,7 @@ uv run tail-cw export tail /aws/lambda/my-fn             # NDJSON, flushed per l
 uv run tail-cw export groups '/aws/lambda/*'             # NDJSON group metadata
 uv run tail-cw export summary '/aws/*' --start 1h        # markdown rollup of errors and warnings
 uv run tail-cw export insights '/aws/*' --query '...'    # Logs Insights, billed per GB scanned
+uv run tail-cw export trace 1-68a1f2c3-4d5e '/aws/ecs/*' # one trace as OTLP JSON
 uv run tail-cw export alarms irm-prod --history           # alarms with their firing history
 uv run tail-cw export metrics --namespace AWS/ECS --metric MemoryUtilization --dimension ServiceName=svc
 uv run tail-cw export dashboards                         # NDJSON dashboard list

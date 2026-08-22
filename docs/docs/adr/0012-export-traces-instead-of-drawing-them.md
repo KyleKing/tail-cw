@@ -121,6 +121,24 @@ This generalizes ADR 0010 from query features to visualizations.
 That ADR sends query work to Logs Insights rather than reimplementing it; this one sends
 rendering work to OTel viewers on the same reasoning.
 
+## What shipped
+
+`tail-cw export trace <id>` and `:trace <id>` (2026-08-22).
+Two details the record did
+not anticipate:
+
+- an X-Ray id is a format version then 32 hex digits (`1-68a1f2c3-4d5e…`), so the version
+    is dropped rather than truncated off the other end, which would name a different trace
+- OTLP rejects a span with no id and most of our lines carry none, so a missing span id is
+    derived from the event's group, stream, timestamp, and body.
+    Two exports of one window therefore agree, and no line borrows another's identity
+
+The span interval follows the record's reasoning: a service logs when work finishes, so
+a
+span covers `[timestamp - duration, timestamp]` where the record names a duration and is
+instantaneous where it does not.
+Nothing is invented to make a bar wider.
+
 ## Consequences
 
 - the four `claude/*` branches are closed.

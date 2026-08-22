@@ -70,6 +70,7 @@ ScreenFactory = Callable[[NavTarget], 'ShellScreen']
 MAX_SELECTED_GROUPS = 10
 MAX_LABEL_CHARS = 32
 
+_REPORT_COMMANDS = {'alarms': 'alarms', 'history': 'history', 'rollup': 'summary'}
 _RANGE_CHOICES = ('15m', '1h', '3h', '6h', '12h', '1d')
 _DURATION_UNITS = {'m': 'minutes', 'h': 'hours', 'd': 'days'}
 _MIN_DURATION_LENGTH = 2
@@ -128,6 +129,7 @@ def _global_commands() -> dict[str, ShellCommand]:
         'rollup': ShellCommand('Rank recurring patterns in the selected groups'),
         'range': ShellCommand('Set the time window ending now', _RANGE_CHOICES),
         'tail': ShellCommand('Stream the selected groups live', ('<group>',)),
+        'trace': ShellCommand('Open a trace by id across the selected groups', ('<trace>',)),
         'alarms': ShellCommand('Rank alarms by how often they changed state'),
     }
 
@@ -417,6 +419,9 @@ class TailCWApp(App[None]):
                 self.notify(f'Unknown command: {name}', severity='warning')
 
     def _run_navigation_command(self, name: str, argument: str) -> bool:
+        if (report := _REPORT_COMMANDS.get(name)) is not None:
+            self.open_report(report)
+            return True
         match name:
             case 'groups':
                 self.goto(NavTarget(kind=ViewKind.GROUPS, label='groups'))
@@ -424,16 +429,12 @@ class TailCWApp(App[None]):
                 self.goto(NavTarget(kind=ViewKind.DASHBOARDS, label='dashboards'))
             case 'dash':
                 self._command_dash(argument)
-            case 'rollup':
-                self.open_report('summary')
-            case 'alarms':
-                self.open_report('alarms')
-            case 'history':
-                self.open_report('history')
             case 'insights':
                 self._command_insights(argument)
             case 'logs':
                 self._command_logs(argument, live=False)
+            case 'trace':
+                self._command_trace(argument)
             case 'tail':
                 self._command_logs(argument, live=True)
             case _:
@@ -453,6 +454,25 @@ class TailCWApp(App[None]):
             self.notify('Select a group first, or name one: :logs <group>', severity='warning')
             return
         self.open_logs(groups, live=live)
+
+    def _command_trace(self, argument: str) -> None:
+        """Open a trace pasted from an alarm, which is where an investigation starts."""
+        trace_id = argument.strip()
+        if not trace_id:
+            self.notify('Usage: :trace <id>', severity='warning')
+            return
+        groups = list(self.session.selected_groups)
+        if not groups:
+            self.notify('Select the groups the trace touched first', severity='warning')
+            return
+        self.goto(
+            NavTarget(
+                kind=ViewKind.LOGS,
+                label=f'trace {trace_id[:MAX_LABEL_CHARS]}',
+                payload=tuple(groups),
+                argument=trace_id,
+            ),
+        )
 
     def open_report(self, kind: str, *argument: str) -> None:
         """Open one of the aggregation reports over the shared window.

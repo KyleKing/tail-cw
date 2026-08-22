@@ -1216,6 +1216,43 @@ def test_run_cli_export_summary_names_the_groups_it_capped(tmp_path, capsys, mon
     assert 'not fetched: /aws/lambda/two' in capsys.readouterr().err
 
 
+def test_run_cli_export_trace_writes_otlp_for_the_spans_it_found(tmp_path, capsys, monkeypatch):
+    trace_id = '1-68a1f2c3-4d5e6f708192a3b4c5d6e7f8'
+    _install_groups(monkeypatch, ['/aws/lambda/one', '/aws/lambda/two'])
+    fetcher = _SeverityFetcher(
+        {
+            '/aws/lambda/one': [f'{{"trace_id":"{trace_id}","service":"api","event":"in","duration_ms":12}}'],
+            '/aws/lambda/two': [f'{{"trace_id":"{trace_id}","service":"payments","level":"error","event":"boom"}}'],
+        },
+    )
+    config = str(_write_config_file(tmp_path))
+    argv = ['export', 'trace', trace_id, '/aws/lambda/*', '--start', '2m', '--config', config]
+
+    result = run_cli(argv, None, fetch_events=fetcher, is_tty=False)
+
+    captured = capsys.readouterr()
+    assert result == 0
+    document = json.loads(captured.out)
+    services = {
+        attribute['value']['stringValue']
+        for resource in document['resourceSpans']
+        for attribute in resource['resource']['attributes']
+    }
+    assert services == {'api', 'payments'}
+    assert 'first error in payments' in captured.err
+
+
+def test_run_cli_export_trace_says_so_when_the_trace_is_not_in_the_window(tmp_path, capsys, monkeypatch):
+    _install_groups(monkeypatch, ['/aws/lambda/one'])
+    fetcher = _SeverityFetcher({'/aws/lambda/one': ['{"trace_id":"other","event":"in"}']})
+    argv = ['export', 'trace', 'missing-id', '--start', '2m', '--config', str(_write_config_file(tmp_path))]
+
+    result = run_cli(argv, None, fetch_events=fetcher, is_tty=False)
+
+    assert result == 1
+    assert 'has no spans' in capsys.readouterr().err
+
+
 def test_run_cli_export_insights_writes_rows_and_reports_scanned_volume(tmp_path, capsys, monkeypatch):
     _install_groups(monkeypatch, ['/aws/lambda/one', '/other'])
     captured: dict[str, object] = {}

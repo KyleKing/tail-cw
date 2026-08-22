@@ -22,7 +22,11 @@ def build_screen(target: NavTarget) -> ShellScreen:
         case ViewKind.GROUPS:
             return GroupsScreen()
         case ViewKind.LOGS:
-            return LogsScreen(list(target.payload), live=target.label.startswith('tail'))
+            return LogsScreen(
+                list(target.payload),
+                live=target.label.startswith('tail'),
+                trace_id=target.argument or None,
+            )
         case ViewKind.DASHBOARDS:
             return DashboardsScreen()
         case ViewKind.DASHBOARD:

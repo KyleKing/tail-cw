@@ -121,11 +121,16 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         Binding('shift+t', 'show_trace_for_selected', 'Show Trace', show=True),
     ]
 
-    def __init__(self, log_groups: Sequence[str], *, live: bool = False) -> None:
-        """Open the view over the given groups, streaming when ``live`` is set."""
+    def __init__(self, log_groups: Sequence[str], *, live: bool = False, trace_id: str | None = None) -> None:
+        """Open the view over the given groups, streaming when ``live`` is set.
+
+        ``trace_id`` opens the trace view over that id as soon as the window is
+        read, which is how an id pasted out of an alarm reaches a trace.
+        """
         super().__init__()
         self._log_groups: list[str] = list(log_groups)
         self._live_mode = live
+        self._pending_trace_id = trace_id
         self._log_events: list[LogEvent] = []
         self._all_events: list[LogEvent] = []
         self._table: DataTable[Any] | None = None
@@ -195,20 +200,32 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         """Add the log-specific ``:`` commands."""
         return {
             'live': ShellCommand('Toggle between the historical window and a live stream'),
-            'trace': ShellCommand('Open the trace view over the loaded events'),
+            'trace': ShellCommand('Open the trace view, over one id or the whole window', ('<trace>',)),
         }
 
     def run_view_command(self, name: str, argument: str) -> bool:
         """Run ``:live`` or ``:trace``, leaving anything else to the shell."""
-        del argument
         match name:
             case 'live':
                 self.action_toggle_live()
             case 'trace':
-                self.action_toggle_trace_view()
+                self.show_trace(argument.strip() or None)
             case _:
                 return False
         return True
+
+    def show_trace(self, trace_id: str | None) -> None:
+        """Open the trace view over one id, or over every trace in the window."""
+        if not self._parquet_paths:
+            self.notify('Trace view requires Parquet data source', severity='warning')
+            return
+        self.run_worker(self._open_trace_view(trace_id), name='traces', group='traces', exclusive=True)
+
+    def _open_pending_trace(self) -> None:
+        if self._pending_trace_id is None:
+            return
+        trace_id, self._pending_trace_id = self._pending_trace_id, None
+        self.show_trace(trace_id)
 
     def nav_siblings(self) -> list[NavTarget]:
         """One target per selected group, so ``[`` and ``]`` cycle groups.
@@ -307,6 +324,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._all_events = events.copy()
         self._load_log_events(events)
         self._update_status(f'Loaded {len(events)} events (showing first {min(len(events), initial_limit)})')
+        self._open_pending_trace()
 
     def load_events(self, events: list[LogEvent], parquet_paths: Sequence[Path] | None = None) -> None:
         """Replace the displayed events, optionally pointing search at new files."""
@@ -562,10 +580,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
 
     def action_toggle_trace_view(self) -> None:
         """Open the trace view over every trace in the loaded data."""
-        if not self._parquet_paths:
-            self.notify('Trace view requires Parquet data source', severity='warning')
-            return
-        self.run_worker(self._open_trace_view(None), name='traces', group='traces', exclusive=True)
+        self.show_trace(None)
 
     def action_show_trace_for_selected(self) -> None:
         """Open the trace view for the selected event's trace."""
@@ -583,7 +598,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             self.notify('No trace ID found in selected event', severity='information')
             return
 
-        self.run_worker(self._open_trace_view(trace_id), name='traces', group='traces', exclusive=True)
+        self.show_trace(trace_id)
 
     async def _open_trace_view(self, trace_id: str | None) -> None:
         """Group the loaded Parquet windows into traces, then show them.

@@ -292,6 +292,30 @@ async def test_view_switching_commands(command: str, expected: ViewKind):
         assert app.nav.stack[-1].kind is expected
 
 
+async def test_trace_command_opens_the_selected_groups_on_that_id():
+    """An id pasted out of an alarm is where a real investigation starts."""
+    app = _app(session=_session(selected_groups=['/aws/lambda/api']))
+    async with running(app) as _pilot:
+        screen = app.screen
+        assert isinstance(screen, ShellScreen)
+        app.run_command(screen, 'trace 1-68a1f2c3-4d5e6f708192a3b4c5d6e7f8')
+
+        target = app.nav.stack[-1]
+        assert target.kind is ViewKind.LOGS
+        assert target.argument == '1-68a1f2c3-4d5e6f708192a3b4c5d6e7f8'
+        assert target.payload == ('/aws/lambda/api',)
+
+
+@pytest.mark.parametrize('command', ['trace', 'trace 1-abc'])
+async def test_trace_command_needs_both_an_id_and_a_selection(command: str):
+    app = _app(session=_session(selected_groups=[]))
+    async with running(app) as _pilot:
+        screen = app.screen
+        assert isinstance(screen, ShellScreen)
+        app.run_command(screen, command)
+        assert len(app.nav.stack) == 1
+
+
 async def test_dash_command_without_a_name_is_refused():
     """`:dash` needs a dashboard name."""
     app = _app()

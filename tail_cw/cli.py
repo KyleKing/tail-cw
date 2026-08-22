@@ -56,10 +56,12 @@ from tail_cw.demo import demo_dashboard
 from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.fuzzy import DEFAULT_SIMILARITY
+from tail_cw.query.otlp import trace_error_summary, trace_groups_to_otlp
 from tail_cw.query.parser import FilterNode, parse_filter_pattern
 from tail_cw.query.report import render_alarm_markdown, render_markdown, render_rows_markdown
 from tail_cw.query.rollup import DEFAULT_PATTERN_LIMIT, Granularity, RollupReport, roll_up
 from tail_cw.query.severity import Severity
+from tail_cw.query.trace import query_traces_from_parquet_files
 
 FetchEvents = Callable[..., AsyncIterator[LogEvent]]
 StreamEvents = Callable[..., AsyncIterator[LogEvent]]
@@ -252,6 +254,9 @@ def _add_export_parsers(export: argparse.ArgumentParser) -> None:
     _configure_insights(
         export_sub.add_parser('insights', help='Run a CloudWatch Logs Insights query (billed per GB scanned).')
     )
+    _configure_trace(
+        export_sub.add_parser('trace', help='Write one trace as OTLP JSON, for a viewer that draws waterfalls.'),
+    )
     _configure_alarms(export_sub.add_parser('alarms', help='Write metric alarms, and their firing history, as NDJSON.'))
     _configure_metrics(export_sub.add_parser('metrics', help='Write metric datapoints as NDJSON.'))
     _configure_dashboards(export_sub.add_parser('dashboards', help='Write the account dashboard list as NDJSON.'))
@@ -327,6 +332,20 @@ def _configure_summary(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=DEFAULT_SIMILARITY,
         help=f'Fuzzy merge threshold for near-identical shapes, 0 to disable (default: {DEFAULT_SIMILARITY})',
+    )
+    parser.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
+
+
+def _configure_trace(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('trace_id', help='Trace identifier to collect spans for')
+    parser.add_argument('patterns', nargs='*', help='Log group names or glob patterns (omit for every group)')
+    _add_aws_flags(parser)
+    _add_window_flags(parser, default_start=DEFAULT_WINDOW)
+    parser.add_argument(
+        '--max-groups',
+        type=int,
+        default=DEFAULT_SUMMARY_MAX_GROUPS,
+        help=f'Cap on groups read (default: {DEFAULT_SUMMARY_MAX_GROUPS})',
     )
     parser.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
 
@@ -1117,6 +1136,69 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
     return 0
 
 
+async def _export_trace(
+    pool: ClientProvider,
+    args: argparse.Namespace,
+    now: datetime,
+    *,
+    fetch_events: FetchEvents | None,
+    executor: ThreadPoolExecutor,
+) -> int:
+    """Collect one trace across every matching group and write it as OTLP JSON.
+
+    A trace spans services, so every group is read together; grouping is
+    blocking DuckDB work and runs on the pool.
+    """
+    try:
+        start_time, end_time = _window_from_args(args, now)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+    config = _load_config_or_report(args.config_path)
+    if config is None:
+        return 1
+    logs = await pool.client('logs')
+    names = [group.name for group in await _resolve_summary_groups(logs, args.patterns, config.presets)]
+    if not names:
+        sys.stderr.write('No log groups matched\n')
+        return 1
+    names = names[: args.max_groups]
+    paths = await resolve_parquet_paths(
+        logs,
+        [
+            FetchRequest(
+                log_group=name,
+                start_time=start_time,
+                end_time=end_time,
+                profile=args.profile,
+                region=args.region,
+            )
+            for name in names
+        ],
+        config,
+        now=now,
+        use_cache=not args.no_cache,
+        fetch_events=fetch_events,
+        executor=executor,
+    )
+    groups = await run_blocking(
+        executor,
+        lambda: query_traces_from_parquet_files(
+            paths,
+            trace_id=args.trace_id,
+            trace_id_fields=list(config.trace.trace_id_fields),
+        ),
+    )
+    if not groups:
+        sys.stderr.write(f'Trace {args.trace_id} has no spans in {len(paths)} of {len(names)} groups\n')
+        return 1
+    for group in groups:
+        sys.stderr.write(f'{trace_error_summary(group)}\n')
+    json.dump(trace_groups_to_otlp(groups), sys.stdout)
+    sys.stdout.write('\n')
+    return 0
+
+
 def _insights_preflight(
     groups: Sequence[LogGroupInfo],
     args: argparse.Namespace,
@@ -1340,6 +1422,7 @@ async def _dispatch_export(
         'groups': lambda: _export_groups(pool, args),
         'summary': lambda: _export_summary(pool, args, now, fetch_events=fetch_events, executor=executor),
         'insights': lambda: _export_insights(pool, args, now),
+        'trace': lambda: _export_trace(pool, args, now, fetch_events=fetch_events, executor=executor),
         'alarms': lambda: _export_alarms(pool, args, now),
         'metrics': lambda: _export_metrics(pool, args, now),
         'dashboards': lambda: _export_dashboards(pool, args),

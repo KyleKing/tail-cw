@@ -100,10 +100,11 @@ def _make_app(
     config: TailCWConfig | None = None,
     services: ShellServices | None = None,
     session: Session | None = None,
+    trace_id: str = '',
 ) -> TailCWApp:
     """Build a shell whose opening view is the log screen over ``log_groups``."""
     label = f'{"tail" if live else "logs"} {log_groups[0] if len(log_groups) == 1 else f"{len(log_groups)} groups"}'
-    target = NavTarget(kind=ViewKind.LOGS, label=label, payload=tuple(log_groups))
+    target = NavTarget(kind=ViewKind.LOGS, label=label, payload=tuple(log_groups), argument=trace_id)
     return TailCWApp(
         config if config is not None else TailCWConfig(),
         session if session is not None else _session(selected_groups=list(log_groups)),
@@ -1015,6 +1016,20 @@ async def test_toggle_trace_view(tmp_path: Path):
         await app.workers.wait_for_complete()
         await pilot.pause()
         await pilot.press('t')
+        await pilot.pause()
+
+        assert isinstance(app.screen, TraceViewerScreen)
+
+
+@pytest.mark.asyncio
+async def test_opening_on_a_trace_id_lands_in_the_trace_view(tmp_path: Path):
+    """`:trace <id>` opens the log window and goes straight to that trace."""
+    parquet_path = tmp_path / 'logs.parquet'
+    trace_ids = _create_parquet_with_traces(parquet_path, trace_count=2)
+    app = _make_app(services=_resolving_to([parquet_path]), trace_id=trace_ids[0])
+
+    async with running(app) as pilot:
+        await app.workers.wait_for_complete()
         await pilot.pause()
 
         assert isinstance(app.screen, TraceViewerScreen)

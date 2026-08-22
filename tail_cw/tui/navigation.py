@@ -35,11 +35,14 @@ class NavTarget:
         label: Breadcrumb text for the target.
         payload: View-specific arguments, such as selected log groups or a
             dashboard name.
+        argument: One view-specific value that is not part of the payload list,
+            such as the trace id a log view opens on.
     """
 
     kind: ViewKind
     label: str
     payload: tuple[str, ...] = ()
+    argument: str = ''
 
 
 @dataclass(frozen=True)
