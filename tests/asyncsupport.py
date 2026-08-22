@@ -9,27 +9,25 @@ were while returning what the service layer awaits.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
-from typing import Any, TypeVar
-
-T = TypeVar('T')
+from typing import Any
 
 
-async def ready(value: T) -> T:
+async def ready[T](value: T) -> T:
     """Present an already-computed value as an awaitable."""
     return value
 
 
-def returns(value: T) -> Callable[..., Awaitable[T]]:
+def returns[T](value: T) -> Callable[..., Awaitable[T]]:
     """Build a service that awaits to ``value``, whatever arguments it is given."""
     return lambda *_args, **_kwargs: ready(value)
 
 
-def calls(work: Callable[..., T]) -> Callable[..., Awaitable[T]]:
+def calls[T](work: Callable[..., T]) -> Callable[..., Awaitable[T]]:
     """Build a service that runs a sync callable and awaits to its result."""
     return lambda *args, **kwargs: ready(work(*args, **kwargs))
 
 
-def streams(items: Iterable[T]) -> Callable[..., AsyncIterator[T]]:
+def streams[T](items: Iterable[T]) -> Callable[..., AsyncIterator[T]]:
     """Build a live-stream service that yields ``items`` then ends."""
 
     async def factory(*_args: Any, **_kwargs: Any) -> AsyncIterator[T]:
@@ -48,7 +46,7 @@ def raises(error: BaseException) -> Callable[..., Awaitable[Any]]:
     return factory
 
 
-def stream_raises(error: BaseException, *, after: Iterable[T] = ()) -> Callable[..., AsyncIterator[T]]:
+def stream_raises[T](error: BaseException, *, after: Iterable[T] = ()) -> Callable[..., AsyncIterator[T]]:
     """Build a live-stream service that yields ``after`` and then fails."""
 
     async def factory(*_args: Any, **_kwargs: Any) -> AsyncIterator[T]:

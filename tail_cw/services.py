@@ -85,7 +85,7 @@ def _target_label(seed: ShellSeed) -> str:
     return f'{len(seed.targets)} groups'
 
 
-async def _ready(value: T) -> T:  # ruff: ignore[unused-async]
+async def _ready[T](value: T) -> T:  # ruff: ignore[unused-async]
     """Present an already-computed value as an awaitable.
 
     Turning a value into an awaitable is the whole job here, so the missing

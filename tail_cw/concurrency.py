@@ -31,10 +31,6 @@ import threading
 from collections.abc import AsyncIterator, Callable, Iterator
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
-from typing import Generic, TypeVar
-
-T = TypeVar('T')
-R = TypeVar('R')
 
 DEFAULT_BLOCKING_WORKERS = 4
 """Concurrent DuckDB/Polars calls to allow. Above this, oversubscription stalls the loop."""
@@ -103,7 +99,7 @@ def _named_pool(prefix: str, max_workers: int) -> Iterator[ThreadPoolExecutor]:
         pool.shutdown(wait=True)
 
 
-async def run_blocking(executor: ThreadPoolExecutor | None, work: Callable[[], T]) -> T:
+async def run_blocking[T](executor: ThreadPoolExecutor | None, work: Callable[[], T]) -> T:
     """Run a blocking callable on ``executor``, or the default pool when None.
 
     The thread runs to completion even if the awaiting task is cancelled. Use
@@ -113,7 +109,7 @@ async def run_blocking(executor: ThreadPoolExecutor | None, work: Callable[[], T
 
 
 @asynccontextmanager
-async def closing_stream(source: AsyncIterator[T]) -> AsyncIterator[AsyncIterator[T]]:
+async def closing_stream[T](source: AsyncIterator[T]) -> AsyncIterator[AsyncIterator[T]]:
     """Close an async source on the way out, when it supports closing.
 
     Closing matters for anything backed by a paginator: abandoning the generator
@@ -131,7 +127,7 @@ async def closing_stream(source: AsyncIterator[T]) -> AsyncIterator[AsyncIterato
             await aclose()
 
 
-async def take(source: AsyncIterator[T], limit: int) -> list[T]:
+async def take[T](source: AsyncIterator[T], limit: int) -> list[T]:
     """Read at most ``limit`` items, then close the source."""
     async with closing_stream(source) as stream:
         items: list[T] = []
@@ -142,7 +138,7 @@ async def take(source: AsyncIterator[T], limit: int) -> list[T]:
         return items
 
 
-async def _next_batch(source: AsyncIterator[T], size: int) -> list[T]:
+async def _next_batch[T](source: AsyncIterator[T], size: int) -> list[T]:
     batch: list[T] = []
     async for item in source:
         batch.append(item)
@@ -151,7 +147,7 @@ async def _next_batch(source: AsyncIterator[T], size: int) -> list[T]:
     return batch
 
 
-class _Bridge(Generic[T]):
+class _Bridge[T]:
     """Pulls from an async iterator on ``loop`` for a consumer in another thread.
 
     Written as a plain class rather than a dataclass so the lock and the in-flight
@@ -194,7 +190,7 @@ class _Bridge(Generic[T]):
                 self._pending.cancel()
 
 
-async def consume_in_thread(
+async def consume_in_thread[T, R](
     executor: ThreadPoolExecutor | None,
     source: AsyncIterator[T],
     consume: Callable[[Iterator[T]], R],

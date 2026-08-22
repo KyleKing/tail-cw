@@ -239,7 +239,7 @@ Substring matching still works at run time, so `tail-cw logs handler` opens
 
 ## Requirements
 
-- Python 3.11 or newer
+- Python 3.13 or newer
 - AWS credentials through the standard chain (environment, profile, SSO, or role);
     `--profile`, `--region`, or `AWS_PROFILE` select them, and the profile is part of the
     cache key so accounts never collide

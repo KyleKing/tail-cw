@@ -23,6 +23,7 @@ import re
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from itertools import batched
 from typing import Any
 
 TRACE_IDS_PER_REQUEST = 5
@@ -472,10 +473,6 @@ async def _traces_for_chunk(client: Any, trace_ids: Sequence[str]) -> list[XRayT
     return traces
 
 
-def _chunk(values: Sequence[str], size: int) -> list[Sequence[str]]:
-    return [values[index : index + size] for index in range(0, len(values), size)]
-
-
 async def batch_get_traces(
     client: Any,
     trace_ids: Sequence[str],
@@ -497,5 +494,5 @@ async def batch_get_traces(
             return await _traces_for_chunk(client, chunk)
 
     async with asyncio.TaskGroup() as group:
-        tasks = [group.create_task(fetch(chunk)) for chunk in _chunk(trace_ids, TRACE_IDS_PER_REQUEST)]
+        tasks = [group.create_task(fetch(chunk)) for chunk in batched(trace_ids, TRACE_IDS_PER_REQUEST, strict=False)]
     return [trace for task in tasks for trace in task.result()]

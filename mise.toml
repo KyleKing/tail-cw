@@ -15,4 +15,4 @@ mv docs/images/demo.compressed.gif docs/images/demo.gif
 '''
 
 [tools]
-python = ["3.11.11", "3.13.11"]
+python = ["3.13.11", "3.14.7"]

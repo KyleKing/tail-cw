@@ -6,7 +6,7 @@ and the fewest dependencies practical.
 
 ## Quick context
 
-- Language: Python >=3.11
+- Language: Python >=3.13, developed and CI-gated on 3.14
 - Package layout: `tail_cw/` with tests in `tests/`
 - Dependency management with uv (`uv sync`)
 - Package manager/config in repo: uv (via `pyproject.toml`)
