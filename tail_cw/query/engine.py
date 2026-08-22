@@ -105,6 +105,9 @@ def query_parquet_file(
         msg = f'Parquet file not found: {parquet_path}'
         raise FileNotFoundError(msg)
 
+    if filter_node is not None and _missing_field_path(parquet_path, filter_node):
+        return
+
     # Select backend
     selected_backend = backend
     if backend == QueryBackend.AUTO:
@@ -119,6 +122,58 @@ def query_parquet_file(
     # rebuilt here rather than rediscovering that ``message`` can be null.
     for row in rows:
         yield {**row, 'message': readable_message(row)}
+
+
+def _missing_field_path(parquet_path: Path, filter_node: FilterNode) -> bool:
+    """Say whether the filter reads a record field this file's schema does not have.
+
+    Such a file cannot hold a match, so it is skipped rather than queried. Both
+    engines raise on a struct field that is absent, which failed the whole
+    multi-group search: one group whose records never carry ``level`` took
+    ``level:info`` down for every other group too.
+
+    A tree holding a negation is never skipped, because "not level:info" matches
+    every record in a file that has no ``level`` at all, and answering that with
+    an empty result would be wrong rather than merely unhelpful.
+    """
+    paths = list(_referenced_field_paths(filter_node))
+    if not paths or _has_negation(filter_node):
+        return False
+    parsed = pl.scan_parquet(str(parquet_path)).collect_schema().get('parsed')
+    if not isinstance(parsed, pl.Struct):
+        return True
+    return any(not _struct_has_path(parsed, path) for path in paths)
+
+
+def _struct_has_path(struct: Any, field_path: Sequence[str]) -> bool:
+    """Walk a struct dtype down ``field_path``.
+
+    ``struct`` is ``Any`` because beartype rejects every Polars dtype class as an
+    annotation: their metaclass reports a repr that does not round-trip.
+    """
+    dtype = struct
+    for field in field_path:
+        if not isinstance(dtype, pl.Struct):
+            return False
+        fields = {inner.name: inner.dtype for inner in dtype.fields}
+        if field not in fields:
+            return False
+        dtype = fields[field]
+    return True
+
+
+def _referenced_field_paths(filter_node: FilterNode) -> Iterator[list[str]]:
+    """Yield every record field path the filter reads, however deeply nested."""
+    if filter_node.field_path:
+        yield list(filter_node.field_path)
+    for child in filter_node.children or ():
+        yield from _referenced_field_paths(child)
+
+
+def _has_negation(node: FilterNode) -> bool:
+    if node.node_type == FilterNodeType.NOT:
+        return True
+    return any(_has_negation(child) for child in node.children or ())
 
 
 def _select_backend(filter_node: FilterNode | None) -> QueryBackend:

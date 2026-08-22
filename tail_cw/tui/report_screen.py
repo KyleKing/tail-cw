@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import ClassVar
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
@@ -126,8 +127,9 @@ class ReportScreen(ShellScreen):
             self._markdown.update(body)
 
     def _set_status(self, text: str) -> None:
+        """Show one line of plain text, never markup: error text carries brackets."""
         if self._status is not None:
-            self._status.update(text)
+            self._status.update(Text(text))
 
     def _title(self) -> str:
         """Name what ran: the query for Insights, the groups for a rollup."""

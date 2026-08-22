@@ -517,6 +517,26 @@ def test_query_parquet_files_merges_groups_by_timestamp(fix_test_cache):
     ]
 
 
+def test_a_group_whose_records_lack_the_field_does_not_fail_the_search(fix_test_cache):
+    """One group with no `level` field took `level:info` down for every other group."""
+    with_level = fix_test_cache / 'has_level.parquet'
+    without_level = fix_test_cache / 'no_level.parquet'
+    write_log_events_to_parquet(
+        [make_event('{"level":"info","event":"up"}', timestamp=datetime(2025, 1, 1, tzinfo=UTC))],
+        with_level,
+    )
+    write_log_events_to_parquet(
+        [make_event('{"OTelLib":"grpc","event":"metric"}', timestamp=datetime(2025, 1, 1, 0, 1, tzinfo=UTC))],
+        without_level,
+    )
+
+    results = list(query_parquet_files_to_log_events([with_level, without_level], parse_extended_filter('level:info')))
+
+    assert [event.message for event in results] == ['{"level":"info","event":"up"}']
+    assert query_parquet_file(without_level, parse_extended_filter('nothing_here:1')) is not None
+    assert list(query_parquet_file(without_level, parse_extended_filter('level:info'))) == []
+
+
 def test_query_parquet_files_limit_caps_merged_output(fix_test_cache):
     """The limit bounds the merged stream, not each file separately."""
     first = fix_test_cache / 'merge_limit_a.parquet'

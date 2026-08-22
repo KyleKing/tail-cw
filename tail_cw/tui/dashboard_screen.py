@@ -253,7 +253,8 @@ class DashboardScreen(ShellScreen):
         self.build_grid(dashboard)
 
     def _show_status(self, message: str) -> None:
-        self.query_one('#dash_status', Label).update(message)
+        """Show one line of plain text, never markup: error text carries brackets."""
+        self.query_one('#dash_status', Label).update(Text(message))
 
     def build_grid(self, dashboard: Dashboard) -> None:
         """Mount one cell per widget, then start every fetch the grid needs."""
@@ -379,7 +380,7 @@ class DashboardScreen(ShellScreen):
         try:
             series = await fetch_metrics(queries, session.start, session.end)
         except Exception as err:
-            panel.cell.render_static(f'[red]error:[/] {err}')
+            panel.cell.render_static(Text('error: ', style='red') + Text(str(err)))
             return
         visible = [item for item in series if item.values]
         panel.series = visible

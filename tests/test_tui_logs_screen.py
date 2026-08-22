@@ -17,7 +17,7 @@ from tail_cw.aws.events import LogEvent
 from tail_cw.cache.storage import write_log_events_to_parquet
 from tail_cw.cli import Session
 from tail_cw.config import TailCWConfig, TUIConfig
-from tail_cw.tui.logs_screen import LogsScreen, ProgressUpdate
+from tail_cw.tui.logs_screen import LogsScreen, ProgressUpdate, _field_syntax_hint
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.shell import ShellServices, TailCWApp
 from tail_cw.tui.trace_viewer import TraceViewerScreen
@@ -366,6 +366,38 @@ async def test_escape_still_goes_back_when_nothing_is_loading(tmp_path: Path):
 
         assert len(app.screen_stack) == depth, 'the log view is the root here, so Back has nowhere to go'
         assert 'Load stopped' not in str(app.screen.query_one('#status', Label).render())
+
+
+@pytest.mark.parametrize(
+    ('query', 'expected'),
+    [
+        ('level=info', ' · try level:info to match the record field'),
+        ('level:info', ''),
+        ('a=b c=d', ''),
+        ('plain text', ''),
+    ],
+)
+def test_a_fruitless_search_that_reads_like_a_field_suggests_the_field_syntax(query, expected):
+    """The table renders a record as key=value, so that is what gets typed into the search box."""
+    assert _field_syntax_hint(query) == expected
+
+
+@pytest.mark.asyncio
+async def test_an_error_naming_a_file_does_not_take_the_app_down(tmp_path: Path):
+    """Every Polars failure names its file as [/path.parquet], which Rich reads as a closing tag."""
+
+    async def failing_resolve(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
+        del groups, start, end
+        msg = "closing tag '[/tmp/cache_v2_abc.parquet]' does not match any open tag"
+        raise RuntimeError(msg)
+
+    app = _make_app(services=ShellServices(resolve_logs=failing_resolve))
+
+    async with running(app) as pilot:
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert 'cache_v2_abc.parquet' in str(app.screen.query_one('#status', Label).render())
 
 
 @pytest.mark.asyncio

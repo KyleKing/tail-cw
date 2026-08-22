@@ -18,6 +18,7 @@ from pathlib import Path
 from time import monotonic
 from typing import Any, ClassVar
 
+from rich.text import Text
 from textual import events, on
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -74,6 +75,19 @@ class ProgressUpdate(Message):
         self.total = total
         self.status = status
         Message.__init__(self)
+
+
+def _field_syntax_hint(query: str) -> str:
+    """Suggest the field syntax when a fruitless search reads like one.
+
+    The table renders a record as ``key=value``, so that is what gets typed into
+    the search box, where the field operator is ``:`` and ``=`` falls through to a
+    text match that a JSON record can never satisfy.
+    """
+    field, separator, value = query.partition('=')
+    if not (separator and field and value) or any(character in query for character in ' \t:'):
+        return ''
+    return f' · try {field}:{value} to match the record field'
 
 
 class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
@@ -466,7 +480,14 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self.post_message(ProgressUpdate(current=current, total=total, status=status))
 
     def _update_status(self, message: str) -> None:
-        self.query_one('#status', Label).update(message)
+        """Show one line of plain text, never markup.
+
+        Error text is not ours: every Polars failure names the file it failed on
+        as ``[/path/to.parquet]``, which Rich reads as a closing tag and raises
+        ``MarkupError`` from inside the update. That took the whole app down on
+        any failed search, so the error handler was worse than the error.
+        """
+        self.query_one('#status', Label).update(Text(message))
 
     def on_progress_update(self, message: ProgressUpdate) -> None:
         """Show a worker's progress on the status line."""
@@ -797,7 +818,8 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
 
             self._log_events = results
             self._load_log_events(results)
-            self._update_status(f'Found {len(results)} matching events')
+            hint = _field_syntax_hint(query) if not results else ''
+            self._update_status(f'Found {len(results)} matching events{hint}')
 
         except ValueError as err:
             self._update_status(f'Invalid query: {err}')

@@ -179,6 +179,11 @@ If you introduce or modify Textual UI code:
         Escape alone is not that key on a view that can be the opening view, because
         `nav_pop` has nothing to pop there, so the screen overrides it to cancel first and go
         back on the second press
+    - A status line takes `Text`, never a bare string.
+        Error text is not ours: every Polars failure names its file as
+        `[/path.parquet]`, which Rich parses as a closing tag and raises `MarkupError`
+        from inside `update`, so the error handler took the app down on every failed
+        search
     - Never handle `on_descendant_blur` to restore focus.
         It fires when another control opens
         and steals the focus straight back; watch the one widget you mean
@@ -228,6 +233,11 @@ References:
     verbatim rather than re-encoded, because Polars decodes the file straight after.
     Anything spliced must hold no newline: a pretty-printed payload is valid JSON and would
     end the line early, so it takes the re-encoding path
+- A record-field filter (`level:info`) is skipped for a Parquet file whose `parsed`
+    struct lacks that field, because both engines raise on an absent struct field and one
+    such group failed the search for every other group.
+    A tree holding a `NOT` is never skipped: "not level:info" matches every record in a
+    file with no `level`
 - Trace heuristics should inspect structured fields (levels, status, message bodies)
     before falling back to free-text keyword scans to avoid misclassifying IDs like
     `trace-error` as failures.
