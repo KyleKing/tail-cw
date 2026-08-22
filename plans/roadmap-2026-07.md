@@ -166,17 +166,17 @@ What remains:
     real log line.
     Still blocked cross-service by the instrumentation gap below, and a pivot onto
     `workflow_run_id` is pointless until worker logs carry one
-- **what X-Ray does not cover, which is most of the application.** The reader is done; the
-    data is thin.
-    Of 442,828 traces in three hours, 97% are Hatchet's own background loops and only 3,554
-    carry an HTTP URL, most of those health checks.
-    `http.url CONTAINS "radar_event"` matches nothing, so the endpoint the open latency
-    investigation is about is invisible here while `/v1/import` and `/v1/work_queue_item`
-    are traced.
-    That is an application-side gap, and it sits with the instrumentation prerequisites
-    below.
-    The 3,800 traces an hour measured on 2026-07-25 is now 148,000, a 39x rise worth its own
-    look at the recording bill
+- **what X-Ray does not cover, which is most of the application.** The reader is done and
+    the data is thin, in two ways worth keeping apart.
+    The account runs one sampling rule, the AWS default, so `irm-api` is recorded at 14.5%
+    uniformly across routes, while Hatchet's OTel exporter never consults the rule and
+    supplies 99% of the traces.
+    And what is recorded is shallow: `irm-api` emits no database spans, so a 59-second
+    request arrives as five spans with 24ms accounted for.
+    Both are application-side, and they sit with the instrumentation prerequisites below.
+    Separately, the X-Ray recording bill went from covered by credits to $866.86 in 21
+    days, and 71% of it is three Hatchet polling loops; the 2026-08-22 spend write-up in
+    `irm-0-null/docs/investigations/` has the numbers
 - **time-bucketed histogram of the current view.** Shipped 2026-08-22 behind `h`, over
     whatever the current search left on screen rather than over the whole group, and
     coloured per column by the worst severity in it.

@@ -73,13 +73,27 @@ the API costs nothing extra in complexity.
 97% of those 442,828 traces are Hatchet's own background loops (`hatchet.run/snapshot`,
 `hatchet.run/concurrency-manager`, `hatchet.run/pgmq-read-messages`).
 Only 3,554 carry an HTTP URL, and most of those are health checks.
+Over six hours the
+service graph puts `irm-api` at 0.87% of root traces.
 
-`http.url CONTAINS "radar_event"` matches nothing over three hours, so the endpoint at
-the centre of the open latency investigation is invisible here while `/v1/import`,
-`/v1/work_queue_item`, and the health checks are traced.
-The reader works; the coverage is an application-side gap, recorded with the rest of the
-instrumentation prerequisites in
-[the roadmap](../../../plans/roadmap-2026-07.md).
+Coverage of our own service is thinner still, and thin in two separate ways that are
+easy to confuse.
+
+The account runs one sampling rule, the AWS default of a one-per-second reservoir plus
+5%
+above it, and `irm-api` obeys it: 14.5% of its requests are recorded, uniformly across
+routes.
+Hatchet does not obey it, because its OTel exporter never asks X-Ray for a quota,
+which is why it supplies 99% of the traces.
+So any question about our own service is being asked of a one-in-seven sample.
+
+And what is recorded is shallow. `irm-api` emits no database spans, so a 59-second
+request arrives as five spans with 24ms accounted for, while `hatchet-server` in the
+same
+account traces every query it makes.
+Both are application-side gaps rather than reader
+gaps, measured in the 2026-08-22 radar write-up (the investigation write-ups live in
+`irm-0-null/docs/investigations/`).
 
 ## Decision
 
