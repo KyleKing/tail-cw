@@ -4,89 +4,50 @@ Written 2026-07-05 from a code capability review and a survey of the CloudWatch 
 
 ## Delivered
 
-| Milestone                     | Outcome                                                                                                                        | Record                                                                                                                                        |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0 wire the drivetrain        | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                           | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
-| M1 live tail                  | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached    | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
-| M2 navigation-first discovery | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets             | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
-| M4 dashboards and metrics     | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
-| M5 async AWS I/O              | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests  | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
-| M6 aggregation surface        | `export summary` with fuzzy-merged pattern rollups, `export insights`, `export alarms --history`, `export metrics`, CPU budget | this file's queue, plus [the evaluation](evaluation-2026-08-21-vs-aws-cli.md)                                                                 |
+| Milestone                      | Outcome                                                                                                                           | Record                                                                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 wire the drivetrain         | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                              | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
+| M1 live tail                   | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached       | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
+| M2 navigation-first discovery  | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets                | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
+| M4 dashboards and metrics      | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs    | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
+| M5 async AWS I/O               | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests     | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
+| M6 aggregation surface         | `export summary` with fuzzy-merged pattern rollups, `export insights`, `export alarms --history`, `export metrics`, CPU budget    | this file's queue, plus [the evaluation](evaluation-2026-08-21-vs-aws-cli.md)                                                                 |
+| M7 cache v2 and one front door | segmented cache windows, a schema at 25 bytes per event, rollup/alarms/Insights in the TUI behind a cost gate, one shared history | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
 
 Two deviations from the original plans are worth carrying forward, because they change what a reader should expect to find. There is no `tail-cw groups` subcommand: the browser is the home view and `tail-cw export groups` covers the NDJSON case. And log groups do not sort by last-event time, because `DescribeLogGroups` does not return it (that would be a `DescribeLogStreams` call per group); your own selection recency sorts the list instead, which is what the console's "recently accessed" actually gives you.
 
 ## Next up, in priority order
 
-Six investigations on 2026-08-21 produced five new commands and four correctness fixes. What they also produced is a clear ranking of what the tool gets wrong, because every item below was measured rather than guessed. Take them in order.
+Six investigations on 2026-08-21 produced five new commands and four correctness fixes, and a ranking of what the tool got wrong. Items 1 to 4 of that ranking shipped on 2026-08-22 (see Delivered above); what remains is below, still in order.
 
-### 1. Cache schema v2: stop storing the same bytes twice
-
-Rewriting the largest cached file (26.9 MB, 375,598 events from `irm-ecs-api-prod`) measured where the disk goes and what each change is worth:
-
-| Variant                          |    Size | Share of baseline |
-| -------------------------------- | ------: | ----------------: |
-| baseline                         | 26.9 MB |              100% |
-| drop `event_id`                  | 21.3 MB |               79% |
-| plus native datetime columns     | 21.2 MB |               79% |
-| plus drop the redundant raw line | 10.1 MB |               38% |
-| plus sort by timestamp           | 10.1 MB |               38% |
-
-`message` is 41% of the file and `event_id` is 21%, and both are avoidable. For a JSON log line the raw `message` and the `parsed` struct hold the same content, so storing the raw line only for events that failed to parse costs nothing and saves 41%. `event_id` is a ~56-digit decimal string whose docstring claims it exists "for deduplication", and nothing in the codebase dedupes on it; it is also the `Event ID` column the critique wants removed, because truncated to 12 characters it renders the same string on every row. Timestamps are stored as ISO strings, so a time predicate compares text and row-group statistics cannot prune.
-
-The change has a dependency worth naming: once the raw line is conditional, the log table has to build its display text from `parsed`, which is exactly the roadmap's long-standing readable-JSON item. The two land together rather than fighting each other. Bump the key prefix to `cache:v2` so old files fall out of the cache instead of being misread, and drop `ParquetConfig.row_group_size` and `compression_level` if they still have no caller reaching for them; the `infer_schema_length` knob taught the lesson that a tuning parameter over arbitrary log JSON is a bug surface, not a feature.
-
-### 2. Cache keying: make the repeat query fast by default
-
-The single largest measured latency win, 13.8x, is only available if you pass ISO timestamps, which nobody does. Two defects:
-
-- the key holds exact microsecond start and end, so two consecutive `--start 1h` runs never collide because `now` moved between them, and both paid 69s
-- the key holds `filter_pattern`, so a filtered fetch re-downloads a window that is already cached and could be re-filtered locally for free
-
-Fix both, and update [ADR 0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md) in place with the measured result rather than appending a second decision. [ADR 0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md) also needs a line, because it deliberately orphans truncated Parquet on cancellation and segment composition has to survive that.
-
-**How to snap when the request lands 15 minutes into the hour.** Do not stretch or round the user's window; that would answer a different question than the one asked. Instead split it into a run of aligned interior segments plus a ragged tail, cache the segments, and never cache the tail:
-
-```text
-request:  17:15 ────────────────────────────────────► 18:15  (--start 1h at 18:15)
-segments: [17:15-17:20)[17:20-17:25) … [18:05-18:10)  cached, immutable, reusable
-tail:                                    [18:10-18:15)  fetched every time, never cached
-```
-
-Pick the segment width from the window length so the count stays bounded: 5 minutes for an hour or less, an hour for a day, a day for a week. A repeated `--start 1h` then reuses eleven of twelve segments and fetches one, and asking for 17:00-19:00 after caching 17:00-18:00 and 18:00-19:00 composes both instead of refetching. Overlapping segment reads need a dedupe key, and since item 1 removes `event_id` the honest key is `(log_stream, timestamp, message)`.
-
-The ragged tail is the same thing as item 4 below, which is why they share a rule: a window whose end is close to now is incomplete, so it must not be written to a cache that has no TTL.
-
-### 3. Rollup and alarms in the TUI, Insights everywhere behind a cost gate
-
-Every one of the six investigations was done from the CLI. The TUI has no rollup, no alarms, and no Insights, so the day's real work never touched the tool's own front door. That is the largest capability gap now, and it is mostly wiring, because `query/rollup.py`, `aws/alarms.py`, and `aws/insights.py` are already pure functions over an open client.
-
-- **rollup and alarms reach both surfaces.** A key on the group browser runs `roll_up` over the selected groups and shows ranked patterns, with Enter drilling into the matching events; alarms get a screen ranked by transition count, which is the view that found `irm-stg-radar-daemon-high-cpu` at 52 transitions in 14 days
-- **Insights stays opt-in on both surfaces.** In the TUI that means typing the query and pressing Enter, never a single keypress that bills. Both surfaces enforce the same two guards: a bounded time range and a required filter, so a bare `fields @message` over a week cannot be the accident that costs money
-- **one query history, shared.** Insights queries and their results are saved and browseable, and a CLI `export insights` run appends to the same history the TUI reads. Same for rollups and alarm reads, so a session's work is recoverable whichever surface ran it. `recents.py` already has the idiom to copy: frozen dataclass, pure record function, atomic replace, degrade on corruption
-
-### 4. Do not cache a window that was still filling
-
-`CacheConfig.default_ttl_seconds` is `None`, so nothing expires. Combined with CloudWatch's ingestion lag, a window fetched with its end near now is permanently short of events that arrived seconds later, and there is no signal that it is short. Refuse to write, or record as partial, any window ending within a few minutes of the fetch. This is the same rule as the ragged tail in item 2 and should be one predicate used by both.
-
-### 5. Cost preflight for Insights
+### 1. Cost preflight for Insights
 
 [ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md) and this file both promised a scan estimate before any paid query. Today the size prints after the bill is incurred: `292,676 of 3,293,189 records matched, 1.149 GB scanned`. There is no AWS preflight API, and the console's own estimate is not exposed, so estimate it from what `DescribeLogGroups` already returns: `storedBytes` divided by the retention period gives bytes per day, multiplied by the requested window and the group count gives an honest order of magnitude. Show it, and the dollar figure at $0.005/GB, before `StartQuery`. Label it an estimate, because stored bytes are compressed and Insights bills uncompressed, so it reads low.
 
-### 6. An entry point that takes a trace ID
+### 2. An entry point that takes a trace ID
 
 `TraceViewerScreen` works and is reachable with `t` from the log view, and it was useless for the investigation that needed it, because the real workflow starts with an identifier pasted out of a Slack alarm and there is no way to hand the tool one. That gap cost four hand-written Insights queries on the Bedrock `ReadTimeoutError` investigation. Add `:trace <id>` in the TUI and `tail-cw export trace <id>` emitting OTLP JSON per [ADR 0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md). The fan-out and the timestamp-merged read already exist from the M2 browser work, so this is an entry point rather than a subsystem. An error summary over the trace (first service to error, total errors, services touched) is one status line in the same screen and needs no parent links.
 
-### 7. Lazy imports so the CLI starts in a tenth of a second
+### 3. Lazy imports so the CLI starts in a tenth of a second
 
 `tail-cw --help` takes 0.34s against 0.03s for a bare interpreter, and 277ms of that is import: aiobotocore at 86ms, Polars at 34ms, and `beartype.typing` at 31ms, none of which argparse needs to reject a typo. Defer them behind the dispatch and the startup penalty against the AWS CLI (0.35s per invocation, measured) mostly disappears, which matters because the tool gets called in loops from shell scripts. One constraint: `apply_native_thread_limits()` must still run before anything imports Polars, and moving the Polars import later makes that easier rather than harder.
 
-### 8. The log table, the most-looked-at and least-designed surface
+### 4. The log table, the most-looked-at and least-designed surface
 
 Detailed in [the critique](tui-critique-2026-08-21.md). Responsive column widths, drop `log_group` when the view has one group, drop `log_stream` and `event_id` below roughly 120 columns since the detail pane shows both in full, truncate with `…` everywhere a fixed width can clip, and colour the message by `query.severity.event_severity` with a level glyph so it survives `NO_COLOR`. At 80x24 the Message column currently renders 12 characters wide, which makes the view unusable over SSH from a phone. The severity question worth settling first: colour only records carrying an explicit `level`, or colour inferred ones too. A wrong colour in a live table is worse than no colour.
 
-### 9. Metric dimension discovery
+### 5. Metric dimension discovery
 
 The latency investigation could not name the slow endpoint from metrics, because `ApiRequestLatencyMs` carries only `Method` and `StatusClass` and no route, and there was no way to learn that without reading the emitter's source. `ListMetrics` returns the dimension sets a metric actually publishes. Surfacing them turns "which dimensions does this metric have" from a code-reading exercise into a command, and it is the blocker that recurred most across the six investigations.
+
+### What items 1 to 4 measured after shipping
+
+Worth keeping, because two of the four predictions were wrong in the useful direction:
+
+- **disk.** The schema predicted 38% of v1. On the same log group it landed at 25 bytes per event against 72, so 35%, and the whole local cache fell from 119 MB to 3.2 MB once the superseded v1 entries were reclaimed
+- **repeat latency.** A cold hour costs 24.6s. Repeating it with a window that has moved costs 6.3s, because the aligned interior is reused and only the ragged ends and the unsettled tail are refetched. The 13.8x figure needed identical ISO timestamps; 3.9x is what a relative window actually gets
+- **the filter.** Dropping it from the key made a local filter mandatory, which exposed a real defect: Polars widens the `parsed` struct across the whole file, so re-encoding one record emits every field any record had. A search for `ERROR` matched all 100,292 events in an hour because some other event carried `error_type`. Null fields are stripped from the search text now, and the same query returns 125
+- **two dead keybindings.** `q` never quit and Enter never opened the record detail. Both were bindings whose action the screen did not have or whose key a child widget had already claimed, and both had passing tests, because the tests called the action instead of pressing the key. A binding is not covered until a test presses the key
 
 ## Then: M3 investigation tools
 
