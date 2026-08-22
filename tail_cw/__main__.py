@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Sequence
 
+from tail_cw.completion import install as install_completion
 from tail_cw.concurrency import is_engine_panic
 from tail_cw.parser import build_parser
 
@@ -33,6 +34,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     _write_utf8(sys.stdout)
     _write_utf8(sys.stderr)
     parser = build_parser()
+    install_completion(parser)
     args = parser.parse_args(argv)
     # The one deliberate deferred import in the package: aiobotocore (88ms),
     # Polars (34ms), and Textual (36ms) must not load to answer --help.

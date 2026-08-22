@@ -66,6 +66,7 @@ from tail_cw.query.report import render_alarm_markdown, render_markdown, render_
 from tail_cw.query.rollup import Granularity, RollupReport, roll_up
 from tail_cw.query.severity import Severity
 from tail_cw.query.trace import query_traces_from_parquet_files
+from tail_cw.recents import load_recents, record_selection, save_recents
 
 FetchEvents = Callable[..., AsyncIterator[LogEvent]]
 StreamEvents = Callable[..., AsyncIterator[LogEvent]]
@@ -628,8 +629,28 @@ def _run_shell_command(args: argparse.Namespace, now: datetime, run_shell: RunSh
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
+    _remember_literal_groups(seed.targets, profile=args.profile)
     run_shell(config, session, seed)
     return 0
+
+
+_PATTERN_CHARACTERS = frozenset('*?[')
+
+
+def _remember_literal_groups(targets: Sequence[str], *, profile: str | None) -> None:
+    """Record the names typed on the command line, so completion can offer them back.
+
+    Only literal names: a glob is not a group, and recording one would offer a pattern
+    where a name belongs. Failing to write is not worth an error, since the history is a
+    convenience and the command it decorates has already been asked for.
+    """
+    literal = [name for name in targets if not (_PATTERN_CHARACTERS & set(name))]
+    if not literal:
+        return
+    try:
+        save_recents(record_selection(load_recents(), literal, profile=profile))
+    except OSError:
+        return
 
 
 async def _export_logs(

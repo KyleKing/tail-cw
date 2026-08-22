@@ -14,6 +14,7 @@ from pathlib import Path
 
 from tail_cw.aws.alarms import ALARM_STATES
 from tail_cw.aws.insights import MAX_INSIGHTS_LOG_GROUPS
+from tail_cw.completion import log_group_completer
 from tail_cw.query.fuzzy import DEFAULT_SIMILARITY
 from tail_cw.query.rollup import DEFAULT_PATTERN_LIMIT, Granularity
 from tail_cw.query.severity import Severity
@@ -74,7 +75,10 @@ def _add_export_parsers(export: argparse.ArgumentParser) -> None:
 
 
 def _configure_logs(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument('log_group', help='CloudWatch log group name (e.g. /aws/lambda/my-function)')
+    parser.add_argument(
+        'log_group',
+        help='CloudWatch log group name (e.g. /aws/lambda/my-function)',
+    ).completer = log_group_completer  # type: ignore[attr-defined]
     _add_aws_flags(parser)
     _add_window_flags(parser, default_start=DEFAULT_WINDOW)
     parser.add_argument(
@@ -86,7 +90,11 @@ def _configure_logs(parser: argparse.ArgumentParser) -> None:
 
 
 def _configure_tail(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument('log_groups', nargs='+', help='One or more CloudWatch log group names (max 10)')
+    parser.add_argument(
+        'log_groups',
+        nargs='+',
+        help='One or more CloudWatch log group names (max 10)',
+    ).completer = log_group_completer  # type: ignore[attr-defined]
     _add_aws_flags(parser)
     parser.add_argument('--filter', dest='filter_pattern', default=None, help='CloudWatch Logs filter pattern')
     parser.add_argument(
@@ -102,7 +110,11 @@ def _configure_groups(parser: argparse.ArgumentParser) -> None:
 
 
 def _configure_summary(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument('patterns', nargs='*', help='Log group names or glob patterns (omit for every group)')
+    parser.add_argument(
+        'patterns',
+        nargs='*',
+        help='Log group names or glob patterns (omit for every group)',
+    ).completer = log_group_completer  # type: ignore[attr-defined]
     _add_aws_flags(parser)
     _add_window_flags(parser, default_start=DEFAULT_WINDOW)
     parser.add_argument(
@@ -148,7 +160,11 @@ def _configure_summary(parser: argparse.ArgumentParser) -> None:
 
 def _configure_trace(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('trace_id', help='Trace identifier to collect spans for')
-    parser.add_argument('patterns', nargs='*', help='Log group names or glob patterns (omit for every group)')
+    parser.add_argument(
+        'patterns',
+        nargs='*',
+        help='Log group names or glob patterns (omit for every group)',
+    ).completer = log_group_completer  # type: ignore[attr-defined]
     _add_aws_flags(parser)
     _add_window_flags(parser, default_start=DEFAULT_WINDOW)
     parser.add_argument(
@@ -193,7 +209,11 @@ def _configure_xray_trace(parser: argparse.ArgumentParser) -> None:
 
 
 def _configure_insights(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument('patterns', nargs='*', help='Log group names or glob patterns')
+    parser.add_argument(
+        'patterns',
+        nargs='*',
+        help='Log group names or glob patterns',
+    ).completer = log_group_completer  # type: ignore[attr-defined]
     _add_aws_flags(parser)
     parser.add_argument(
         '--start',
@@ -320,7 +340,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest='command')
 
     logs = subparsers.add_parser('logs', help='Open the log view on the groups matching a pattern.')
-    logs.add_argument('patterns', nargs='*', help='Log group names or glob patterns (omit to use the browser)')
+    logs.add_argument(
+        'patterns',
+        nargs='*',
+        help='Log group names or glob patterns (omit to use the browser)',
+    ).completer = log_group_completer  # type: ignore[attr-defined]
     _add_aws_flags(logs)
     _add_window_flags(logs, default_start=DEFAULT_WINDOW)
     logs.add_argument(
@@ -331,7 +355,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     tail = subparsers.add_parser('tail', help='Open the log view streaming live events.')
-    tail.add_argument('patterns', nargs='*', help='Log group names or glob patterns (max 10)')
+    tail.add_argument(
+        'patterns',
+        nargs='*',
+        help='Log group names or glob patterns (max 10)',
+    ).completer = log_group_completer  # type: ignore[attr-defined]
     _add_aws_flags(tail)
     _add_window_flags(tail, default_start=DEFAULT_WINDOW)
 

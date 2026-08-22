@@ -315,7 +315,7 @@ does not, but the Polars path already does `scan_parquet` into
 `collect(engine='streaming')`, so the premise is weak; if pursued, use a configured byte
 ceiling rather than adding `psutil`.
 
-**Discovery.** Done on 2026-08-22, except shell completion.
+**Discovery.** Done on 2026-08-22.
 The preview pane now lists the group's JSON fields with the share of sampled events
 carrying each, merged from the shapes it already computed, which answers "what can I
 filter this on" in a way the shape list could not: the same field appears in several
@@ -340,6 +340,20 @@ its own: the table already loses Created at 160 columns beside the preview pane,
 every group in this account is Standard, so the column would have been blank in every
 row.
 That also means the Infrequent Access path is unverified against a real IA group.
+
+Shell completion goes through argcomplete, so bash, zsh, and fish come from one place
+and
+stay in step with argparse, and the import is guarded on `_ARGCOMPLETE` so a normal
+invocation still starts in 0.06s.
+Group names complete from the recents file, because completion runs on every Tab and no
+AWS call belongs at that latency, and CLI-typed names are now recorded there too (globs
+are not: a pattern is not a group).
+Matching is by prefix rather than the substring matching the pattern resolver does,
+since
+a shell replaces the word being completed and argcomplete filters non-prefix matches out
+regardless.
+Verified by driving argcomplete's own protocol rather than by reading the code:
+`tail-cw logs irm<TAB>` returns `irm-ecs-api-prod`.
 
 **Plumbing and tooling.** Mostly closed on 2026-08-22, and two of the four items were
 already stale when read.

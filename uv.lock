@@ -2291,6 +2291,7 @@ version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiobotocore" },
+    { name = "argcomplete" },
     { name = "beartype" },
     { name = "botocore" },
     { name = "diskcache" },
@@ -2313,6 +2314,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiobotocore", specifier = ">=3.8.0" },
+    { name = "argcomplete", specifier = ">=3.7.2" },
     { name = "beartype", specifier = ">=0.19.0" },
     { name = "botocore", specifier = ">=1.43.3,<1.43.47" },
     { name = "diskcache", specifier = ">=5.6.0" },

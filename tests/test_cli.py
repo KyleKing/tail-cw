@@ -39,6 +39,7 @@ from tail_cw.cli import (
 )
 from tail_cw.config import CacheConfig, TailCWConfig
 from tail_cw.parser import build_parser
+from tail_cw.recents import Recents
 
 NOW = datetime(2026, 7, 5, 12, 0, 0, tzinfo=UTC)
 
@@ -1690,3 +1691,19 @@ def test_server_side_pattern_passes_through_what_cloudwatch_can_mean():
     assert server_side_pattern('ERROR OR WARNING') == '?ERROR ?WARNING'
     with pytest.raises(ValueError, match='cannot be sent to CloudWatch'):
         server_side_pattern('NOT ERROR')
+
+
+def test_a_named_group_is_recorded_so_completion_can_offer_it_back(tmp_path, monkeypatch):
+    """The names typed on the CLI never reached recents, which is where completion reads."""
+    recorded: list[object] = []
+    monkeypatch.setattr('tail_cw.cli.load_recents', Recents)
+    monkeypatch.setattr('tail_cw.cli.save_recents', recorded.append)
+    monkeypatch.setattr(
+        'tail_cw.cli.record_selection',
+        lambda _recents, groups, *, profile: (tuple(groups), profile),
+    )
+    shell = _RecordingShell()
+    argv = ['logs', 'irm-ecs-api-prod', '/aws/lambda/*', '--profile', 'read-prod', '--config']
+
+    assert run_cli([*argv, str(_write_config_file(tmp_path))], shell, is_tty=False) == 0
+    assert recorded == [(('irm-ecs-api-prod',), 'read-prod')], 'a glob is not a group name'

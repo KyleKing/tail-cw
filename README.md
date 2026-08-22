@@ -220,6 +220,23 @@ In a dashboard, `:add <title>` puts a second panel beside the staged one, `:dive
 the logs behind the focused widget, and `:reset` clears the stage.
 Set `AWS_PROFILE`, `--profile`, or `--region` to pick an account.
 
+### Shell completion
+
+Completion comes from [argcomplete](https://github.com/kislyuk/argcomplete), so one hook
+covers bash, zsh, and fish:
+
+```sh
+eval "$(register-python-argcomplete tail-cw)"    # add to ~/.zshrc or ~/.bashrc
+```
+
+Log group names complete from the groups you have already opened, per profile, read from
+the recents file rather than from AWS: completion runs on every Tab and no API call
+belongs at that latency.
+Matching is by prefix, because a shell replaces the word being
+completed.
+Substring matching still works at run time, so `tail-cw logs handler` opens
+`/aws/lambda/api-handler` whether or not Tab could complete it.
+
 ## Requirements
 
 - Python 3.11 or newer
