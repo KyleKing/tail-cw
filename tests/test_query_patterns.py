@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from tail_cw.query.patterns import MessagePattern, cluster_messages, message_shape_key, normalize_message
+from tail_cw.query.patterns import MessagePattern, cluster_messages, field_roster, message_shape_key, normalize_message
 
 _UUID = '550e8400-e29b-41d4-a716-446655440000'
 
@@ -174,3 +174,34 @@ def test_message_shape_key_falls_back_to_text_without_a_body_field():
     assert message_shape_key(json.dumps({'level': 'warning', 'count': 3})) == normalize_message(
         json.dumps({'level': 'warning', 'count': 3}),
     )
+
+
+def test_the_field_roster_merges_shapes_into_one_list():
+    """The same field appears in several shapes, so the shape list cannot answer this."""
+    patterns = [
+        MessagePattern(key='a', count=7, example='{"level":"info","event":"up","user":{"id":"1"}}'),
+        MessagePattern(key='b', count=3, example='{"level":"error","error_code":500}'),
+    ]
+
+    roster = field_roster(patterns)
+
+    by_path = {usage.path: usage for usage in roster}
+    assert by_path['level'].events == 10
+    assert by_path['level'].share == pytest.approx(1.0), 'a field every record carries reads as 100%'
+    assert by_path['event'].events == 7
+    assert by_path['user.id'].events == 7, 'a nested field reads the way a filter writes it'
+    assert next(usage.path for usage in roster) == 'level', 'most common first'
+
+
+def test_the_roster_ignores_plain_text_and_an_empty_sample():
+    assert field_roster([MessagePattern(key='t', count=5, example='plain text line')]) == []
+    assert field_roster([]) == []
+
+
+def test_the_roster_stops_at_the_depth_a_filter_can_read():
+    deep = MessagePattern(key='d', count=1, example='{"a":{"b":{"c":1}}}')
+
+    paths = [usage.path for usage in field_roster([deep])]
+
+    assert paths == ['a', 'a.b'], 'a deeper blob produces more names than a reader can use'
+    assert [usage.path for usage in field_roster([deep], max_depth=3)] == ['a', 'a.b', 'a.b.c']

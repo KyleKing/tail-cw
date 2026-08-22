@@ -18,7 +18,8 @@ from textual.binding import Binding
 from textual.widgets import DataTable, Input
 
 from tail_cw.aws.log_groups import LogGroupInfo, resolve_group_pattern
-from tail_cw.preview import GroupPreview
+from tail_cw.preview import Activity, GroupPreview
+from tail_cw.query.patterns import field_roster
 from tail_cw.recents import sort_by_recency
 from tail_cw.tui.picker import (
     DEBOUNCE_SECONDS,
@@ -55,21 +56,65 @@ _COLUMNS = (
     PickerColumn(key='created', label='Created', width=11),
 )
 
+MAX_ROSTER_FIELDS = 12
+"""Fields listed per group. A wide record has more names than a preview pane can hold."""
+
+_IA_SUFFIX = '  IA'
+"""Marks an Infrequent Access group, which ``StartLiveTail`` refuses outright.
+
+On the name rather than in a column of its own: the table already loses Created at 160
+columns beside the preview pane, and Standard would leave the column blank for every row.
+"""
+
+
+def activity_label(preview: GroupPreview) -> str:
+    """Say what the sample knows about recency, and no more than that.
+
+    A capped sample of a busy group cannot see its newest event, so it reports being
+    busy rather than a timestamp that would rank it as the stalest group in the list.
+    """
+    match preview.activity:
+        case Activity.SATURATED:
+            return 'busy, sample filled'
+        case Activity.MEASURED if preview.last_event is not None:
+            return f'last event {preview.last_event:%H:%M:%S} UTC'
+        case _:
+            return 'quiet'
+
 
 def render_preview(preview: GroupPreview) -> Text:
-    """Render a group preview as the ADR's header line plus one line per shape."""
+    """Render a group preview: a header line, the shapes, then the field roster."""
     window = format_window(preview.window_seconds)
     body = Text()
     body.append(preview.log_group, style='bold')
-    body.append(f'\n{preview.event_count} events, last {window}\n', style='dim')
+    body.append(f'\n{preview.event_count} events, last {window}, {activity_label(preview)}\n', style='dim')
     if not preview.patterns:
         body.append('\nNo events in this window', style='dim italic')
         return body
+    _append_roster(body, preview)
     for pattern in preview.patterns:
         label = pattern.key or pattern.example
         body.append(f'\n{pattern.count:>6}  ')
         body.append(label)
     return body
+
+
+def _append_roster(body: Text, preview: GroupPreview) -> None:
+    """List the fields these records carry, which is what a filter is written against.
+
+    Above the shapes, not below: the shapes are long enough to push anything after them
+    off the pane, and the roster is the shorter answer to "what can I search here".
+    """
+    roster = field_roster(preview.patterns)[:MAX_ROSTER_FIELDS]
+    if not roster:
+        return
+    body.append('\nfields: ', style='bold')
+    for index, field in enumerate(roster):
+        if index:
+            body.append(' ', style='dim')
+        body.append(field.path, style='cyan')
+        body.append(f' {field.share:.0%}', style='dim')
+    body.append('\n')
 
 
 class GroupsScreen(ShellScreen):
@@ -319,7 +364,7 @@ class GroupsScreen(ShellScreen):
     def _row_cells(self, info: LogGroupInfo) -> tuple[str, str, str, str, str]:
         return (
             self._marker(info.name),
-            info.name,
+            info.name if info.supports_live_tail else f'{info.name}{_IA_SUFFIX}',
             humanize_bytes(info.stored_bytes),
             format_retention(info.retention_days),
             format_created(info.created),

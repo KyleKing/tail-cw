@@ -508,6 +508,7 @@ def _log_group_to_record(group: LogGroupInfo) -> dict[str, object]:
         'stored_bytes': group.stored_bytes,
         'retention_days': group.retention_days,
         'created': group.created.isoformat() if group.created is not None else None,
+        'log_group_class': group.log_group_class,
     }
 
 

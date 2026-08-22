@@ -315,23 +315,31 @@ does not, but the Polars path already does `scan_parquet` into
 `collect(engine='streaming')`, so the premise is weak; if pursued, use a configured byte
 ceiling rather than adding `psutil`.
 
-**Discovery.** Group metadata is done: stored bytes, retention, and creation time are
-read and displayed, and the sampled preview clusters messages into distinct shapes.
-Three things are still open. The preview already computes per-shape skeletons with
-literal keys and placeholder values, so merging them into one field roster ("here are
-this group's JSON fields, and how many events carry each") is a pure function over
-`list[MessagePattern]` and would also feed filter-field completion.
-Last-write time has an honest cheap form and a dishonest one: the sample already
-receives timestamps and throws them away, but `FilterLogEvents` yields ascending and the
-sample is capped, so a busy group's newest sampled timestamp sits early in the window
-and the busiest groups would read as the stalest.
-Ship it as an activity indicator (saturated, an exact time, or quiet) rather than as a
-timestamp.
-`logGroupClass` is returned by `DescribeLogGroups` and dropped; it is worth a column
-because Infrequent Access groups cannot be live-tailed.
-Separately, there is no shell completion for the CLI at all, and with nine `export`
-subcommands and log group names that run past 40 characters, completing group names from
-the cached group list would save more typing than any other ergonomics change.
+**Discovery.** Done on 2026-08-22, except shell completion.
+The preview pane now lists the group's JSON fields with the share of sampled events
+carrying each, merged from the shapes it already computed, which answers "what can I
+filter this on" in a way the shape list could not: the same field appears in several
+shapes, and a field in every record looked no different from a rare one.
+Driving it against `irm-ecs-api-prod` read
+`event 100% level 100% logger 100% timestamp 100% request_id 30% span_id 30% trace_id 30%`,
+which says at a glance that the
+X-Ray pivot only works on a third of the records.
+The roster sits above the shapes because the shapes are long enough to push anything
+after them off the pane.
+
+Last-write time shipped as the honest form: `saturated` when the capped sample filled up
+(so the newest event is unknown), an exact time when the whole window fit, and `quiet`
+when nothing landed.
+Reporting the newest sampled timestamp instead would have ranked the busiest groups as
+the stalest.
+
+`logGroupClass` is read and carried on `LogGroupInfo` with a `supports_live_tail`
+property, and an Infrequent Access group is marked on its name rather than in a column
+of
+its own: the table already loses Created at 160 columns beside the preview pane, and
+every group in this account is Standard, so the column would have been blank in every
+row.
+That also means the Infrequent Access path is unverified against a real IA group.
 
 **Plumbing and tooling.** Mostly closed on 2026-08-22, and two of the four items were
 already stale when read.

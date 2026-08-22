@@ -15,6 +15,9 @@ from typing import Any
 
 from tail_cw.aws.events import epoch_ms_to_datetime
 
+INFREQUENT_ACCESS_CLASS = 'INFREQUENT_ACCESS'
+"""The one storage class ``StartLiveTail`` refuses."""
+
 GLOB_METACHARACTERS = frozenset('*?[')
 """Characters that mark a pattern as a glob rather than a name or prefix."""
 
@@ -30,6 +33,9 @@ class LogGroupInfo:
         stored_bytes: Bytes stored, or None when the API omits the field.
         retention_days: Retention in days, or None when the group never expires.
         created: Creation time (UTC), or None when the API omits the field.
+        log_group_class: Storage class, such as ``STANDARD`` or
+            ``INFREQUENT_ACCESS``, or None when the API omits it. Worth carrying
+            because an Infrequent Access group cannot be live-tailed at all.
     """
 
     name: str
@@ -37,6 +43,12 @@ class LogGroupInfo:
     stored_bytes: int | None
     retention_days: int | None
     created: datetime | None
+    log_group_class: str | None = None
+
+    @property
+    def supports_live_tail(self) -> bool:
+        """Whether ``StartLiveTail`` accepts this group."""
+        return self.log_group_class != INFREQUENT_ACCESS_CLASS
 
 
 def _to_log_group_info(group: dict[str, Any]) -> LogGroupInfo:
@@ -47,6 +59,7 @@ def _to_log_group_info(group: dict[str, Any]) -> LogGroupInfo:
         stored_bytes=group.get('storedBytes'),
         retention_days=group.get('retentionInDays'),
         created=epoch_ms_to_datetime(created_ms) if created_ms is not None else None,
+        log_group_class=group.get('logGroupClass'),
     )
 
 

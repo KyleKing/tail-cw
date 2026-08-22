@@ -13,7 +13,7 @@ from textual.widgets import DataTable
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.cli import Session
 from tail_cw.config import load_config
-from tail_cw.preview import GroupPreview
+from tail_cw.preview import Activity, GroupPreview
 from tail_cw.query.patterns import MessagePattern
 from tail_cw.recents import Recents, save_recents
 from tail_cw.tui.groups_screen import (
@@ -21,6 +21,7 @@ from tail_cw.tui.groups_screen import (
     NO_PREVIEW_SERVICE,
     RECENT_MARKER,
     GroupsScreen,
+    activity_label,
     render_preview,
 )
 from tail_cw.tui.navigation import NavTarget, ViewKind
@@ -551,3 +552,61 @@ async def test_opening_a_group_records_it_for_the_next_visit(tmp_path: Path) -> 
         screen.action_open_logs()
         await pilot.pause()
         assert app.recent_groups() == ('/aws/lambda/api',)
+
+
+def test_an_infrequent_access_group_says_so_because_it_cannot_be_tailed():
+    """`StartLiveTail` refuses the class outright, and nothing showed why."""
+    standard = LogGroupInfo(name='/std', arn='a', stored_bytes=None, retention_days=None, created=None)
+    infrequent = LogGroupInfo(
+        name='/ia',
+        arn='b',
+        stored_bytes=None,
+        retention_days=None,
+        created=None,
+        log_group_class='INFREQUENT_ACCESS',
+    )
+
+    assert standard.supports_live_tail
+    assert not infrequent.supports_live_tail
+
+
+@pytest.mark.parametrize(
+    ('activity', 'last_event', 'expected'),
+    [
+        (Activity.SATURATED, None, 'busy, sample filled'),
+        (Activity.MEASURED, datetime(2026, 8, 22, 14, 5, 30, tzinfo=UTC), 'last event 14:05:30 UTC'),
+        (Activity.QUIET, None, 'quiet'),
+        (Activity.MEASURED, None, 'quiet'),
+    ],
+)
+def test_the_activity_label_claims_only_what_the_sample_knows(activity, last_event, expected):
+    """A capped sample cannot see a busy group's newest event, so it must not name a time."""
+    preview = GroupPreview(
+        log_group='/g',
+        event_count=1,
+        window_seconds=900,
+        patterns=[],
+        activity=activity,
+        last_event=last_event,
+    )
+
+    assert activity_label(preview) == expected
+
+
+def test_the_preview_lists_the_fields_a_filter_could_use():
+    preview = GroupPreview(
+        log_group='/g',
+        event_count=3,
+        window_seconds=900,
+        patterns=[
+            MessagePattern(key='k1', count=2, example='{"level":"info","user":{"id":"1"}}'),
+            MessagePattern(key='k2', count=1, example='{"level":"error"}'),
+        ],
+        activity=Activity.MEASURED,
+    )
+
+    rendered = str(render_preview(preview))
+
+    assert 'fields:' in rendered
+    assert 'level 100%' in rendered
+    assert 'user.id 67%' in rendered

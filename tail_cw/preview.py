@@ -9,9 +9,10 @@ layer, so no Textual import belongs here.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Iterable
+from collections.abc import AsyncIterator, Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Any
 
 from tail_cw.aws.client import fetch_log_events
@@ -27,14 +28,44 @@ DEFAULT_VOLUME_BUCKETS = 48
 """Buckets per log-volume series; the sparkline resamples this to the cell width."""
 
 
+class Activity(StrEnum):
+    """How much the sample can honestly say about when a group last wrote.
+
+    ``FilterLogEvents`` yields ascending and the sample is capped, so a busy group's
+    newest sampled event sits early in the window. Reporting that as a last-write time
+    would make the busiest groups read as the stalest, which is the opposite of useful.
+    """
+
+    SATURATED = 'saturated'
+    """The sample filled up, so the group is busy and its last write is unknown."""
+
+    MEASURED = 'measured'
+    """The whole window fit in the sample, so ``last_event`` is exact."""
+
+    QUIET = 'quiet'
+    """Nothing in the window at all."""
+
+
 @dataclass(frozen=True)
 class GroupPreview:
-    """Recent-event summary for one log group."""
+    """Recent-event summary for one log group.
+
+    Attributes:
+        log_group: The group sampled.
+        event_count: Events read, capped at the sample limit.
+        window_seconds: How far back the sample looked.
+        patterns: Recurring message shapes, most frequent first.
+        activity: What the sample can say about recency, per :class:`Activity`.
+        last_event: The newest sampled event, exact only when ``activity`` is
+            :attr:`Activity.MEASURED`.
+    """
 
     log_group: str
     event_count: int
     window_seconds: int
     patterns: list[MessagePattern]
+    activity: Activity = Activity.QUIET
+    last_event: datetime | None = None
 
 
 async def build_group_preview(
@@ -116,13 +147,22 @@ async def _sample_group(
     effective_fetch = fetch_events if fetch_events is not None else fetch_log_events
     events = await take(effective_fetch(client, log_group, now - window, now), sample_limit)
     messages = [event.message for event in events]
+    saturated = len(events) >= sample_limit
 
     return GroupPreview(
         log_group=log_group,
         event_count=len(messages),
         window_seconds=window_seconds,
         patterns=cluster_messages(messages),
+        activity=_activity(events, saturated=saturated),
+        last_event=max((event.timestamp for event in events), default=None) if not saturated else None,
     )
+
+
+def _activity(events: Sequence[LogEvent], *, saturated: bool) -> Activity:
+    if saturated:
+        return Activity.SATURATED
+    return Activity.MEASURED if events else Activity.QUIET
 
 
 def _encode_payload(preview: GroupPreview) -> dict[str, Any]:
@@ -132,6 +172,8 @@ def _encode_payload(preview: GroupPreview) -> dict[str, Any]:
         'patterns': [
             {'key': pattern.key, 'count': pattern.count, 'example': pattern.example} for pattern in preview.patterns
         ],
+        'activity': preview.activity.value,
+        'last_event': preview.last_event.isoformat() if preview.last_event is not None else None,
     }
 
 
@@ -150,7 +192,13 @@ def _decode_payload(log_group: str, payload: dict[str, Any]) -> GroupPreview | N
             MessagePattern(key=pattern['key'], count=pattern['count'], example=pattern['example'])
             for pattern in patterns
         ],
+        activity=Activity(payload.get('activity', Activity.QUIET)),
+        last_event=_parse_moment(payload.get('last_event')),
     )
+
+
+def _parse_moment(value: Any) -> datetime | None:
+    return datetime.fromisoformat(value) if isinstance(value, str) else None
 
 
 def bucket_event_counts(

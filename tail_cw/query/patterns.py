@@ -10,11 +10,12 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from tail_cw.cache.records import is_jsonl_message
+from tail_cw.query.severity import load_json_dict
 
 TS_PLACEHOLDER = '<ts>'
 UUID_PLACEHOLDER = '<uuid>'
@@ -179,3 +180,52 @@ def _dump_shape(value: Any) -> str:
     dumped = json.dumps(value, sort_keys=True, separators=(',', ':'))
 
     return _QUOTED_PLACEHOLDER_RE.sub(r'\1', dumped)
+
+
+@dataclass(frozen=True)
+class FieldUsage:
+    """One JSON field a group's records carry, and how many carry it.
+
+    Attributes:
+        path: Dotted path, so ``user.id`` reads the way a filter writes it.
+        events: Sampled events whose record has the field.
+        share: Those events as a fraction of every sampled event.
+    """
+
+    path: str
+    events: int
+    share: float
+
+
+def field_roster(patterns: Sequence[MessagePattern], *, max_depth: int = 2) -> list[FieldUsage]:
+    """Merge the sampled shapes into one field list, most common first.
+
+    Answers "what can I filter this group on", which the shape list does not: the same
+    field appears in several shapes, and a field present in every record looks no
+    different from a rare one when the shapes are read side by side.
+
+    Only structured records contribute. Depth is capped because the filter syntax reads
+    a dotted path and a deeply nested blob produces more names than a reader can use.
+    """
+    total = sum(pattern.count for pattern in patterns)
+    if not total:
+        return []
+    counts: Counter[str] = Counter()
+    for pattern in patterns:
+        parsed = load_json_dict(pattern.example)
+        if parsed is None:
+            continue
+        for path in _field_paths(parsed, depth=max_depth):
+            counts[path] += pattern.count
+    return [
+        FieldUsage(path=path, events=events, share=events / total)
+        for path, events in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def _field_paths(record: Mapping[str, Any], *, depth: int, prefix: str = '') -> Iterator[str]:
+    for key, value in record.items():
+        path = f'{prefix}{key}'
+        yield path
+        if depth > 1 and isinstance(value, Mapping):
+            yield from _field_paths(value, depth=depth - 1, prefix=f'{path}.')
