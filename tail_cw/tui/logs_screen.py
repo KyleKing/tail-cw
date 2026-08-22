@@ -32,6 +32,7 @@ from tail_cw.config import TailCWConfig
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.parser import FilterNode, combine_filters, parse_extended_filter, parse_filter_pattern
 from tail_cw.query.trace import TraceGroup, extract_trace_id_from_event, query_traces_from_parquet_files
+from tail_cw.tui.command_bar import SearchLine
 from tail_cw.tui.log_viewer import Column, format_rows, plan_columns
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.record_detail import RecordDetailScreen
@@ -42,6 +43,12 @@ LiveStreamFactory = Callable[[], AsyncIterator[LogEvent]]
 
 _LIVE_FLUSH_INTERVAL_SECONDS = 0.25
 _HALF_PAGE = 10
+_ROW_RESERVE = 4
+"""Cells the elastic column cannot use: the cursor gutter and the scrollbar.
+
+Without it the message is cut at the pane edge and the ellipsis marking the cut
+is itself off-screen, which is the clipping the column budget exists to avoid.
+"""
 
 
 @dataclass(slots=True, init=False)
@@ -82,13 +89,6 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
     DEFAULT_CSS = """
     LogsScreen {
         layout: vertical;
-    }
-
-    #search_input {
-        dock: top;
-        height: 3;
-        padding: 0 1;
-        border: solid $accent;
     }
 
     #log_table {
@@ -143,7 +143,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._all_events: list[LogEvent] = []
         self._table: DataTable[Any] | None = None
         self._columns: tuple[Column, ...] = ()
-        self._search_input: Input | None = None
+        self._search_input: SearchLine | None = None
         self._parquet_paths: list[Path] = []
         self._trace_id_fields: list[str] = []
         self._live_stream_factory: LiveStreamFactory | None = None
@@ -175,10 +175,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         Yields:
             The search input, the table inside its container, and the status label.
         """
-        yield Input(
-            placeholder='Search (CloudWatch syntax or key:value)...',
-            id='search_input',
-        )
+        yield SearchLine(placeholder='Search (CloudWatch syntax or key:value)...')
         with Container():
             yield DataTable(
                 id='log_table',
@@ -193,7 +190,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         """Wire up the table, then load either the window or the live stream."""
         super().on_mount()
         self._table = self.query_one('#log_table', DataTable)
-        self._search_input = self.query_one('#search_input', Input)
+        self._search_input = self.query_one(SearchLine)
         self._trace_id_fields = list(self._config.trace.trace_id_fields)
         self._live_buffer = deque(maxlen=self._config.tui.live_buffer_limit)
         self._setup_table_columns()
@@ -267,10 +264,13 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         """Give the table the columns this width can afford, replacing any it had."""
         if self._table is None:
             return
-        self._columns = plan_columns(self._table_width(), single_group=len(self._log_groups) <= 1)
+        self._columns = self._plan()
         self._table.clear(columns=True)
         for column in self._columns:
             self._table.add_column(column.label, key=column.key, width=column.width)
+
+    def _plan(self) -> tuple[Column, ...]:
+        return plan_columns(self._table_width() - _ROW_RESERVE, single_group=len(self._log_groups) <= 1)
 
     def _table_width(self) -> int:
         """Width the column budget is planned against.
@@ -292,7 +292,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         """
         if self._table is None:
             return
-        planned = plan_columns(self._table_width(), single_group=len(self._log_groups) <= 1)
+        planned = self._plan()
         if planned == self._columns:
             return
         self._setup_table_columns()
@@ -354,9 +354,6 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             self._update_status('No events found')
             return
 
-        if self._search_input is not None:
-            self._search_input.display = True
-
         initial_limit = self._config.tui.initial_load_limit
         try:
             events = list(
@@ -383,9 +380,6 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
 
         if parquet_paths is not None:
             self._parquet_paths = list(parquet_paths)
-
-        if self._search_input is not None and (self._parquet_paths or self._all_events):
-            self._search_input.display = True
 
         self._update_status(f'Loaded {len(events)} events')
 
@@ -474,7 +468,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         if not self._parquet_paths and not self._all_events:
             self.notify('No data source available for search', severity='warning')
             return
-        self._search_input.focus()
+        self._search_input.open()
 
     def action_refresh(self) -> None:
         """Extend the shared window to now and re-read it."""
@@ -712,6 +706,18 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             )
 
         self.set_timer(0.3, execute_search)
+
+    @on(Input.Blurred, '#search_input')
+    def on_search_input_blurred(self, _event: Input.Blurred) -> None:
+        """Give the rows back the three lines an empty search box was holding.
+
+        Only the search box is watched. A handler on every descendant blur stole
+        focus back from the command line the moment it opened, which left ``:``
+        advertised in the footer and inert in a real terminal.
+        """
+        if self._search_input is not None and not self._search_input.value.strip():
+            self._search_input.close()
+            self.restore_focus()
 
     @on(Input.Submitted, '#search_input')
     def on_search_input_submitted(self, event: Input.Submitted) -> None:

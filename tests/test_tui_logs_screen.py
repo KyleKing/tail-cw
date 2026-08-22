@@ -114,6 +114,11 @@ def _make_app(
     )
 
 
+def _search_shown(screen: LogsScreen) -> bool:
+    assert screen._search_input is not None
+    return bool(screen._search_input.display)
+
+
 def _cell(app: TailCWApp, key: str) -> object:
     table = app.screen.query_one('#log_table', DataTable)
     return table.get_cell(next(iter(table.rows.keys())), key)
@@ -461,9 +466,10 @@ async def test_search_submit_moves_focus_to_table():
     async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events(_make_test_log_events(3))
-        assert screen._search_input is not None
-        screen._search_input.focus()
+        await pilot.press('/')
         await pilot.pause()
+        assert screen._search_input is not None
+        assert screen._search_input.has_focus, 'the footer advertises / as the way in'
         await pilot.press('enter')
         await pilot.pause()
 
@@ -1271,3 +1277,25 @@ async def test_trace_view_performance(tmp_path: Path):
 
         assert isinstance(app.screen, TraceViewerScreen)
         assert len(app.screen._trace_groups) == 50
+
+
+@pytest.mark.asyncio
+async def test_the_search_box_only_takes_room_while_it_is_in_use():
+    """Three of 24 rows is a lot to spend on an empty input."""
+    app = _make_app()
+
+    async with running(app) as pilot:
+        screen = _logs_screen(app)
+        screen.load_events(_make_test_log_events(3))
+        await pilot.pause()
+        assert _search_shown(screen) is False
+
+        await pilot.press('/')
+        await pilot.pause()
+        assert _search_shown(screen) is True
+
+        await pilot.press('escape')
+        await pilot.pause()
+
+        assert _search_shown(screen) is False, 'escape closes the search rather than leaving the view'
+        assert len(app.nav.stack) == 1, 'and it does not pop the view out from under it'

@@ -20,9 +20,10 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.timer import Timer
 from textual.widget import Widget
-from textual.widgets import DataTable, Input, Label, Static
+from textual.widgets import DataTable, Label, Static
 
 from tail_cw.aws.log_groups import LogGroupInfo, resolve_group_pattern
+from tail_cw.tui.command_bar import PROMPT_CSS, HiddenInput
 
 DEBOUNCE_SECONDS = 0.25
 """Delay before a highlighted row triggers its detail fetch."""
@@ -142,19 +143,14 @@ class Debounce:
             pending()
 
 
-class FilterInput(Input):
+class FilterInput(HiddenInput):
     """The ``/`` filter box, which cancels on Escape instead of popping the view."""
 
-    DEFAULT_CSS = """
-    FilterInput {
-        height: 1;
-        padding: 0 1;
-        /* Input's own rule sets a tall border, which at height 1 leaves no row for the
-           text. Without !important the base class wins and the box renders empty. */
-        border: none !important;
+    DEFAULT_CSS = f"""
+    FilterInput {{
+        {PROMPT_CSS}
         background: $boost;
-        display: none;
-    }
+    }}
     """
 
     class Cancelled(Message):
@@ -236,13 +232,11 @@ class Picker(Horizontal):
 
     def open_filter(self) -> None:
         """Show the filter box and focus it."""
-        box = self.filter_input
-        box.display = True
-        box.focus()
+        self.filter_input.open()
 
     def close_filter(self) -> None:
         """Hide the filter box and return focus to the table."""
-        self.filter_input.display = False
+        self.filter_input.close()
         self.table.focus()
 
     def set_status(self, text: str) -> None:
