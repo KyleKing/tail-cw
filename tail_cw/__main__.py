@@ -27,8 +27,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 0
     except Exception as err:
-        sys.stderr.write(f'Error: {err}\n')
+        sys.stderr.write(f'Error: {_readable(err)}\n')
         return 1
+
+
+def _readable(err: BaseException) -> str:
+    """Name what actually failed, looking through the TaskGroups that carried it.
+
+    Concurrent fetches raise an ``ExceptionGroup`` whose own message is
+    "unhandled errors in a TaskGroup (1 sub-exception)", which says nothing about
+    the expired token or missing permission underneath it.
+    """
+    while isinstance(err, BaseExceptionGroup) and len(err.exceptions) == 1:
+        err = err.exceptions[0]
+    if isinstance(err, BaseExceptionGroup):
+        return '; '.join(_readable(inner) for inner in err.exceptions)
+    return str(err)
 
 
 if __name__ == '__main__':

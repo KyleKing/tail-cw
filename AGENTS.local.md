@@ -224,6 +224,10 @@ References:
 - If you’re unsure between feature breadth and testability, choose testability.
 - When in doubt about performance in Textual, profile and reduce work per frame; batch and
     reuse renderables.
+- A message that decodes as a JSON object is spliced into the cache's NDJSON line
+    verbatim rather than re-encoded, because Polars decodes the file straight after.
+    Anything spliced must hold no newline: a pretty-printed payload is valid JSON and would
+    end the line early, so it takes the re-encoding path
 - Trace heuristics should inspect structured fields (levels, status, message bodies)
     before falling back to free-text keyword scans to avoid misclassifying IDs like
     `trace-error` as failures.

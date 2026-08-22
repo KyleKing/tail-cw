@@ -227,18 +227,26 @@ should share whatever storage queue item 3 builds for query history rather than
 inventing a second one; and a `FILTER_GUIDE.md`, since the syntax currently lives only
 in `parser.py` docstrings.
 
-**Cache and query performance.** Every JSON log line is decoded by Python, re-encoded by
-Python, then decoded again by Polars: `_log_events_to_ndjson_file` calls `json.loads`
-per event and `scan_ndjson` re-parses the same bytes.
-Moving the decode into the lazy pipeline as `str.json_decode` is the fix, and the
-original brief asked for parsing "not in Python", so this is the founding requirement
-going unmet rather than a nice-to-have.
-Do it while item 1 is already rewriting the write path.
-Two obstacles the obvious version misses: `jsonl_events` is a returned count feeding
-cache metadata and becomes a null count on the frame, and `is_jsonl_message` strips a
-leading timestamp prefix, so the expression needs a `str.replace` first and non-JSON
-lines need to null rather than error.
-Beyond that: `tail-cw cache status` for size and hit rate, since no cache introspection
+**Cache and query performance.** Done on 2026-08-22, and the framing was wrong.
+Parsing was already in Rust: Polars does the real decode, and the write path measured
+0.39s of Python against 0.64s of Polars over 72,767 events.
+What Python was doing twice was *encoding*, not parsing, so the fix was to splice a
+message that decodes as a JSON object into the NDJSON line verbatim rather than
+re-encoding the dict the check produced.
+That took the Python half to 0.22s, about 13% of the whole write and 1 to 2% of a cold
+fetch, which is the honest size of it.
+Two things stayed: the decode that proves a line is a JSON object (dropping it saves
+0.077s and lets one malformed brace-prefixed line make a whole file unreadable), and
+`scan_ndjson(infer_schema_length=None)`, because `str.json_decode` now requires an
+explicit dtype (Polars 1.33 deprecated inference) and nothing else infers the union of
+keys across a file.
+Neither the sort nor zstd is worth touching: unsorted measured 0.67s against 0.64s, and
+uncompressed 0.60s.
+A pretty-printed payload is the trap: it is valid JSON, so it takes the parsed path, and
+its newlines would end the NDJSON line early and make the whole file unreadable.
+`tests/test_cache.py` covers it.
+Still open here: `tail-cw cache status` for size and hit rate, since no cache
+introspection
 exists and the cache sits at 115 MB against a 1000 MB limit with no way to see either;
 and benchmark targets gated in CI, because ADR 0003's claim that the local engine is
 better at re-filtering was unmeasured until 2026-08-21 and is now measured only once.

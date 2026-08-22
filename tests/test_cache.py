@@ -96,6 +96,19 @@ def test_write_counts_the_events_it_parsed(fix_test_cache: Path, messages, expec
     assert stats['file_size_bytes'] > 0
 
 
+def test_a_pretty_printed_payload_does_not_break_the_file(fix_test_cache: Path):
+    """It is valid JSON, so it takes the parsed path, and its newlines would end the NDJSON line early."""
+    message = '{\n  "level": "info",\n  "event": "multi line"\n}'
+    output_path = fix_test_cache / 'pretty.parquet'
+
+    stats = write_log_events_to_parquet(make_events([message]), output_path)
+
+    assert stats['jsonl_events'] == 1
+    assert [event.message for event in read_parquet_to_log_events(output_path)] == [
+        '{"level":"info","event":"multi line"}',
+    ]
+
+
 def test_write_rejects_an_empty_batch(fix_test_cache: Path):
     output_path = fix_test_cache / 'empty.parquet'
 

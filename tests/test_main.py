@@ -101,6 +101,18 @@ def test_main_handles_generic_exception(capsys):
     assert 'test error' in capsys.readouterr().err
 
 
+def test_main_names_the_failure_inside_a_task_group(capsys):
+    """Concurrent fetches wrap the real error, and "1 sub-exception" names nothing."""
+    carried = ExceptionGroup('unhandled errors in a TaskGroup', [RuntimeError('token has expired')])
+    with patch('tail_cw.services.run', side_effect=carried):
+        result = main(['logs', '/g'])
+
+    err = capsys.readouterr().err
+    assert result == 1
+    assert 'token has expired' in err
+    assert 'sub-exception' not in err
+
+
 def test_main_handles_config_error(tmp_path, capsys):
     config_path = tmp_path / 'config.toml'
     config_path.write_text('not valid toml [', encoding='utf-8')
