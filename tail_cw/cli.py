@@ -50,6 +50,7 @@ from tail_cw.aws.metrics import (
     fetch_metric_data,
     list_metric_definitions,
 )
+from tail_cw.aws.xray import XRayTraceSummary, batch_get_traces, get_trace_summaries
 from tail_cw.cache.storage import LogCache, generate_cache_key
 from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import closing_stream, consume_in_thread, fetch_pool, run_blocking
@@ -58,7 +59,7 @@ from tail_cw.demo import demo_dashboard
 from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.parser import DEFAULT_WINDOW, build_parser
 from tail_cw.query.engine import query_parquet_files_to_log_events
-from tail_cw.query.otlp import trace_error_summary, trace_groups_to_otlp
+from tail_cw.query.otlp import trace_error_summary, trace_groups_to_otlp, xray_trace_summary, xray_traces_to_otlp
 from tail_cw.query.parser import FilterNode, parse_filter_pattern
 from tail_cw.query.report import render_alarm_markdown, render_markdown, render_rows_markdown
 from tail_cw.query.rollup import Granularity, RollupReport, roll_up
@@ -943,6 +944,67 @@ async def _export_trace(
     return 0
 
 
+def _xray_summary_to_record(summary: XRayTraceSummary) -> dict[str, object]:
+    return {
+        'trace_id': summary.trace_id,
+        'start_time': summary.start_time.isoformat() if summary.start_time is not None else None,
+        'duration_seconds': summary.duration_seconds,
+        'response_time_seconds': summary.response_time_seconds,
+        'has_fault': summary.has_fault,
+        'has_error': summary.has_error,
+        'has_throttle': summary.has_throttle,
+        'is_partial': summary.is_partial,
+        'entry_point': summary.entry_point,
+        'services': list(summary.service_names),
+        'http_method': summary.http_method,
+        'http_url': summary.http_url,
+        'http_status': summary.http_status,
+    }
+
+
+async def _export_xray(pool: ClientProvider, args: argparse.Namespace, now: datetime) -> int:
+    """Write one NDJSON row per trace in the window, for pivoting into ``xray-trace``."""
+    try:
+        start_time, end_time = _window_from_args(args, now)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+    xray = await pool.client('xray')
+    written = 0
+    summaries = get_trace_summaries(
+        xray,
+        start_time=start_time,
+        end_time=end_time,
+        filter_expression=args.filter_expression,
+        sampling=args.sampling,
+    )
+    async for summary in summaries:
+        _write_json_line(_xray_summary_to_record(summary))
+        written += 1
+        if args.limit is not None and written >= args.limit:
+            break
+    if written == 0:
+        sys.stderr.write(f'No X-Ray traces in {_window_label(start_time, end_time)}\n')
+        return 1
+    return 0
+
+
+async def _export_xray_trace(pool: ClientProvider, args: argparse.Namespace) -> int:
+    """Write full segment documents for named traces as one OTLP document."""
+    xray = await pool.client('xray')
+    traces = await batch_get_traces(xray, args.trace_ids)
+    found = {trace.trace_id for trace in traces}
+    for missing in (trace_id for trace_id in args.trace_ids if trace_id not in found):
+        sys.stderr.write(f'X-Ray has no segments for {missing}\n')
+    if not traces:
+        return 1
+    for trace in traces:
+        sys.stderr.write(f'{xray_trace_summary(trace)}\n')
+    json.dump(xray_traces_to_otlp(traces), sys.stdout)
+    sys.stdout.write('\n')
+    return 0
+
+
 def _insights_preflight(
     groups: Sequence[LogGroupInfo],
     args: argparse.Namespace,
@@ -1195,6 +1257,8 @@ async def _dispatch_export(
         'summary': lambda: _export_summary(pool, args, now, fetch_events=fetch_events, executor=executor),
         'insights': lambda: _export_insights(pool, args, now),
         'trace': lambda: _export_trace(pool, args, now, fetch_events=fetch_events, executor=executor),
+        'xray': lambda: _export_xray(pool, args, now),
+        'xray-trace': lambda: _export_xray_trace(pool, args),
         'alarms': lambda: _export_alarms(pool, args, now),
         'metrics': lambda: _export_metrics(pool, args, now),
         'dimensions': lambda: _export_dimensions(pool, args),

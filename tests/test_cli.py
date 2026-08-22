@@ -18,6 +18,7 @@ from tail_cw.aws.events import LogEvent
 from tail_cw.aws.insights import InsightsQueryError, InsightsResult
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.aws.metrics import MetricDefinition, MetricSeries
+from tail_cw.aws.xray import XRayTrace, XRayTraceSummary
 from tail_cw.cache.storage import read_parquet_to_log_events
 from tail_cw.cli import (
     FetchRequest,
@@ -1554,3 +1555,60 @@ def test_run_cli_export_metrics_rejects_a_dimension_without_a_value(tmp_path, ca
 
     assert result == 2
     assert 'expects NAME=VALUE' in capsys.readouterr().err
+
+
+def _make_xray_summary(trace_id: str, *, duration: float) -> XRayTraceSummary:
+    return XRayTraceSummary(
+        trace_id=trace_id,
+        start_time=NOW,
+        duration_seconds=duration,
+        response_time_seconds=duration,
+        has_fault=False,
+        has_error=False,
+        has_throttle=False,
+        is_partial=False,
+        service_names=('irm-api',),
+        entry_point='irm-api',
+        http_method='GET',
+        http_url='https://api.example/v1/radar_event',
+        http_status=200,
+    )
+
+
+def test_run_cli_export_xray_writes_one_row_per_trace_and_honours_the_limit(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    summaries = [_make_xray_summary(f'1-0000000{index}-{index:032x}', duration=index / 10) for index in range(5)]
+    monkeypatch.setattr('tail_cw.cli.get_trace_summaries', _async_iter_factory(summaries))
+    argv = ['export', 'xray', '--limit', '2', '--config', str(_write_config_file(tmp_path))]
+
+    result = run_cli(argv, None, is_tty=False)
+
+    assert result == 0
+    rows = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [row['trace_id'] for row in rows] == [summaries[0].trace_id, summaries[1].trace_id]
+    assert rows[0]['services'] == ['irm-api']
+    assert rows[0]['start_time'] == NOW.isoformat()
+
+
+def test_run_cli_export_xray_says_so_when_the_window_is_empty(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    monkeypatch.setattr('tail_cw.cli.get_trace_summaries', _async_iter_factory([]))
+
+    result = run_cli(['export', 'xray', '--config', str(_write_config_file(tmp_path))], None, is_tty=False)
+
+    assert result == 1
+    assert 'No X-Ray traces' in capsys.readouterr().err
+
+
+def test_run_cli_export_xray_trace_names_the_ids_xray_has_no_segments_for(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    found = XRayTrace(trace_id='1-aaaa-1', duration_seconds=0.25, limit_exceeded=False, spans=())
+    monkeypatch.setattr('tail_cw.cli.batch_get_traces', _async_value_factory([found]))
+    argv = ['export', 'xray-trace', '1-aaaa-1', '1-bbbb-2', '--config', str(_write_config_file(tmp_path))]
+
+    result = run_cli(argv, None, is_tty=False)
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert 'no segments for 1-bbbb-2' in captured.err
+    assert json.loads(captured.out) == {'resourceSpans': []}

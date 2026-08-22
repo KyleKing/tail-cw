@@ -1,4 +1,9 @@
-"""Serialize grouped log events as OTLP JSON, for viewers that already draw traces.
+"""Serialize spans as OTLP JSON, for viewers that already draw traces.
+
+Two sources land here. Log lines, which carry one timestamp and no parent, are the
+constrained case documented below. X-Ray segment documents carry real start and end
+times and a real ``parent_id``, so :func:`xray_traces_to_otlp` needs none of the
+heuristics the log path does.
 
 Per [ADR 0012](../../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)
 tail-cw emits a standard document rather than drawing a waterfall. The honest
@@ -20,6 +25,7 @@ from hashlib import blake2b
 from typing import Any
 
 from tail_cw.aws.events import LogEvent
+from tail_cw.aws.xray import XRaySpan, XRayTrace
 from tail_cw.query.severity import load_json_dict
 from tail_cw.query.trace import TraceGroup, TraceSpan
 
@@ -29,6 +35,7 @@ STATUS_CODE_UNSET = 0
 _TRACE_ID_HEX = 32
 _SPAN_ID_HEX = 16
 _NANOS_PER_MS = 1_000_000
+_NANOS_PER_SECOND = 1_000_000_000
 _ATTRIBUTE_SKIP = frozenset({'duration', 'duration_ms', 'durationMs', 'elapsed_ms', 'parent_span_id', 'span_id'})
 
 
@@ -164,3 +171,73 @@ def _hex_id(value: str, *, width: int) -> str:
     if hexed and len(value.replace('-', '')) == len(hexed):
         return hexed.rjust(width, '0')
     return blake2b(value.encode(), digest_size=width // 2).hexdigest()
+
+
+def xray_traces_to_otlp(traces: Sequence[XRayTrace]) -> dict[str, Any]:
+    """Build one OTLP JSON document from X-Ray segment documents.
+
+    Unlike the log-derived path above, these spans carry real start and end times and a
+    real parent, so the waterfall a viewer draws from this is the service's own account
+    of what waited on what.
+    """
+    by_service: dict[str, list[XRaySpan]] = {}
+    for trace in traces:
+        for span in trace.spans:
+            by_service.setdefault(span.service_name, []).append(span)
+    return {
+        'resourceSpans': [
+            {
+                'resource': {'attributes': [_attribute('service.name', service)]},
+                'scopeSpans': [{'scope': {'name': SCOPE_NAME}, 'spans': [_xray_span(span) for span in spans]}],
+            }
+            for service, spans in by_service.items()
+        ],
+    }
+
+
+def xray_trace_summary(trace: XRayTrace) -> str:
+    """One line naming a fetched trace's shape, for stderr alongside the document."""
+    widest = max(trace.spans, key=lambda span: span.duration_ms or 0.0, default=None)
+    slowest = f'{widest.name} at {widest.duration_ms:.0f}ms' if widest and widest.duration_ms else 'nothing timed'
+    truncated = ', truncated by X-Ray' if trace.limit_exceeded else ''
+    return (
+        f'{trace.trace_id}: {len(trace.spans)} spans across {len(trace.service_names)} services, '
+        f'{trace.error_count} errors, widest is {slowest}{truncated}'
+    )
+
+
+def _xray_span(span: XRaySpan) -> dict[str, Any]:
+    start_nanos = int(span.start_time.timestamp() * _NANOS_PER_SECOND)
+    end = span.end_time.timestamp() if span.end_time is not None else span.start_time.timestamp()
+    rendered = {
+        'traceId': _hex_id(span.trace_id, width=_TRACE_ID_HEX),
+        'spanId': _hex_id(span.span_id, width=_SPAN_ID_HEX),
+        'name': span.name,
+        'startTimeUnixNano': str(start_nanos),
+        'endTimeUnixNano': str(int(end * _NANOS_PER_SECOND)),
+        'attributes': list(_xray_attributes(span)),
+        'status': {'code': STATUS_CODE_ERROR if span.is_error or span.is_fault else STATUS_CODE_UNSET},
+    }
+    if span.parent_span_id:
+        rendered['parentSpanId'] = _hex_id(span.parent_span_id, width=_SPAN_ID_HEX)
+    if span.error_message:
+        rendered['status'] = {'code': STATUS_CODE_ERROR, 'message': span.error_message}
+    return rendered
+
+
+def _xray_attributes(span: XRaySpan) -> Iterable[dict[str, Any]]:
+    optional = {
+        'aws.xray.origin': span.origin,
+        'aws.xray.namespace': span.namespace,
+        'db.statement': span.sql_url,
+        'http.response.status_code': span.http_status,
+    }
+    for key, value in optional.items():
+        if value is not None:
+            yield _attribute(key, value)
+    if span.is_inferred:
+        # An inferred span's timings are the caller's view of the work, not the work's
+        # own, so a reader comparing it against a real span needs to know which it is.
+        yield _attribute('aws.xray.inferred', value=True)
+    for key, value in span.annotations:
+        yield _attribute(f'annotation.{key}', value)

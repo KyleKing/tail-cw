@@ -56,6 +56,12 @@ def _add_export_parsers(export: argparse.ArgumentParser) -> None:
     _configure_trace(
         export_sub.add_parser('trace', help='Write one trace as OTLP JSON, for a viewer that draws waterfalls.'),
     )
+    _configure_xray(
+        export_sub.add_parser('xray', help='Write X-Ray trace summaries for a time range as NDJSON.'),
+    )
+    _configure_xray_trace(
+        export_sub.add_parser('xray-trace', help='Write full X-Ray traces as OTLP JSON, with real span timings.'),
+    )
     _configure_alarms(export_sub.add_parser('alarms', help='Write metric alarms, and their firing history, as NDJSON.'))
     _configure_metrics(export_sub.add_parser('metrics', help='Write metric datapoints as NDJSON.'))
     _configure_dimensions(
@@ -150,6 +156,33 @@ def _configure_trace(parser: argparse.ArgumentParser) -> None:
         help=f'Cap on groups read (default: {DEFAULT_SUMMARY_MAX_GROUPS})',
     )
     parser.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
+
+
+def _configure_xray(parser: argparse.ArgumentParser) -> None:
+    _add_aws_flags(parser)
+    parser.add_argument(
+        '--start',
+        default=DEFAULT_WINDOW,
+        help=f'Start of range: duration (15m, 2h, 3d) or ISO-8601 datetime (default: {DEFAULT_WINDOW})',
+    )
+    parser.add_argument('--end', default=None, help='End of range: duration or ISO-8601 datetime')
+    parser.add_argument(
+        '--expression',
+        dest='filter_expression',
+        default=None,
+        help='X-Ray filter expression applied server-side, e.g. \'service("api") AND responsetime > 3\'',
+    )
+    parser.add_argument(
+        '--sampling',
+        action='store_true',
+        help='Ask X-Ray for a representative sample rather than every trace',
+    )
+    parser.add_argument('--limit', type=int, default=None, help='Stop after this many traces')
+
+
+def _configure_xray_trace(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('trace_ids', nargs='+', help='One or more X-Ray trace ids (1-<hex>-<hex>)')
+    _add_aws_flags(parser)
 
 
 def _configure_insights(parser: argparse.ArgumentParser) -> None:
