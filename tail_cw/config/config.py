@@ -90,6 +90,33 @@ class TUIConfig:
 
 
 @dataclass(slots=True)
+class InsightsConfig:
+    """Guards on the one query path that bills.
+
+    Attributes:
+        confirm_above_gb: Estimated gigabytes a query may scan before it needs
+            an explicit confirmation.
+    """
+
+    confirm_above_gb: float = 1.0
+
+
+@dataclass(slots=True)
+class MessageConfig:
+    """Which record fields carry the human-readable phrase in the log table.
+
+    Attributes:
+        phrase_fields: Keys tried in order for the sentence a person reads. The
+            first present wins; the rest of the record renders as ``key=value``.
+        hidden_fields: Keys dropped from the tabulated remainder, for identifiers
+            the table's own columns already carry.
+    """
+
+    phrase_fields: list[str] = field(default_factory=lambda: ['event', 'message', 'msg', 'log', 'text'])
+    hidden_fields: list[str] = field(default_factory=lambda: ['timestamp', 'time', 'asctime', 'level', 'levelname'])
+
+
+@dataclass(slots=True)
 class TraceConfig:
     """Trace extraction configuration.
 
@@ -129,6 +156,8 @@ class TailCWConfig:
 
     Attributes:
         cache: Cache persistence configuration.
+        insights: Guards on billed Logs Insights queries.
+        message: Which record fields the log table reads as the phrase.
         preview: Log group preview sampling configuration.
         tui: TUI incremental loading configuration.
         trace: Trace extraction configuration.
@@ -137,6 +166,8 @@ class TailCWConfig:
     """
 
     cache: CacheConfig = field(default_factory=CacheConfig)
+    insights: InsightsConfig = field(default_factory=InsightsConfig)
+    message: MessageConfig = field(default_factory=MessageConfig)
     preview: PreviewConfig = field(default_factory=PreviewConfig)
     tui: TUIConfig = field(default_factory=TUIConfig)
     trace: TraceConfig = field(default_factory=TraceConfig)
@@ -234,6 +265,8 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
         raise
 
     cache_kwargs = _load_section(data.get('cache'), CacheConfig)
+    insights_kwargs = _load_section(data.get('insights'), InsightsConfig)
+    message_kwargs = _load_section(data.get('message'), MessageConfig)
     preview_kwargs = _load_section(data.get('preview'), PreviewConfig)
     tui_kwargs = _load_section(data.get('tui'), TUIConfig)
     trace_kwargs = _load_section(data.get('trace'), TraceConfig)
@@ -248,6 +281,8 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
 
     config = TailCWConfig(
         cache=CacheConfig(**cache_kwargs),
+        insights=InsightsConfig(**insights_kwargs),
+        message=MessageConfig(**message_kwargs),
         preview=PreviewConfig(**preview_kwargs),
         tui=TUIConfig(**tui_kwargs),
         trace=TraceConfig(**trace_kwargs),
@@ -295,6 +330,11 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'size_limit_mb = 1000\n'
             'default_ttl_seconds = 3600  # 1 hour\n'
             'eviction_policy = "least-recently-stored"\n\n'
+            '[insights]\n'
+            '# Estimated GB a query may scan before it asks for confirmation.\n'
+            'confirm_above_gb = 1.0\n\n'
+            '[message]\n'
+            '# phrase_fields = ["event", "message", "msg"]\n\n'
             '[preview]\n'
             'sample_limit = 500\n'
             'window_seconds = 900  # 15 minutes\n'

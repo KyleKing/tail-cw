@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 from collections.abc import AsyncIterator, Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -1165,9 +1166,10 @@ def _summary_argv(tmp_path: Path, *extra: str) -> list[str]:
     ]
 
 
-def _install_groups(monkeypatch, names: list[str]) -> None:
+def _install_groups(monkeypatch, names: list[str], *, stored_bytes: int = 10) -> None:
+    groups = [replace(_make_group(name), stored_bytes=stored_bytes) for name in names]
     monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
-    monkeypatch.setattr('tail_cw.cli.describe_log_groups', _async_iter_factory([_make_group(name) for name in names]))
+    monkeypatch.setattr('tail_cw.cli.describe_log_groups', _async_iter_factory(groups))
 
 
 def test_run_cli_export_summary_writes_markdown(tmp_path, capsys, monkeypatch):
@@ -1251,6 +1253,63 @@ def test_run_cli_export_insights_writes_rows_and_reports_scanned_volume(tmp_path
     assert '| 2026-08-14 | 7 |' in captured_output.out
     # Insights bills on bytes scanned, so the caller is always told.
     assert '1.500 GB scanned' in captured_output.err
+
+
+def _insights_argv(tmp_path: Path, *extra: str) -> list[str]:
+    return [
+        'export',
+        'insights',
+        '/aws/lambda/*',
+        '--config',
+        str(_write_config_file(tmp_path)),
+        '--query',
+        'filter @message like /boom/',
+        *extra,
+    ]
+
+
+def _unreachable_query(_client, **_kwargs):
+    msg = 'the preflight should have stopped this query'
+    raise AssertionError(msg)
+
+
+@pytest.mark.parametrize(
+    ('extra', 'expected_code', 'expected_err'),
+    [
+        ((), 1, 'Above the 1 GB ceiling'),
+        (('--dry-run',), 0, 'Estimate ~'),
+    ],
+)
+def test_run_cli_export_insights_stops_before_billing(
+    tmp_path,
+    capsys,
+    monkeypatch,
+    extra,
+    expected_code,
+    expected_err,
+):
+    # A week's retention holding 70 GB is 10 GB a day, so an hour of it is over the ceiling.
+    _install_groups(monkeypatch, ['/aws/lambda/one'], stored_bytes=70 * 10**9)
+    monkeypatch.setattr('tail_cw.cli.run_insights_query', _unreachable_query)
+
+    result = run_cli(_insights_argv(tmp_path, '--start', '12h', *extra), None, is_tty=False)
+
+    assert result == expected_code
+    assert expected_err in capsys.readouterr().err
+
+
+def test_run_cli_export_insights_runs_over_the_ceiling_when_told_to(tmp_path, capsys, monkeypatch):
+    _install_groups(monkeypatch, ['/aws/lambda/one'], stored_bytes=70 * 10**9)
+
+    async def fake_query(_client, **_kwargs):
+        return InsightsResult(columns=(), rows=(), records_matched=0, records_scanned=0, bytes_scanned=0)
+
+    monkeypatch.setattr('tail_cw.cli.run_insights_query', fake_query)
+
+    result = run_cli(_insights_argv(tmp_path, '--start', '12h', '--yes'), None, is_tty=False)
+
+    assert result == 0
+    assert 'Above the' not in capsys.readouterr().err
 
 
 def test_run_cli_export_insights_reports_a_failed_query(tmp_path, capsys, monkeypatch):

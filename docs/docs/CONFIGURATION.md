@@ -30,6 +30,10 @@ Retrieve this location programmatically via `tail_cw.config.get_default_cache_di
 ## Configuration Sections
 
 - `[cache]` controls cache storage limits and eviction behaviour.
+- `[insights]` sets the estimated scan size a Logs Insights query may reach before it
+    asks for confirmation.
+- `[message]` names the record fields the log table reads as the human-readable phrase,
+    and the ones it drops from the tabulated remainder.
 - `[presets]` names groups of log groups so `@name` stands in for the whole set.
 - `[preview]` bounds the log group previews shown in the browser.
 - `[tui]` exposes pagination and search limits for the Textual UI.
@@ -43,6 +47,13 @@ Retrieve this location programmatically via `tail_cw.config.get_default_cache_di
 size_limit_mb = 1024
 default_ttl_seconds = 3600                # 1 hour
 eviction_policy = "least-recently-stored"
+
+[insights]
+confirm_above_gb = 1.0 # estimated GB before a query needs --yes or a keypress
+
+[message]
+phrase_fields = ["event", "message", "msg"]
+hidden_fields = ["timestamp", "level"]
 
 [presets]
 api = ["/aws/lambda/api-a", "/ecs/api-b"]

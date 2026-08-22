@@ -6,11 +6,14 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from tail_cw.aws.insights import (
+    ASSUMED_RETENTION_DAYS,
     MAX_INSIGHTS_LOG_GROUPS,
     InsightsQueryError,
+    estimate_scan,
     run_insights_query,
     validate_insights_request,
 )
+from tail_cw.aws.log_groups import LogGroupInfo
 
 START = datetime(2026, 8, 14, tzinfo=UTC)
 END = START + timedelta(days=7)
@@ -132,3 +135,49 @@ def test_validate_insights_request(query, days, expected):
         return
     with pytest.raises(ValueError, match=expected):
         validate_insights_request(query, start, end)
+
+
+def _group(
+    name: str = '/g',
+    *,
+    stored_bytes: int | None = 7 * 10**9,
+    retention_days: int | None = 7,
+    created: datetime | None = None,
+) -> LogGroupInfo:
+    return LogGroupInfo(
+        name=name,
+        arn=f'arn:{name}',
+        stored_bytes=stored_bytes,
+        retention_days=retention_days,
+        created=created,
+    )
+
+
+@pytest.mark.parametrize(
+    ('groups', 'window', 'expected_gb', 'expected_unknown'),
+    [
+        # 7 GB over 7 days retention is 1 GB a day.
+        ([_group()], timedelta(days=1), 1.0, 0),
+        ([_group(), _group('/h')], timedelta(hours=12), 1.0, 0),
+        # No retention: the span is measured from creation instead.
+        ([_group(retention_days=None, created=END - timedelta(days=14))], timedelta(days=1), 0.5, 0),
+        # Neither retention nor creation: the assumed span stands in.
+        ([_group(retention_days=None)], timedelta(days=ASSUMED_RETENTION_DAYS), 7.0, 0),
+        ([_group(stored_bytes=None)], timedelta(days=1), 0.0, 1),
+        ([], timedelta(days=1), 0.0, 0),
+    ],
+)
+def test_estimate_scan(groups, window, expected_gb, expected_unknown):
+    estimate = estimate_scan(groups, window=window, now=END)
+
+    assert estimate.gigabytes == pytest.approx(expected_gb, rel=0.01)
+    assert estimate.unknown_groups == expected_unknown
+    assert estimate.group_count == len(groups)
+
+
+def test_scan_estimate_label_prices_the_window_and_says_it_reads_low():
+    label = estimate_scan([_group()], window=timedelta(days=2), now=END).label()
+
+    assert '~2.000 GB' in label
+    assert '$0.010' in label
+    assert 'reads low' in label

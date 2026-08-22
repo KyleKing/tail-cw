@@ -36,6 +36,7 @@ from tail_cw.aws.insights import (
     MAX_INSIGHTS_LOG_GROUPS,
     InsightsQueryError,
     InsightsResult,
+    estimate_scan,
     run_insights_query,
     validate_insights_request,
 )
@@ -358,6 +359,16 @@ def _configure_insights(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=MAX_INSIGHTS_LOG_GROUPS,
         help=f'Cap on groups queried (default: {MAX_INSIGHTS_LOG_GROUPS}, the Insights maximum)',
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Print the scan estimate and stop without querying',
+    )
+    parser.add_argument(
+        '--yes',
+        action='store_true',
+        help='Run even when the estimate is above [insights].confirm_above_gb',
     )
 
 
@@ -922,17 +933,17 @@ async def _resolve_summary_groups(
     logs: Any,
     patterns: Sequence[str],
     presets: Mapping[str, Sequence[str]],
-) -> list[str]:
-    """Resolve patterns to group names, deduplicated and in pattern order."""
+) -> list[LogGroupInfo]:
+    """Resolve patterns to log groups, deduplicated by name and in pattern order."""
     groups = [group async for group in describe_log_groups(logs)]
     expanded = expand_presets(patterns, presets) if patterns else []
     if not expanded:
-        return [group.name for group in groups]
-    resolved: dict[str, None] = {}
+        return groups
+    resolved: dict[str, LogGroupInfo] = {}
     for pattern in expanded:
         for group in resolve_group_pattern(pattern, groups):
-            resolved.setdefault(group.name, None)
-    return list(resolved)
+            resolved.setdefault(group.name, group)
+    return list(resolved.values())
 
 
 def _summary_to_record(report: RollupReport, *, window_label: str, source: str) -> dict[str, object]:
@@ -981,7 +992,7 @@ async def _export_summary(
     if config is None:
         return 1
     logs = await pool.client('logs')
-    names = await _resolve_summary_groups(logs, args.patterns, config.presets)
+    names = [group.name for group in await _resolve_summary_groups(logs, args.patterns, config.presets)]
     if not names:
         sys.stderr.write('No log groups matched\n')
         return 1
@@ -1059,16 +1070,20 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
     if config is None:
         return 1
     logs = await pool.client('logs')
-    names = await _resolve_summary_groups(logs, args.patterns, config.presets)
-    if not names:
+    groups = await _resolve_summary_groups(logs, args.patterns, config.presets)
+    if not groups:
         sys.stderr.write('No log groups matched\n')
         return 1
-    if len(names) > args.max_groups:
+    if len(groups) > args.max_groups:
         sys.stderr.write(
-            f'Capped at {args.max_groups} of {len(names)} matching groups; '
-            f'not queried: {", ".join(names[args.max_groups :])}\n',
+            f'Capped at {args.max_groups} of {len(groups)} matching groups; '
+            f'not queried: {", ".join(group.name for group in groups[args.max_groups :])}\n',
         )
-        names = names[: args.max_groups]
+        groups = groups[: args.max_groups]
+    names = [group.name for group in groups]
+
+    if (refusal := _insights_preflight(groups, args, config, window=end_time - start_time, now=now)) is not None:
+        return refusal
 
     try:
         validate_insights_request(args.query, start_time, end_time)
@@ -1096,10 +1111,36 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
     )
     if args.output_format == 'md':
         sys.stdout.write(table)
-        return 0
-    for row in result.rows:
-        _write_json_line(dict(row))
+    else:
+        for row in result.rows:
+            _write_json_line(dict(row))
     return 0
+
+
+def _insights_preflight(
+    groups: Sequence[LogGroupInfo],
+    args: argparse.Namespace,
+    config: TailCWConfig,
+    *,
+    window: timedelta,
+    now: datetime,
+) -> int | None:
+    """Report what the query is likely to scan, and refuse above the ceiling.
+
+    Returns an exit code when the query must not run, or None to go ahead.
+    """
+    estimate = estimate_scan(groups, window=window, now=now)
+    sys.stderr.write(f'{estimate.label()}\n')
+    if args.dry_run:
+        return 0
+    ceiling = config.insights.confirm_above_gb
+    if estimate.gigabytes > ceiling and not args.yes:
+        sys.stderr.write(
+            f'Above the {ceiling:g} GB ceiling. Re-run with --yes, '
+            'or raise [insights].confirm_above_gb in config.toml.\n',
+        )
+        return 1
+    return None
 
 
 def _window_label(start_time: datetime, end_time: datetime) -> str:

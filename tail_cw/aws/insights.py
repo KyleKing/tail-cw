@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
+
+from tail_cw.aws.log_groups import LogGroupInfo
 
 DEFAULT_LIMIT = 1000
 DEFAULT_POLL_SECONDS = 0.5
@@ -25,6 +28,13 @@ Insights bills on the bytes it reads inside the window, so the window is the one
 input that decides the bill before the query runs.
 """
 
+DOLLARS_PER_GB = 0.005
+"""What Insights bills per gigabyte scanned in us-east-1 as of mid-2026."""
+
+ASSUMED_RETENTION_DAYS = 30
+"""Span assumed for a group that neither expires nor reports when it was created."""
+
+_BYTES_PER_GB = 1_000_000_000
 _TERMINAL_STATUSES = frozenset({'Complete', 'Failed', 'Cancelled', 'Timeout', 'Unknown'})
 _NARROWING_COMMANDS = re.compile(r'(?<![\w@])(filter|pattern|dedup)(?![\w@])', re.IGNORECASE)
 
@@ -52,6 +62,67 @@ def validate_insights_request(query: str, start_time: datetime, end_time: dateti
     if not _NARROWING_COMMANDS.search(query):
         msg = 'Insights queries must narrow with filter, pattern, or dedup rather than reading the whole window'
         raise ValueError(msg)
+
+
+@dataclass(frozen=True)
+class ScanEstimate:
+    """What a query is likely to scan, before it runs.
+
+    Attributes:
+        bytes_scanned: Estimated bytes read, summed across the groups.
+        group_count: Groups the estimate covers.
+        unknown_groups: Groups reporting no stored bytes, whose share is missing.
+    """
+
+    bytes_scanned: int
+    group_count: int
+    unknown_groups: int
+
+    @property
+    def gigabytes(self) -> float:
+        """The estimate in gigabytes, which is the unit Insights bills in."""
+        return self.bytes_scanned / _BYTES_PER_GB
+
+    @property
+    def dollars(self) -> float:
+        """What the estimate costs at :data:`DOLLARS_PER_GB`."""
+        return self.gigabytes * DOLLARS_PER_GB
+
+    def label(self) -> str:
+        """One line naming the estimate, its cost, and why it reads low."""
+        missing = f', {self.unknown_groups} of them reporting no size' if self.unknown_groups else ''
+        return (
+            f'Estimate ~{self.gigabytes:.3f} GB scanned across {self.group_count} '
+            f'group{"s" if self.group_count != 1 else ""}{missing}, roughly ${self.dollars:.3f}. '
+            'Stored bytes are compressed and Insights bills uncompressed, so this reads low.'
+        )
+
+
+def estimate_scan(groups: Sequence[LogGroupInfo], *, window: timedelta, now: datetime) -> ScanEstimate:
+    """Estimate what a query over ``groups`` will scan across ``window``.
+
+    There is no AWS preflight API, so the estimate divides each group's stored
+    bytes by the span they accumulated over and multiplies by the window. A
+    group that never expires is measured from its creation time, and one
+    reporting neither gets :data:`ASSUMED_RETENTION_DAYS`.
+    """
+    window_days = max(window.total_seconds() / 86400.0, 0.0)
+    total = 0.0
+    unknown = 0
+    for group in groups:
+        if not group.stored_bytes:
+            unknown += 1
+            continue
+        total += group.stored_bytes / _span_days(group, now=now) * window_days
+    return ScanEstimate(bytes_scanned=int(total), group_count=len(groups), unknown_groups=unknown)
+
+
+def _span_days(group: LogGroupInfo, *, now: datetime) -> float:
+    if group.retention_days:
+        return float(group.retention_days)
+    if group.created is not None:
+        return max((now - group.created).total_seconds() / 86400.0, 1.0)
+    return float(ASSUMED_RETENTION_DAYS)
 
 
 class InsightsQueryError(RuntimeError):

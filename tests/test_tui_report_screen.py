@@ -9,6 +9,7 @@ from textual.widgets import Label, Markdown
 
 from tail_cw.aws.alarms import AlarmSummary
 from tail_cw.aws.insights import InsightsResult
+from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.cli import Session
 from tail_cw.config import TailCWConfig
 from tail_cw.history import HistoryKind, load_history, make_entry, save_history
@@ -148,6 +149,49 @@ async def test_insights_reports_what_it_scanned_and_what_it_cost():
         assert '1.500 GB scanned' in body
         assert '$0.007' in body
         assert '| 2026-08-21 | 7 |' in body
+
+
+def _big_group() -> LogGroupInfo:
+    """A group holding 100 GB a day, so the session's hour clears the 1 GB ceiling."""
+    return LogGroupInfo(name=GROUP, arn=f'arn:{GROUP}', stored_bytes=700 * 10**9, retention_days=7, created=None)
+
+
+@pytest.mark.asyncio
+async def test_insights_estimates_the_bill_and_waits_before_running_an_expensive_query():
+    ran: list[str] = []
+
+    def run_insights(_groups: Sequence[str], query: str, _start: datetime, _end: datetime) -> InsightsResult:
+        ran.append(query)
+        return _RESULT
+
+    services = _services(list_groups=returns([_big_group()]), run_insights=calls(run_insights))
+    app = _app(ReportKind.INSIGHTS, 'filter @message like /boom/', services=services)
+
+    async with running(app, settled=True) as pilot:
+        assert 'Above the 1 GB ceiling' in _body(app)
+        assert ran == [], 'the query must not bill before the estimate is answered'
+        assert not load_history(), 'an unrun query is not history'
+
+        await pilot.press('y')
+        await pilot.pause()
+
+        assert ran == ['filter @message like /boom/']
+        assert '1.500 GB scanned' in _body(app)
+
+
+@pytest.mark.asyncio
+async def test_insights_runs_under_the_ceiling_without_asking():
+    app = _app(
+        ReportKind.INSIGHTS,
+        'filter @message like /boom/',
+        services=_services(list_groups=returns([_big_group()])),
+    )
+    app.session.start = app.session.end - timedelta(minutes=5)
+
+    async with running(app, settled=True):
+        body = _body(app)
+        assert 'Above the' not in body
+        assert 'Estimate ~' in body, 'the estimate is worth showing even when it does not stop the query'
 
 
 @pytest.mark.asyncio

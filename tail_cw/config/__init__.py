@@ -8,6 +8,8 @@ details.
 
 from tail_cw.config.config import (
     CacheConfig,
+    InsightsConfig,
+    MessageConfig,
     PreviewConfig,
     TailCWConfig,
     TraceConfig,
@@ -20,6 +22,8 @@ from tail_cw.config.config import (
 
 __all__ = [
     'CacheConfig',
+    'InsightsConfig',
+    'MessageConfig',
     'PreviewConfig',
     'TUIConfig',
     'TailCWConfig',

@@ -17,7 +17,7 @@ from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.widgets import Label, Markdown
 
-from tail_cw.aws.insights import validate_insights_request
+from tail_cw.aws.insights import DOLLARS_PER_GB, ScanEstimate, estimate_scan, validate_insights_request
 from tail_cw.history import HistoryEntry, HistoryKind, append, load_history, make_entry
 from tail_cw.query.report import render_alarm_markdown, render_markdown, render_rows_markdown
 from tail_cw.tui.shell import ShellScreen
@@ -64,6 +64,7 @@ class ReportScreen(ShellScreen):
 
     BINDINGS: ClassVar[Sequence[Binding]] = [
         Binding('r', 'reload', 'Reload'),
+        Binding('y', 'confirm', 'Run it'),
     ]
 
     def __init__(self, kind: ReportKind, payload: Sequence[str] = ()) -> None:
@@ -73,6 +74,8 @@ class ReportScreen(ShellScreen):
         self.payload = tuple(payload)
         self._markdown: Markdown | None = None
         self._status: Label | None = None
+        self.confirmed = False
+        self.awaiting_confirmation = False
 
     def compose_content(self) -> ComposeResult:
         """Yield the scrollable report and its status line."""
@@ -91,12 +94,20 @@ class ReportScreen(ShellScreen):
         """Run the report again over the current shared window."""
         self.run_worker(self._load(), name='report', group='report', exclusive=True)
 
+    def action_confirm(self) -> None:
+        """Approve a query the estimate stopped, and run it."""
+        if not self.awaiting_confirmation:
+            return
+        self.confirmed = True
+        self.action_reload()
+
     def refresh_view(self) -> None:
         """Re-run after the shared window or filter changed."""
         self.action_reload()
 
     async def _load(self) -> None:
         self._set_status('Running...')
+        self.awaiting_confirmation = False
         try:
             body = await _LOADERS[self._kind](self)
         except Exception as err:
@@ -104,6 +115,9 @@ class ReportScreen(ShellScreen):
             self._set_status(f'Failed: {err}')
             return
         self._show(body)
+        if self.awaiting_confirmation:
+            self._set_status('y to run it · esc to go back')
+            return
         self._set_status(f'{self._kind.value} · {self.shell.session.window_label()}')
         self._remember(body)
 
@@ -183,14 +197,36 @@ async def _load_insights(screen: ReportScreen) -> str:
     if not groups:
         return 'Select log groups first: Insights needs to know what to read.\n'
     validate_insights_request(query, session.start, session.end)
+    estimate = await _estimate_scan(screen, groups)
+    ceiling = screen.shell.config_data.insights.confirm_above_gb
+    if estimate is not None and estimate.gigabytes > ceiling and not screen.confirmed:
+        screen.awaiting_confirmation = True
+        return f'# {query}\n\n{estimate.label()}\n\nAbove the {ceiling:g} GB ceiling.\n'
+    preflight = f'{estimate.label()}\n\n' if estimate is not None else ''
     result = await run_insights(groups, query, session.start, session.end)
     scanned = result.bytes_scanned / 1_000_000_000
     header = (
-        f'# {query}\n\n'
+        f'# {query}\n\n{preflight}'
         f'{result.records_matched:,} of {result.records_scanned:,} records matched, '
-        f'{scanned:.3f} GB scanned (billed at roughly ${scanned * 0.005:.3f})\n\n'
+        f'{scanned:.3f} GB scanned (billed at roughly ${scanned * DOLLARS_PER_GB:.3f})\n\n'
     )
     return header + render_rows_markdown(result.columns, result.rows)
+
+
+async def _estimate_scan(screen: ReportScreen, groups: Sequence[str]) -> ScanEstimate | None:
+    """Estimate the query's bill from group metadata, or None when it is unavailable.
+
+    A missing estimate does not stop the query: the typed query is still the
+    caller's confirmation, and refusing to run without a number nobody can
+    supply would be worse than running.
+    """
+    list_groups = screen.shell.services.list_groups
+    if list_groups is None:
+        return None
+    selected = set(groups)
+    session = screen.shell.session
+    known = [group for group in await list_groups() if group.name in selected]
+    return estimate_scan(known, window=session.end - session.start, now=datetime.now(tz=UTC))
 
 
 async def _load_history(_screen: ReportScreen) -> str:  # noqa: RUF029 - conforms to the loader signature
