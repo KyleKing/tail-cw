@@ -139,22 +139,40 @@ Rescoped on 2026-07-25 by
 The rule is now: build what only a CloudWatch-native terminal tool can build, and send
 the rest to Logs Insights, which grew roughly fifty new commands across June and July
 2026 and got GA PPL, SQL, JOIN, and sub-queries.
-Items 3, 5, and 6 above were the front of this milestone; what remains:
+Items 3, 5, and 6 above were the front of this milestone.
+The X-Ray reader shipped on 2026-08-22
+([ADR 0013](../docs/docs/adr/0013-read-x-ray-directly-for-spans.md)): `export xray`
+writes summaries, `export xray-trace` writes segment documents as OTLP, and `:xray <id>`
+draws the waterfall
+[ADR 0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)
+deferred.
+Three things it measured are worth carrying forward.
+The hierarchy is real (one root, no orphans, durations from 0.0ms to 50ms), so the
+picture is honest.
+Half the spans are X-Ray's own inferred segments, and reading their `name` as a service
+made one trace look like four services called `pool.acquire` and
+`query SELECT PG_NOTIFY12`.
+And a filter expression does not make a query cheaper, because `TracesProcessedCount`
+counts the traces it rejected: an uncapped three-hour sweep spent 44% of the month's
+free tier, so `--limit` defaults to 1,000.
+
+What remains:
 
 - **correlation-ID pivot.** Select a request, trace, or Hatchet `workflow_run_id` in any
     event and fan out across related log groups, building on `query/trace.py`.
     Blocked cross-service by the instrumentation gap below; build it against a single
     service's groups first
-- **spans from X-Ray, not from `aws/spans`.** Measured in the prod account on 2026-07-25:
-    Transaction Search is off (`get-trace-segment-destination` returns `Destination: XRay`),
-    so `aws/spans` does not exist, while X-Ray already carries about 3,800 traces an hour
-    including `hatchet-server` and an `execution_loop.lag_spike` service.
-    Read the X-Ray API directly rather than enabling Transaction Search, which would
-    duplicate every span into CloudWatch Logs at ingest cost
-- **X-Ray span reader,** `GetTraceSummaries` into `BatchGetTraces`.
-    Segment documents carry `start_time`, `end_time`, and `parent_id`, so this is what makes
-    an honest waterfall possible later.
-    Note `/aws/spans` and `BatchGetTraces` are mutually exclusive span sources
+- **what X-Ray does not cover, which is most of the application.** The reader is done; the
+    data is thin.
+    Of 442,828 traces in three hours, 97% are Hatchet's own background loops and only 3,554
+    carry an HTTP URL, most of those health checks.
+    `http.url CONTAINS "radar_event"` matches nothing, so the endpoint the open latency
+    investigation is about is invisible here while `/v1/import` and `/v1/work_queue_item`
+    are traced.
+    That is an application-side gap, and it sits with the instrumentation prerequisites
+    below.
+    The 3,800 traces an hour measured on 2026-07-25 is now 148,000, a 39x rise worth its own
+    look at the recording bill
 - **time-bucketed histogram of the current view.** Partly built: `bucket_event_counts` in
     `tail_cw/preview.py` powers the dashboard log-volume sparklines, and `rollup.py` now
     owns the bucketing the histogram needs

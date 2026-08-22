@@ -238,6 +238,18 @@ References:
     such group failed the search for every other group.
     A tree holding a `NOT` is never skipped: "not level:info" matches every record in a
     file with no `level`
+- X-Ray is billed per trace *scanned*, and `TracesProcessedCount` counts the traces a
+    filter expression rejected.
+    So a narrow `--expression` over a wide window costs the same as no expression at all,
+    and only a shorter window is cheaper
+    ([ADR 0013](docs/docs/adr/0013-read-x-ray-directly-for-spans.md)).
+    Any new X-Ray surface caps its paging by default and says what it scanned
+- Half the spans in an X-Ray trace are `inferred`, synthesized per downstream resource and
+    named after the call that reached them.
+    Read the service from `metadata.default["otel.resource.service.name"]`, fall back to the
+    parent's for a subsegment, and use `origin` for an inferred one; using `name` makes
+    every
+    SQL statement look like its own service
 - Trace heuristics should inspect structured fields (levels, status, message bodies)
     before falling back to free-text keyword scans to avoid misclassifying IDs like
     `trace-error` as failures.

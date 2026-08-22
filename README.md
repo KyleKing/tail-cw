@@ -178,7 +178,9 @@ uv run tail-cw export tail /aws/lambda/my-fn             # NDJSON, flushed per l
 uv run tail-cw export groups '/aws/lambda/*'             # NDJSON group metadata
 uv run tail-cw export summary '/aws/*' --start 1h        # markdown rollup of errors and warnings
 uv run tail-cw export insights '/aws/*' --query '...'    # Logs Insights, billed per GB scanned
-uv run tail-cw export trace 1-68a1f2c3-4d5e '/aws/ecs/*' # one trace as OTLP JSON
+uv run tail-cw export trace 1-68a1f2c3-4d5e '/aws/ecs/*' # one trace as OTLP JSON, from log lines
+uv run tail-cw export xray --start 1h --expression 'service("api")'  # X-Ray trace summaries as NDJSON
+uv run tail-cw export xray-trace 1-68a1f2c3-4d5e         # its segment documents as OTLP JSON
 uv run tail-cw export alarms irm-prod --history           # alarms with their firing history
 uv run tail-cw export metrics --namespace AWS/ECS --metric MemoryUtilization --dimension ServiceName=svc
 uv run tail-cw export dimensions --namespace AWS/ECS      # the dimension sets a namespace publishes
@@ -198,13 +200,18 @@ logs, `t` opens them streaming.
 In a log view: `/` searches, `Enter` opens the record detail, `L` toggles live, `r`
 refreshes, `t` and `T` open the trace views.
 
+In an X-Ray waterfall (`:xray <id>`): `s` hides the segments X-Ray synthesized rather
+than received, `r` refetches.
+The bold rows are the slowest chain from the root, dim rows are inferred, and red rows
+carry a fault.
+
 In a dashboard: `hjkl` move, `Enter` focuses a chart on the stage, `Esc` clears the
 stage and then goes up, `s` cycles the statistic, `p` the period, `d` dives into the
 logs.
 
 Commands include `:groups`, `:logs`, `:tail`, `:dash <name>`, `:dashboards`,
 `:range 6h`, `:filter ERROR`, `:panels errors`, `:focus latency`, `:stat`, `:period`,
-and `:help`.
+`:xray <id>`, and `:help`.
 In a dashboard, `:add <title>` puts a second panel beside the staged one, `:dive` opens
 the logs behind the focused widget, and `:reset` clears the stage.
 Set `AWS_PROFILE`, `--profile`, or `--region` to pick an account.
