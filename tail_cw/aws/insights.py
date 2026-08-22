@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -33,6 +33,33 @@ DOLLARS_PER_GB = 0.005
 
 ASSUMED_RETENTION_DAYS = 30
 """Span assumed for a group that neither expires nor reports when it was created."""
+
+SAMPLE_SLICES = 3
+"""Slices sampled across the query's window to measure a group's throughput.
+
+One slice is not enough. A production group measured between 5,773 and 14,900
+bytes a second inside one hour, so a single sample of its first minute read the
+hour 1.68x high, where three slices spread across it read 1.03x.
+"""
+
+SAMPLE_SLICE = timedelta(minutes=5)
+"""Longest one slice may cover. A busy group truncates well inside this."""
+
+SAMPLE_LIMIT = 10_000
+"""Events read per sample. FilterLogEvents caps its own response at 1 MB regardless."""
+
+SAMPLE_CONCURRENCY = 4
+"""Samples in flight at once.
+
+Nothing here touches the blocking pool, so this is not tied to its width. Raising
+it to 8 was tried against an 18-group account and the wall clock swung between
+4.6s and 13.6s at either setting, so there is no evidence for the wider fan-out.
+"""
+
+EVENT_OVERHEAD_BYTES = 26
+"""What CloudWatch counts per event on top of the message, for the timestamp and metadata."""
+
+_MIN_MEASURABLE_SPAN_SECONDS = 1.0
 
 _BYTES_PER_GB = 1_000_000_000
 _TERMINAL_STATUSES = frozenset({'Complete', 'Failed', 'Cancelled', 'Timeout', 'Unknown'})
@@ -72,11 +99,14 @@ class ScanEstimate:
         bytes_scanned: Estimated bytes read, summed across the groups.
         group_count: Groups the estimate covers.
         unknown_groups: Groups reporting no stored bytes, whose share is missing.
+        measured_groups: Groups whose share came from a sample of recent traffic
+            rather than from stored bytes over retention.
     """
 
     bytes_scanned: int
     group_count: int
     unknown_groups: int
+    measured_groups: int = 0
 
     @property
     def gigabytes(self) -> float:
@@ -89,38 +119,73 @@ class ScanEstimate:
         return self.gigabytes * DOLLARS_PER_GB
 
     def label(self) -> str:
-        """One line naming the estimate, its cost, and how far off it can be."""
+        """One line naming the estimate, its cost, and how it was arrived at."""
         missing = f', {self.unknown_groups} of them reporting no size' if self.unknown_groups else ''
         return (
             f'Estimate ~{self.gigabytes:.3f} GB scanned across {self.group_count} '
             f'group{"s" if self.group_count != 1 else ""}{missing}, roughly ${self.dollars:.3f}. '
-            "Order of magnitude only: it spreads the group's stored bytes evenly over its "
-            'retention, so a group whose traffic grew reads low and a quiet one reads high.'
+            f'{self._basis()}'
+        )
+
+    def _basis(self) -> str:
+        averaged = self.group_count - self.measured_groups
+        if not averaged:
+            return f'Measured from {SAMPLE_SLICES} samples spread across the window, so a burst between them reads low.'
+        if not self.measured_groups:
+            return (
+                "Order of magnitude only: it spreads each group's stored bytes evenly over its "
+                'retention, so a group whose traffic grew reads low and a quiet one reads high.'
+            )
+        return (
+            f'{self.measured_groups} of them measured from recent traffic, the rest spread over '
+            'retention and so good to an order of magnitude.'
         )
 
 
-def estimate_scan(groups: Sequence[LogGroupInfo], *, window: timedelta, now: datetime) -> ScanEstimate:
+def estimate_scan(
+    groups: Sequence[LogGroupInfo],
+    *,
+    window: timedelta,
+    now: datetime,
+    rates: Mapping[str, float] | None = None,
+) -> ScanEstimate:
     """Estimate what a query over ``groups`` will scan across ``window``.
 
-    There is no AWS preflight API, so the estimate divides each group's stored
-    bytes by the span they accumulated over and multiplies by the window. A
-    group that never expires is measured from its creation time, and one
-    reporting neither gets :data:`ASSUMED_RETENTION_DAYS`.
+    There is no AWS preflight API. A group with a measured rate from
+    :func:`measure_group_rates` is estimated from that rate, which is what makes
+    the number worth reading. Without one, the fallback divides stored bytes by
+    the span they accumulated over: that was measured against three production
+    groups on 2026-08-22 and came out wrong by up to 8x in both directions,
+    because compression pushes it low and a lifetime average pushes it high for a
+    group that has quietened down.
 
-    Measured against three production groups on 2026-08-22, the result was out
-    by up to 8x in both directions: compression pushes it low, and averaging
-    over a lifetime pushes it high for a group that has quietened down. It is
-    worth showing as a scale, and not worth trusting as a number.
+    Args:
+        groups: Groups the query will read.
+        window: The query's window.
+        now: Current time, used to date a group that never expires.
+        rates: Bytes per second per group name, from a sample of recent traffic.
     """
-    window_days = max(window.total_seconds() / 86400.0, 0.0)
+    measured_rates = rates or {}
+    window_seconds = max(window.total_seconds(), 0.0)
+    window_days = window_seconds / 86400.0
     total = 0.0
     unknown = 0
+    measured = 0
     for group in groups:
-        if not group.stored_bytes:
+        rate = measured_rates.get(group.name)
+        if rate is not None:
+            measured += 1
+            total += rate * window_seconds
+        elif group.stored_bytes:
+            total += group.stored_bytes / _span_days(group, now=now) * window_days
+        else:
             unknown += 1
-            continue
-        total += group.stored_bytes / _span_days(group, now=now) * window_days
-    return ScanEstimate(bytes_scanned=int(total), group_count=len(groups), unknown_groups=unknown)
+    return ScanEstimate(
+        bytes_scanned=int(total),
+        group_count=len(groups),
+        unknown_groups=unknown,
+        measured_groups=measured,
+    )
 
 
 def _span_days(group: LogGroupInfo, *, now: datetime) -> float:
@@ -129,6 +194,77 @@ def _span_days(group: LogGroupInfo, *, now: datetime) -> float:
     if group.created is not None:
         return max((now - group.created).total_seconds() / 86400.0, 1.0)
     return float(ASSUMED_RETENTION_DAYS)
+
+
+async def measure_group_rates(
+    client: Any,
+    group_names: Sequence[str],
+    *,
+    start: datetime,
+    end: datetime,
+    slices: int = SAMPLE_SLICES,
+    concurrency: int = SAMPLE_CONCURRENCY,
+) -> dict[str, float]:
+    """Sample traffic inside the query's own window, in bytes per second per group.
+
+    Slices are spread across the window rather than taken from one end, because a
+    group's rate moves by more than a factor of two inside an hour. A group is
+    left out when nothing it logged supports a rate, and the caller falls back to
+    the stored-bytes average for it.
+
+    Sampling goes through ``FilterLogEvents``, which is not billed per gigabyte
+    the way the query it guards is.
+    """
+    limiter = asyncio.Semaphore(max(1, concurrency))
+
+    async def sample(name: str, window: tuple[datetime, datetime]) -> float | None:
+        async with limiter:
+            return await _measure_slice(client, name, start=window[0], end=window[1])
+
+    windows = _sample_windows(start, end, slices=slices)
+    async with asyncio.TaskGroup() as group:
+        tasks = {
+            name: [group.create_task(sample(name, window)) for window in windows] for name in dict.fromkeys(group_names)
+        }
+    rates: dict[str, float] = {}
+    for name, slice_tasks in tasks.items():
+        measured = [rate for rate in (task.result() for task in slice_tasks) if rate is not None]
+        if measured:
+            rates[name] = sum(measured) / len(measured)
+    return rates
+
+
+def _sample_windows(start: datetime, end: datetime, *, slices: int) -> list[tuple[datetime, datetime]]:
+    """Spread up to ``slices`` sample windows across ``[start, end)``."""
+    span = end - start
+    if span <= SAMPLE_SLICE or slices <= 1:
+        return [(max(start, end - SAMPLE_SLICE), end)]
+    step = span / slices
+    length = min(step, SAMPLE_SLICE)
+    return [(start + step * index, start + step * index + length) for index in range(slices)]
+
+
+async def _measure_slice(client: Any, group_name: str, *, start: datetime, end: datetime) -> float | None:
+    response = await client.filter_log_events(
+        logGroupName=group_name,
+        startTime=int(start.timestamp() * 1000),
+        endTime=int(end.timestamp() * 1000),
+        limit=SAMPLE_LIMIT,
+        interleaved=True,
+    )
+    events = response.get('events', [])
+    if not events:
+        return None
+    measured_bytes = sum(len(event.get('message', '').encode()) + EVENT_OVERHEAD_BYTES for event in events)
+    if response.get('nextToken') is None:
+        # Nothing was left behind, so the events cover the whole slice even if
+        # they all arrived in one burst inside it.
+        return measured_bytes / max((end - start).total_seconds(), _MIN_MEASURABLE_SPAN_SECONDS)
+    stamps = [event['timestamp'] for event in events]
+    span_seconds = (max(stamps) - min(stamps)) / 1000.0
+    if span_seconds < _MIN_MEASURABLE_SPAN_SECONDS:
+        return None
+    return measured_bytes / span_seconds
 
 
 class InsightsQueryError(RuntimeError):

@@ -37,6 +37,7 @@ from tail_cw.aws.insights import (
     InsightsQueryError,
     InsightsResult,
     estimate_scan,
+    measure_group_rates,
     run_insights_query,
     validate_insights_request,
 )
@@ -842,7 +843,9 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
         groups = groups[: args.max_groups]
     names = [group.name for group in groups]
 
-    if (refusal := _insights_preflight(groups, args, config, window=end_time - start_time, now=now)) is not None:
+    rates = await measure_group_rates(logs, names, start=start_time, end=end_time)
+    refusal = _insights_preflight(groups, args, config, window=end_time - start_time, now=now, rates=rates)
+    if refusal is not None:
         return refusal
 
     try:
@@ -947,12 +950,13 @@ def _insights_preflight(
     *,
     window: timedelta,
     now: datetime,
+    rates: Mapping[str, float] | None = None,
 ) -> int | None:
     """Report what the query is likely to scan, and refuse above the ceiling.
 
     Returns an exit code when the query must not run, or None to go ahead.
     """
-    estimate = estimate_scan(groups, window=window, now=now)
+    estimate = estimate_scan(groups, window=window, now=now, rates=rates)
     sys.stderr.write(f'{estimate.label()}\n')
     if args.dry_run:
         return 0

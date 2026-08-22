@@ -65,6 +65,7 @@ LoadTraces = Callable[[Sequence[Path], str | None, Sequence[str], int | None], A
 RollUpLogs = Callable[[Sequence[str], datetime, datetime], Awaitable[RollupReport]]
 ListAlarms = Callable[[datetime, datetime], Awaitable[tuple[list[AlarmSummary], dict[str, int]]]]
 RunInsights = Callable[[Sequence[str], str, datetime, datetime], Awaitable[InsightsResult]]
+SampleRates = Callable[[Sequence[str], datetime, datetime], Awaitable[dict[str, float]]]
 ScreenFactory = Callable[[NavTarget], 'ShellScreen']
 
 MAX_SELECTED_GROUPS = 10
@@ -97,6 +98,7 @@ class ShellServices:
     roll_up_logs: RollUpLogs | None = None
     list_alarms: ListAlarms | None = None
     run_insights: RunInsights | None = None
+    sample_rates: SampleRates | None = None
 
 
 @dataclass(frozen=True)

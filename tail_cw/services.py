@@ -21,7 +21,7 @@ from tail_cw.aws.alarms import AlarmSummary, describe_alarm_history, describe_al
 from tail_cw.aws.client import ClientProvider, client_pool, fetch_log_events
 from tail_cw.aws.dashboards import Dashboard, DashboardSummary, get_dashboard, list_dashboards
 from tail_cw.aws.events import LogEvent
-from tail_cw.aws.insights import InsightsResult, run_insights_query
+from tail_cw.aws.insights import InsightsResult, measure_group_rates, run_insights_query
 from tail_cw.aws.live_tail import stream_live_tail
 from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups
 from tail_cw.aws.metrics import MetricSeries, fetch_metric_data
@@ -51,6 +51,7 @@ from tail_cw.tui.shell import (
     LogVolume,
     ResolveLogs,
     RunInsights,
+    SampleRates,
     ShellServices,
     TailCWApp,
 )
@@ -186,7 +187,7 @@ def _cache_services(
     return resolve_logs, log_volume, count_events, load_traces
 
 
-def _cloudwatch_services(pool: ClientProvider) -> tuple[ListAlarms, RunInsights]:
+def _cloudwatch_services(pool: ClientProvider) -> tuple[ListAlarms, RunInsights, SampleRates]:
     """Build the services that read CloudWatch without touching the Parquet cache."""
 
     async def count_transitions(client: Any, name: str, start: datetime, end: datetime) -> int:
@@ -218,7 +219,10 @@ def _cloudwatch_services(pool: ClientProvider) -> tuple[ListAlarms, RunInsights]
             end_time=end,
         )
 
-    return list_alarms, run_insights
+    async def sample_rates(groups: Sequence[str], start: datetime, end: datetime) -> dict[str, float]:
+        return await measure_group_rates(await pool.client('logs'), list(groups), start=start, end=end)
+
+    return list_alarms, run_insights, sample_rates
 
 
 def _live_services(
@@ -228,7 +232,7 @@ def _live_services(
     executor: ThreadPoolExecutor,
 ) -> ShellServices:
     resolve_logs, log_volume, count_events, load_traces = _cache_services(config, session, pool, executor)
-    list_alarms, run_insights = _cloudwatch_services(pool)
+    list_alarms, run_insights, sample_rates = _cloudwatch_services(pool)
 
     async def list_groups() -> list[LogGroupInfo]:
         logs = await pool.client('logs')
@@ -290,6 +294,7 @@ def _live_services(
         roll_up_logs=roll_up_logs,
         list_alarms=list_alarms,
         run_insights=run_insights,
+        sample_rates=sample_rates,
     )
 
 

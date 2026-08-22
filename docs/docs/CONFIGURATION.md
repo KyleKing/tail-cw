@@ -33,6 +33,8 @@ Retrieve this location programmatically via `tail_cw.config.get_default_cache_di
 - `[fetch]` sets how many segments of a window are fetched at once.
 - `[insights]` sets the estimated scan size a Logs Insights query may reach before it
     asks for confirmation.
+    The estimate is measured by sampling the query's own window, so it is worth reading as
+    a number rather than a scale.
 - `[message]` names the record fields the log table reads as the human-readable phrase,
     and the ones it drops from the tabulated remainder.
 - `[presets]` names groups of log groups so `@name` stands in for the whole set.

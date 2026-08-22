@@ -2,14 +2,19 @@
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
 from tail_cw.aws.insights import (
     ASSUMED_RETENTION_DAYS,
+    EVENT_OVERHEAD_BYTES,
     MAX_INSIGHTS_LOG_GROUPS,
+    SAMPLE_SLICE,
+    SAMPLE_SLICES,
     InsightsQueryError,
     estimate_scan,
+    measure_group_rates,
     run_insights_query,
     validate_insights_request,
 )
@@ -181,3 +186,86 @@ def test_scan_estimate_label_prices_the_window_and_owns_its_error():
     assert '~2.000 GB' in label
     assert '$0.010' in label
     assert 'Order of magnitude only' in label
+
+
+class _FakeSampler:
+    """Answers one ``filter_log_events`` sample per group."""
+
+    def __init__(self, samples: dict[str, dict[str, object]]) -> None:
+        self._samples = samples
+        self.calls: list[str] = []
+        self.windows: list[dict[str, Any]] = []
+
+    async def filter_log_events(self, **kwargs: Any) -> dict[str, object]:
+        name = str(kwargs['logGroupName'])
+        self.calls.append(name)
+        self.windows.append(kwargs)
+        return self._samples.get(name, {'events': []})
+
+
+def _sample_events(count: int, *, size: int, spread_ms: int) -> list[dict[str, Any]]:
+    step = spread_ms // max(count - 1, 1)
+    base = int(END.timestamp() * 1000)
+    return [{'message': 'x' * size, 'timestamp': base + index * step} for index in range(count)]
+
+
+async def test_a_quiet_group_is_measured_over_the_whole_slice() -> None:
+    """Everything it logged came back, so the slice is the denominator even for one burst."""
+    events = _sample_events(10, size=100, spread_ms=2000)
+    client = _FakeSampler({'/g': {'events': events}})
+
+    rates = await measure_group_rates(client, ['/g'], start=END - SAMPLE_SLICE, end=END)
+
+    expected = 10 * (100 + EVENT_OVERHEAD_BYTES) / SAMPLE_SLICE.total_seconds()
+    assert rates['/g'] == pytest.approx(expected)
+    assert client.calls == ['/g'], 'a window no wider than one slice is sampled once'
+
+
+async def test_a_wide_window_is_sampled_in_slices_spread_across_it() -> None:
+    """One group measured 5,773 to 14,900 B/s inside an hour, so one end of it is not the rate."""
+    client = _FakeSampler({'/g': {'events': _sample_events(10, size=100, spread_ms=2000)}})
+
+    await measure_group_rates(client, ['/g'], start=END - timedelta(hours=1), end=END)
+
+    assert len(client.calls) == SAMPLE_SLICES
+    starts = sorted(window['startTime'] for window in client.windows)
+    assert len(set(starts)) == SAMPLE_SLICES, 'the slices must not sit on top of each other'
+    assert max(starts) - min(starts) == pytest.approx(2 * 3_600_000 / SAMPLE_SLICES)
+
+
+async def test_a_truncated_sample_is_measured_over_the_span_it_reached() -> None:
+    """A capped response covers a prefix of the window, so the window would read low."""
+    events = _sample_events(100, size=1000, spread_ms=10_000)
+    client = _FakeSampler({'/g': {'events': events, 'nextToken': 'more'}})
+
+    rates = await measure_group_rates(client, ['/g'], start=END - SAMPLE_SLICE, end=END)
+
+    stamps = [event['timestamp'] for event in events]
+    span = (max(stamps) - min(stamps)) / 1000.0
+    assert rates['/g'] == pytest.approx(100 * (1000 + EVENT_OVERHEAD_BYTES) / span)
+    assert span < SAMPLE_SLICE.total_seconds(), 'the slice would have read an order of magnitude low'
+
+
+@pytest.mark.parametrize(
+    'sample',
+    [
+        {'events': []},
+        {'events': _sample_events(50, size=10, spread_ms=100), 'nextToken': 'more'},
+    ],
+    ids=['nothing logged', 'a burst inside one second'],
+)
+async def test_a_group_with_no_measurable_rate_is_left_out(sample) -> None:
+    rates = await measure_group_rates(_FakeSampler({'/g': sample}), ['/g'], start=END - SAMPLE_SLICE, end=END)
+
+    assert '/g' not in rates
+
+
+def test_a_measured_rate_replaces_the_average_for_that_group_alone() -> None:
+    groups = [_group('/measured'), _group('/averaged')]
+
+    estimate = estimate_scan(groups, window=timedelta(days=1), now=END, rates={'/measured': 1000.0})
+
+    # 1 GB a day averaged, plus 1000 B/s measured over a day.
+    assert estimate.gigabytes == pytest.approx(1.0 + 86_400_000 / 10**9)
+    assert estimate.measured_groups == 1
+    assert 'measured from recent traffic' in estimate.label()

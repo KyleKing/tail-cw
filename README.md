@@ -52,11 +52,13 @@ and [AGENTS.md](AGENTS.md) for where to start.
     roughly ten minutes to pull the same week through `FilterLogEvents`.
     Insights bills per gigabyte scanned where `FilterLogEvents` does not, so nothing routes
     through it unless you ask, and every run prints what it scanned.
-    A scan estimate comes first, from stored bytes spread over retention, and a query
-    estimated above `[insights].confirm_above_gb` needs `--yes` in the CLI or a keypress in
-    the TUI.
-    Measured against three production groups it was out by up to 8x either way, so it is a
-    scale rather than a number
+    A scan estimate comes first, measured by sampling three slices of the query's own
+    window, and a query estimated above `[insights].confirm_above_gb` needs `--yes` in the
+    CLI or a keypress in the TUI.
+    Against three production groups it reads 0.033 GB against 0.032 actual, 0.070 against
+    0.069, and 0.006 against 0.008.
+    A group that logged nothing measurable falls back to stored bytes over retention, which
+    was out by up to 8x either way and is a scale rather than a number
 - `:trace <id>` in the TUI and `tail-cw export trace <id>` both take an identifier pasted
     out of an alarm, collect its spans across every selected group, and either open the
     trace view or write OTLP JSON for a viewer that draws waterfalls

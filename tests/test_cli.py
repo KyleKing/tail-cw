@@ -1166,10 +1166,21 @@ def _summary_argv(tmp_path: Path, *extra: str) -> list[str]:
     ]
 
 
-def _install_groups(monkeypatch, names: list[str], *, stored_bytes: int = 10) -> None:
+def _install_groups(
+    monkeypatch,
+    names: list[str],
+    *,
+    stored_bytes: int = 10,
+    rates: dict[str, float] | None = None,
+) -> None:
     groups = [replace(_make_group(name), stored_bytes=stored_bytes) for name in names]
     monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
     monkeypatch.setattr('tail_cw.cli.describe_log_groups', _async_iter_factory(groups))
+
+    async def sample(_client, _names, **_kwargs):
+        return dict(rates or {})
+
+    monkeypatch.setattr('tail_cw.cli.measure_group_rates', sample)
 
 
 def test_run_cli_export_summary_writes_markdown(tmp_path, capsys, monkeypatch):
@@ -1333,6 +1344,19 @@ def test_run_cli_export_insights_stops_before_billing(
 
     assert result == expected_code
     assert expected_err in capsys.readouterr().err
+
+
+def test_a_measured_rate_beats_the_stored_bytes_average(tmp_path, capsys, monkeypatch):
+    """A group storing almost nothing can still be logging 10 MB a second right now."""
+    _install_groups(monkeypatch, ['/aws/lambda/one'], stored_bytes=10, rates={'/aws/lambda/one': 10_000_000.0})
+    monkeypatch.setattr('tail_cw.cli.run_insights_query', _unreachable_query)
+
+    result = run_cli(_insights_argv(tmp_path, '--start', '1h'), None, is_tty=False)
+
+    err = capsys.readouterr().err
+    assert result == 1
+    assert 'Estimate ~36.000 GB' in err
+    assert 'samples spread across the window' in err
 
 
 def test_run_cli_export_insights_runs_over_the_ceiling_when_told_to(tmp_path, capsys, monkeypatch):

@@ -226,7 +226,9 @@ async def _estimate_scan(screen: ReportScreen, groups: Sequence[str]) -> ScanEst
     selected = set(groups)
     session = screen.shell.session
     known = [group for group in await list_groups() if group.name in selected]
-    return estimate_scan(known, window=session.end - session.start, now=datetime.now(tz=UTC))
+    sample_rates = screen.shell.services.sample_rates
+    rates = await sample_rates(groups, session.start, session.end) if sample_rates is not None else None
+    return estimate_scan(known, window=session.end - session.start, now=datetime.now(tz=UTC), rates=rates)
 
 
 async def _load_history(_screen: ReportScreen) -> str:  # noqa: RUF029 - conforms to the loader signature
