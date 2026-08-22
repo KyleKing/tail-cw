@@ -111,6 +111,15 @@ What follows is what they measured, because half the numbers were wrong.
     worker instead of only popping the screen, which mattered because the log view is
     reachable as the opening view where there is no screen to pop.
     A second escape goes back as before
+- **a field search across groups was broken, and its error crashed the app.** Driving the
+    TUI against two prod groups found both: `level:info` raised
+    `StructFieldNotFoundError` because `/aws/ecs/irm-metrics` records carry no `level`, and
+    the handler then took the app down, because a status `Label` renders markup and every
+    Polars failure names its file as `[/path.parquet]`, which Rich reads as a closing tag.
+    A file whose `parsed` struct lacks the field is skipped now (it cannot hold a match),
+    except under a `NOT`, where it matches everything.
+    Both predate today's work; Pilot could not see either, because no test searched a
+    mixed-schema set and no test failed a search
 - **every surface emits UTC now.** The local-time bug was wider than `export metrics`:
     botocore stamps the machine's zone on every timestamp it parses, so alarm state changes
     and alarm history read local too, while everything derived from epoch milliseconds read
