@@ -30,10 +30,13 @@ from textual.worker import get_current_worker
 
 from tail_cw.aws.events import LogEvent
 from tail_cw.aws.xray import as_xray_trace_id
+from tail_cw.charts.sparkline import sparkline_blocks
 from tail_cw.concurrency import closing_stream
 from tail_cw.config import TailCWConfig
+from tail_cw.histogram import bucket_events, histogram_headline
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.parser import FilterNode, combine_filters, parse_extended_filter, parse_filter_pattern
+from tail_cw.query.severity import Severity
 from tail_cw.query.trace import (
     TraceGroup,
     correlation_ids,
@@ -52,6 +55,10 @@ LiveStreamFactory = Callable[[], AsyncIterator[LogEvent]]
 _LIVE_FLUSH_INTERVAL_SECONDS = 0.25
 _LOAD_TICK_SECONDS = 1.0
 _PIVOT_FIELDS_NAMED = 3
+_HISTOGRAM_MARGIN = 52
+"""Columns the headline and the capped note keep beside the bars."""
+_HISTOGRAM_MIN_COLUMNS = 8
+_HISTOGRAM_COLORS = {Severity.INFO: 'cyan', Severity.WARNING: 'yellow', Severity.ERROR: 'red'}
 _LOADING_STATUS = 'Loading events, esc to stop'
 _HALF_PAGE = 10
 _ROW_RESERVE = 4
@@ -120,6 +127,16 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         width: 100%;
     }
 
+    #histogram {
+        height: 1;
+        width: 100%;
+        display: none;
+    }
+
+    #histogram.shown {
+        display: block;
+    }
+
     #status {
         height: 1;
         width: 100%;
@@ -145,6 +162,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         Binding('shift+t', 'show_trace_for_selected', 'Show Trace', show=True),
         Binding('x', 'pivot_xray', 'X-Ray', show=True),
         Binding('p', 'pivot', 'Pivot', show=True),
+        Binding('h', 'toggle_histogram', 'When', show=True),
         # DataTable answers to the arrow keys; these are the vim motions over the
         # same cursor, so hjkl-hands never reach for the arrows.
         Binding('j', 'move(1)', 'Down', show=False),
@@ -180,6 +198,8 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._live_paused = False
         self._live_sampled = False
         self._live_event_count = 0
+        self._show_histogram = False
+        self._load_capped = False
         self._load_timer: Timer | None = None
         self._loading_since: float | None = None
 
@@ -204,6 +224,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             The search input, the table inside its container, and the status label.
         """
         yield SearchLine(placeholder='Search (CloudWatch syntax or key:value)...')
+        yield Label('', id='histogram')
         with Container():
             yield DataTable(
                 id='log_table',
@@ -437,8 +458,8 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._log_events = events
         self._all_events = events.copy()
         self._load_log_events(events)
-        capped = len(events) >= initial_limit
-        hint = ' · capped, narrow the window or add a filter' if capped else ''
+        self._load_capped = len(events) >= initial_limit
+        hint = ' · capped, narrow the window or add a filter' if self._load_capped else ''
         self._update_status(f'Loaded {len(events):,} events{hint}')
         self._open_pending_trace()
 
@@ -460,6 +481,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         events_to_load = events if events is not None else self._log_events
         self._table.clear(columns=False)
         self._table.loading = True
+        self._draw_histogram()
 
         if len(events_to_load) > self._config.tui.chunk_threshold:
             self.run_worker(
@@ -719,6 +741,47 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             return
 
         self.show_trace(trace_id)
+
+    def action_toggle_histogram(self) -> None:
+        """Show or hide when the events on screen actually happened."""
+        self._show_histogram = not self._show_histogram
+        self._draw_histogram()
+
+    def _draw_histogram(self) -> None:
+        """Redraw the histogram row from whatever the view is currently showing.
+
+        Coloured per column by the worst severity in it, because a burst of errors and a
+        burst of traffic are the same height and not the same finding.
+        """
+        row = self.query_one('#histogram', Label)
+        row.set_class(self._show_histogram, 'shown')
+        if not self._show_histogram:
+            return
+        # The screen's width, not the row's: a row that was hidden a moment ago has no
+        # content region yet, which drew the whole window as one column.
+        columns = self.size.width - _HISTOGRAM_MARGIN
+        if columns < _HISTOGRAM_MIN_COLUMNS:
+            row.update(Text('too narrow for a histogram'))
+            return
+        buckets = bucket_events(
+            self._log_events,
+            start=self.shell.session.start,
+            end=self.shell.session.end,
+            columns=columns,
+        )
+        if not buckets:
+            row.update(Text('no window to bucket'))
+            return
+        blocks = sparkline_blocks([float(bucket.count) for bucket in buckets], width=columns, bars=True, lo=0.0)
+        rendered = Text(no_wrap=True)
+        for block, bucket in zip(blocks, buckets, strict=False):
+            rendered.append(block, style=_HISTOGRAM_COLORS[bucket.severity])
+        rendered.append(f' {histogram_headline(buckets)}', style='dim')
+        if self._load_capped:
+            # The shape of a capped load is the shape of the cap, not of the window: the
+            # read stops at the limit, so every event sits at the window's near edge.
+            rendered.append(' · capped, not the whole window', style='yellow')
+        row.update(rendered)
 
     def action_pivot(self, field: str = '') -> None:
         """Search every selected group for the correlation id on the current row.

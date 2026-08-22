@@ -177,9 +177,16 @@ What remains:
     below.
     The 3,800 traces an hour measured on 2026-07-25 is now 148,000, a 39x rise worth its own
     look at the recording bill
-- **time-bucketed histogram of the current view.** Partly built: `bucket_event_counts` in
-    `tail_cw/preview.py` powers the dashboard log-volume sparklines, and `rollup.py` now
-    owns the bucketing the histogram needs
+- **time-bucketed histogram of the current view.** Shipped 2026-08-22 behind `h`, over
+    whatever the current search left on screen rather than over the whole group, and
+    coloured per column by the worst severity in it.
+    It found a burst immediately: an ERROR-filtered half hour of `irm-ecs-api-prod` peaks
+    at 742 events in one column, 77x the average, with 83 of 104 columns quiet.
+    Two traps came out of building it.
+    A `display: none` row has no content region, so measuring it drew the whole window as
+    one column.
+    And the shape of a capped load is the shape of the cap rather than of the window, so
+    the row says so when the read stopped at the limit
 - **dropped:** reimplementing LogsQL (`stream_context before N after N`, `unpack_json`) in
     the local engine.
     Logs Insights does this server-side now, and maintaining a second query language is the

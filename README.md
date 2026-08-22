@@ -199,7 +199,8 @@ logs, `t` opens them streaming.
 
 In a log view: `/` searches, `Enter` opens the record detail, `L` toggles live, `r`
 refreshes, `t` and `T` open the trace views, `p` pivots every selected group onto the
-row's own correlation id, and `x` opens the row's trace in X-Ray.
+row's own correlation id, `x` opens the row's trace in X-Ray, and `h` shows when the
+events on screen happened, coloured by the worst severity in each column.
 
 In an X-Ray waterfall (`:xray <id>`): `s` hides the segments X-Ray synthesized rather
 than received, `r` refetches.

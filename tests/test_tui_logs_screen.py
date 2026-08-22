@@ -1439,3 +1439,33 @@ async def test_x_opens_the_waterfall_only_for_an_id_x_ray_can_answer_for(tmp_pat
 
         assert app.screen.__class__.__name__ == 'WaterfallScreen'
         assert app.nav.stack[-1].argument == xray_id
+
+
+async def test_h_shows_when_the_events_happened_and_marks_a_capped_load(tmp_path):
+    """A binding is not covered until a test presses the key."""
+    session = _session(start=BASE_TIME, end=BASE_TIME + timedelta(minutes=10))
+    events = [_json_event(f'e{index}', offset=index) for index in range(4)]
+    path = tmp_path / 'events.parquet'
+    write_log_events_to_parquet(events, path)
+    app = _make_app(services=_resolving_to([path]), session=session)
+
+    async with running(app, settled=True) as pilot:
+        screen = _logs_screen(app)
+        row = app.screen.query_one('#histogram', Label)
+        assert not row.has_class('shown'), 'the row stays out of the way until asked for'
+
+        await pilot.press('h')
+        await pilot.pause()
+
+        assert row.has_class('shown')
+        assert 'peak 4 at 10:00:00' in str(row.render())
+        assert 'capped' not in str(row.render())
+
+        screen._load_capped = True
+        screen._draw_histogram()
+        await pilot.pause()
+        assert 'capped, not the whole window' in str(row.render()), 'the shape of a capped load is the shape of the cap'
+
+        await pilot.press('h')
+        await pilot.pause()
+        assert not row.has_class('shown')
