@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from typing import ClassVar
 
 from rich.text import Text
-from textual import on
+from textual import events, on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.widgets import DataTable, Label
@@ -164,6 +164,12 @@ class WaterfallScreen(ShellScreen):
         if not rows or not (0 <= table.cursor_row < len(rows)):
             return
         self.app.push_screen(SpanDetailScreen(rows[table.cursor_row].span))
+
+    def on_resize(self, _event: events.Resize) -> None:
+        """Redraw at the new width, since every column is sized from it."""
+        super().on_resize(_event)
+        if self._trace is not None:
+            self._draw()
 
     def action_toggle_inferred(self) -> None:
         """Hide or show the segments X-Ray synthesized rather than received."""

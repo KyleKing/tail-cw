@@ -34,27 +34,13 @@ gives you.
 
 Nothing is scheduled. Ordered by value against effort.
 
-**The demo is only reachable through the dashboard.** `--demo` exists on `dash` and
-nowhere else, so trying the log view, the histogram, or the waterfall offline means
-knowing to start at `dash --demo` and navigate out of it.
-The demo services now cover groups, previews, and an X-Ray trace, so the flag would work
-on `logs` and `tail` as they are.
-Smallest useful change in this list.
-
-**The footer truncates mid-word on a narrow terminal.** At 57 columns it reads
-`[ Prev ] Ne^p palette`.
-Textual's `Footer` does not prioritise, and `?` already holds the full list, so the fix
-is
-to stop advertising the lower-priority bindings below some width.
-That needs either `check_action` or bindings rebuilt on resize, and the earlier work
-deliberately avoided depending on `check_action` semantics, so decide which before
-starting.
-
-**A log row keeps millisecond precision while truncating the message.** At 57 columns
-`plan_columns` correctly drops the date and the log stream, then spends twelve
-characters
-on `13:44:39.472` while the message ends in `path=/v1/or…`.
-Sub-second precision is the cheaper thing to lose.
+**Per-width binding priority in the footer.** The mid-word garble is gone (the four
+vim-conventional motions moved behind `?`, and the footer sheds its padding and the
+palette hint below 100 columns), but a 60-column log view still truncates after
+`t Trace View`.
+Fixing the rest means ranking bindings and showing as many as fit, which is machinery
+Textual does not provide.
+`?` lists everything either way, so this is polish.
 
 **Benchmark targets gated in CI.** ADR 0003's claim that the local engine is better at
 re-filtering was unmeasured until 2026-08-21 and is now measured once.

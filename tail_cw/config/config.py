@@ -95,6 +95,10 @@ class TUIConfig:
         search_limit: Maximum number of search results returned from queries.
         trace_limit: Maximum number of trace groups fetched when toggling the
             trace view.
+        theme: Textual theme name, such as ``catppuccin-mocha``, ``gruvbox``, or
+            ``ansi-dark``. ``ansi-dark`` and ``ansi-light`` are the two that use the
+            terminal's own sixteen colours rather than fixed ones, so they are the
+            answer for a terminal whose palette you have already chosen.
     """
 
     chunk_threshold: int = 5000
@@ -103,6 +107,7 @@ class TUIConfig:
     live_buffer_limit: int = 10_000
     search_limit: int = 10_000
     trace_limit: int = 100
+    theme: str = 'catppuccin-mocha'
 
 
 @dataclass(slots=True)
@@ -393,7 +398,11 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'initial_load_limit = 1000\n'
             'live_buffer_limit = 10000\n'
             'search_limit = 10000\n'
-            'trace_limit = 100\n\n'
+            'trace_limit = 100\n'
+            '# Any Textual theme: catppuccin-mocha, catppuccin-latte, gruvbox, nord,\n'
+            '# tokyo-night, dracula, solarized-dark. ansi-dark and ansi-light use the\n'
+            "# terminal's own sixteen colours instead of fixed ones.\n"
+            'theme = "catppuccin-mocha"\n\n'
             '[trace]\n'
             'trace_id_fields = ["trace_id", "traceId", "x-trace-id"]\n\n'
             '[presets]\n'

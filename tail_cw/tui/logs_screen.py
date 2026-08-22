@@ -348,6 +348,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         Only a plan that actually differs rebuilds the table, because rebuilding
         a thousand rows on every intermediate width of a drag is visible.
         """
+        super().on_resize(_event)
         if self._table is None:
             return
         planned = self._plan()

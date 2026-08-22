@@ -16,8 +16,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
 
-from textual import on
-from textual.app import App, ComposeResult
+from textual import events, on
+from textual.app import App, ComposeResult, InvalidThemeError
 from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Input, Label
@@ -70,6 +70,14 @@ RunInsights = Callable[[Sequence[str], str, datetime, datetime], Awaitable[Insig
 SampleRates = Callable[[Sequence[str], datetime, datetime], Awaitable[dict[str, float]]]
 FetchXRayTrace = Callable[[str], Awaitable[XRayTrace]]
 ScreenFactory = Callable[[NavTarget], 'ShellScreen']
+
+COMPACT_FOOTER_BELOW = 100
+"""Terminal width under which the footer drops its padding and the palette hint.
+
+Textual's ``Footer`` does not prioritise, so past its room it truncates the last hint
+mid-word (``[ Prev  ] Ne^p palette`` at 57 columns). Shedding the padding and the
+command-palette hint buys back the room; ``?`` still lists every key either way.
+"""
 
 MAX_SELECTED_GROUPS = 10
 MAX_LABEL_CHARS = 32
@@ -168,10 +176,13 @@ class ShellScreen(Screen[None]):
     BINDINGS: ClassVar[Sequence[Binding]] = [  # type: ignore[assignment]
         Binding('colon', 'command', 'Command', key_display=':'),
         Binding('escape', 'nav_pop', 'Back'),
-        Binding('ctrl+o', 'jump_back', 'Jump back'),
-        Binding('ctrl+i', 'jump_forward', 'Jump fwd'),
-        Binding('left_square_bracket', 'sibling_prev', 'Prev', key_display='['),
-        Binding('right_square_bracket', 'sibling_next', 'Next', key_display=']'),
+        # Hidden from the footer, listed by `?`. These four are vim conventions a reader
+        # does not discover from a footer, and the log view has sixteen bindings that do
+        # not fit at any sane width; the view's own actions earn the room instead.
+        Binding('ctrl+o', 'jump_back', 'Jump back', show=False),
+        Binding('ctrl+i', 'jump_forward', 'Jump fwd', show=False),
+        Binding('left_square_bracket', 'sibling_prev', 'Prev', key_display='[', show=False),
+        Binding('right_square_bracket', 'sibling_next', 'Next', key_display=']', show=False),
         # 'quit' alone resolves against the screen, which has no action_quit, so the
         # key silently did nothing while the footer advertised it.
         Binding('q', 'app.quit', 'Quit'),
@@ -194,6 +205,20 @@ class ShellScreen(Screen[None]):
         yield from self.compose_content()
         yield CommandLine(completer=self.complete_command)
         yield Footer()
+
+    def on_resize(self, _event: events.Resize) -> None:
+        """Shed footer chrome on a narrow terminal, where it truncates a hint mid-word.
+
+        A subclass overriding this must call ``super().on_resize(event)``, or its view
+        keeps whatever footer the last width gave it.
+        """
+        self._fit_footer()
+
+    def _fit_footer(self) -> None:
+        narrow = self.size.width < COMPACT_FOOTER_BELOW
+        for footer in self.query(Footer):
+            footer.compact = narrow
+            footer.show_command_palette = not narrow
 
     def compose_content(self) -> ComposeResult:  # ruff: ignore[no-self-use]
         """Yield the widgets unique to this view."""
@@ -225,8 +250,9 @@ class ShellScreen(Screen[None]):
         return app
 
     def on_mount(self) -> None:
-        """Render the breadcrumb for this view."""
+        """Render the breadcrumb for this view, and size the footer to the terminal."""
         self.update_breadcrumb()
+        self._fit_footer()
 
     def update_breadcrumb(self) -> None:
         """Redraw the breadcrumb from the app's navigation state."""
@@ -338,8 +364,23 @@ class TailCWApp(App[None]):
         return Screen()
 
     def on_mount(self) -> None:
-        """Push the opening view over the base screen."""
+        """Apply the configured theme, then push the opening view over the base screen."""
+        self._apply_theme()
         self.push_screen(self.build_screen(self._opening))
+
+    def _apply_theme(self) -> None:
+        """Set the theme named in config, keeping the default when the name is unknown.
+
+        An unknown name is a typo in a config file, and refusing to start over a colour
+        scheme would be the wrong trade. It is reported once rather than swallowed.
+        """
+        wanted = self.config_data.tui.theme
+        if wanted == self.theme:
+            return
+        try:
+            self.theme = wanted
+        except InvalidThemeError:
+            self.notify(f'Unknown theme {wanted!r}; keeping {self.theme}', severity='warning')
 
     def build_screen(self, target: NavTarget) -> ShellScreen:
         """Construct the view for a navigation target."""

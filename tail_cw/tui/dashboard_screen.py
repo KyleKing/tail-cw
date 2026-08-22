@@ -22,6 +22,7 @@ from typing import Any, ClassVar
 
 from rich.console import Group
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
@@ -288,8 +289,9 @@ class DashboardScreen(ShellScreen):
         grid.styles.grid_size_rows = rows
         grid.styles.height = rows * _CELL_HEIGHT + (rows - 1)
 
-    def on_resize(self) -> None:
+    def on_resize(self, _event: events.Resize) -> None:
         """Keep the grid sized to the terminal and re-render compact cells."""
+        super().on_resize(_event)
         if not self._panels:
             return
         self._resize_grid()

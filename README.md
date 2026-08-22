@@ -108,6 +108,28 @@ logs behind it.
 Charts are Unicode, so they render the same in any terminal and over SSH.
 Regenerate the clip with `mise run gif`.
 
+`h` in a log view shows when the events on screen happened, one column per terminal
+cell, coloured by the worst severity in each.
+The headline names the peak and how uneven
+the spread is, because an even hour and a single spike carry the same total.
+
+![the log view with its histogram](docs/images/histogram.png)
+
+`:xray <id>` draws one X-Ray trace. The intervals and the parents are the service's own,
+not inferred from log timestamps, which is the distinction
+[ADR 0012](docs/docs/adr/0012-export-traces-instead-of-drawing-them.md) turns on.
+Bold is
+the slowest chain from the root, dim is a segment X-Ray synthesized rather than
+received,
+and `enter` opens the statement or the exception the row has no room for.
+
+![one X-Ray trace as a waterfall](docs/images/waterfall.png)
+
+Both stills come from the offline demo, so they hold no account data.
+Regenerate them
+with `mise run views`. Everything above works without credentials: `tail-cw logs --demo`
+opens the log view on synthetic events, and `--demo` works on `tail` and `dash` too.
+
 ## Why this exists
 
 Dedicated CloudWatch tailers solved log streaming years ago and then stopped.

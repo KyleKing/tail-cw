@@ -12,7 +12,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Label
 
 from tail_cw.cli import Session
-from tail_cw.config import TailCWConfig
+from tail_cw.config import TailCWConfig, TUIConfig
 from tail_cw.recents import Recents, load_recents, save_recents
 from tail_cw.tui.command_bar import CommandLine
 from tail_cw.tui.navigation import NavTarget, ViewKind
@@ -608,3 +608,29 @@ async def test_the_filter_command_expands_a_named_filter_and_records_it(monkeypa
         await pilot.pause()
         assert not app.session.filter_pattern
         assert len(recorded) == 1, 'clearing the filter is not a question worth recording'
+
+
+async def test_the_configured_theme_is_applied():
+    app = _app(config=TailCWConfig(tui=TUIConfig(theme='gruvbox')))
+
+    async with running(app) as pilot:
+        del pilot
+        assert app.theme == 'gruvbox'
+
+
+async def test_an_unknown_theme_warns_rather_than_refusing_to_start():
+    """A typo in a colour scheme is not worth failing a log tool over."""
+    app = _app(config=TailCWConfig(tui=TUIConfig(theme='not-a-theme')))
+
+    async with running(app) as pilot:
+        del pilot
+        assert app.theme != 'not-a-theme'
+        assert app.screen is not None
+
+
+async def test_the_default_theme_is_the_one_config_documents():
+    app = _app()
+
+    async with running(app) as pilot:
+        del pilot
+        assert app.theme == TUIConfig().theme == 'catppuccin-mocha'

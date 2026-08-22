@@ -30,6 +30,7 @@ from tail_cw.query.severity import Classification, Severity, classify_event, loa
 
 FULL_TIME_WIDTH = 23
 COMPACT_TIME_WIDTH = 12
+SECONDS_TIME_WIDTH = 8
 SEVERITY_WIDTH = 1
 GROUP_WIDTH = 20
 STREAM_WIDTH = 16
@@ -44,6 +45,13 @@ repeats a thousand times to no purpose.
 
 DROP_STREAM_BELOW = 120
 """Terminal width under which the stream column goes; the detail pane has it in full."""
+
+DROP_MILLIS_BELOW = 80
+"""Terminal width under which the sub-second digits go.
+
+The last rung of the ladder. Milliseconds separate two events in the same second, which
+matters far less than the four characters of message they cost on a narrow terminal.
+"""
 
 SEVERITY_GLYPHS = {Severity.ERROR: '✖', Severity.WARNING: '⚠', Severity.INFO: ' '}
 _EXPLICIT_STYLES = {Severity.ERROR: 'bold red', Severity.WARNING: 'bold yellow', Severity.INFO: ''}
@@ -75,7 +83,12 @@ def plan_columns(width: int, *, single_group: bool) -> tuple[Column, ...]:
         single_group: True when every row shares one log group, which makes the
             group column a constant repeated on every row.
     """
-    time_width = FULL_TIME_WIDTH if width >= COMPACT_TIME_BELOW else COMPACT_TIME_WIDTH
+    if width >= COMPACT_TIME_BELOW:
+        time_width = FULL_TIME_WIDTH
+    elif width >= DROP_MILLIS_BELOW:
+        time_width = COMPACT_TIME_WIDTH
+    else:
+        time_width = SECONDS_TIME_WIDTH
     columns = [
         Column('timestamp', 'Timestamp', time_width),
         Column('severity', '!', SEVERITY_WIDTH),
@@ -89,9 +102,12 @@ def plan_columns(width: int, *, single_group: bool) -> tuple[Column, ...]:
 
 
 def format_timestamp(moment: datetime, *, width: int = FULL_TIME_WIDTH, style: str = 'cyan') -> Text:
-    """Render an event time, dropping the date when the column is narrow."""
-    pattern = '%Y-%m-%d %H:%M:%S.%f' if width >= FULL_TIME_WIDTH else '%H:%M:%S.%f'
-    return Text(moment.strftime(pattern)[:-3], style=style)
+    """Render an event time, shedding the date then the sub-second digits as room runs out."""
+    if width >= FULL_TIME_WIDTH:
+        return Text(moment.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3], style=style)
+    if width >= COMPACT_TIME_WIDTH:
+        return Text(moment.strftime('%H:%M:%S.%f')[:-3], style=style)
+    return Text(moment.strftime('%H:%M:%S'), style=style)
 
 
 def format_row(

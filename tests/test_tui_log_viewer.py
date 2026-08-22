@@ -14,6 +14,7 @@ from tail_cw.tui.log_viewer import (
     COMPACT_TIME_WIDTH,
     FULL_TIME_WIDTH,
     MIN_MESSAGE_WIDTH,
+    SECONDS_TIME_WIDTH,
     SEVERITY_GLYPHS,
     format_log_event_detail,
     format_log_event_detail_with_json,
@@ -177,3 +178,38 @@ def test_the_detail_pane_leaves_a_plain_line_alone():
 
     assert 'parsed JSON' not in detail
     assert parse_jsonl_message('not json') is None
+
+
+@pytest.mark.parametrize(
+    ('width', 'expected'),
+    [
+        (160, FULL_TIME_WIDTH),
+        (100, FULL_TIME_WIDTH),
+        (99, COMPACT_TIME_WIDTH),
+        (80, COMPACT_TIME_WIDTH),
+        (79, SECONDS_TIME_WIDTH),
+        (57, SECONDS_TIME_WIDTH),
+    ],
+)
+def test_the_clock_sheds_the_date_then_the_milliseconds(width, expected):
+    """Milliseconds cost four characters of message, which matters more on a narrow terminal."""
+    columns = plan_columns(width, single_group=True)
+
+    assert next(column.width for column in columns if column.key == 'timestamp') == expected
+
+
+def test_the_rendered_time_matches_the_width_it_was_given():
+    moment = datetime(2026, 8, 22, 13, 44, 39, 472000, tzinfo=UTC)
+
+    assert str(format_timestamp(moment, width=FULL_TIME_WIDTH)) == '2026-08-22 13:44:39.472'
+    assert str(format_timestamp(moment, width=COMPACT_TIME_WIDTH)) == '13:44:39.472'
+    assert str(format_timestamp(moment, width=SECONDS_TIME_WIDTH)) == '13:44:39'
+
+
+def test_a_narrower_terminal_spends_the_saved_room_on_the_message():
+    narrow = plan_columns(79, single_group=True)
+    wider = plan_columns(80, single_group=True)
+
+    narrow_message = next(column.width for column in narrow if column.key == 'message')
+    wider_message = next(column.width for column in wider if column.key == 'message')
+    assert narrow_message > wider_message - COMPACT_TIME_WIDTH + SECONDS_TIME_WIDTH - 1

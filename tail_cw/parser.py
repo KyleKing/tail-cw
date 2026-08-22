@@ -357,6 +357,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_aws_flags(logs)
     _add_window_flags(logs, default_start=DEFAULT_WINDOW)
     logs.add_argument(
+        '--demo',
+        dest='demo',
+        action='store_true',
+        help='Use the offline synthetic data instead of AWS (no credentials needed)',
+    )
+    logs.add_argument(
         '--no-cache',
         dest='no_cache',
         action='store_true',
@@ -371,6 +377,12 @@ def build_parser() -> argparse.ArgumentParser:
     ).completer = log_group_completer  # type: ignore[attr-defined]
     _add_aws_flags(tail)
     _add_window_flags(tail, default_start=DEFAULT_WINDOW)
+    tail.add_argument(
+        '--demo',
+        dest='demo',
+        action='store_true',
+        help='Use the offline synthetic data instead of AWS (no credentials needed)',
+    )
 
     dash = subparsers.add_parser('dash', help='Open a dashboard, or the dashboard picker when unnamed.')
     dash.add_argument('name', nargs='?', default=None, help='Dashboard name (omit to pick from a list)')

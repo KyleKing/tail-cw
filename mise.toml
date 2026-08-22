@@ -14,5 +14,12 @@ ffmpeg -y -i docs/images/demo.gif -vf "fps=8,scale=1000:-1:flags=lanczos,split[s
 mv docs/images/demo.compressed.gif docs/images/demo.gif
 '''
 
+[tasks.views]
+description = "Re-record the README stills from the offline demo (docs/images/histogram.png, waterfall.png)"
+run = """
+vhs docs/views.tape
+rm -f docs/images/views-throwaway.gif
+"""
+
 [tools]
 python = ["3.13.11", "3.14.7"]

@@ -184,6 +184,11 @@ If you introduce or modify Textual UI code:
         The breadcrumb is docked, so the histogram row landed beside it until `#breadcrumb`
         got `width: 100%`.
         A screenshot caught this; a Pilot test asserting on rendered text never would
+- VHS is not ground truth for colour.
+    Under `NO_COLOR` a VHS capture rendered the faulted waterfall row as a blank line,
+    while the same view in tmux showed it with its glyph and its bar.
+    Screenshots are for layout and hierarchy; confirm anything colour-dependent in a real
+    terminal before believing it
 - Never let colour be the only carrier of meaning.
     Under `NO_COLOR` a red row renders *dim*, so the one span that failed became the
     quietest thing on screen.

@@ -42,7 +42,9 @@ Retrieve this location programmatically via `tail_cw.config.get_default_cache_di
     See [the filter guide](FILTER_GUIDE.md).
 - `[presets]` names groups of log groups so `@name` stands in for the whole set.
 - `[preview]` bounds the log group previews shown in the browser.
-- `[tui]` exposes pagination and search limits for the Textual UI.
+- `[tui]` exposes pagination and search limits for the Textual UI, plus `theme`.
+    Any Textual theme name works (`catppuccin-mocha` is the default, and `ansi-dark` or
+    `ansi-light` use the terminal's own sixteen colours rather than fixed ones).
 - `[trace]` lists the field names inspected when extracting distributed trace identifiers.
 
 ## Example Configuration

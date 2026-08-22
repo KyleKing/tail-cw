@@ -58,7 +58,7 @@ from tail_cw.cache.storage import CacheStatus, LogCache, generate_cache_key
 from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import closing_stream, consume_in_thread, fetch_pool, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
-from tail_cw.demo import demo_dashboard
+from tail_cw.demo import DEMO_LOG_GROUP, demo_dashboard
 from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.parser import DEFAULT_WINDOW, build_parser
 from tail_cw.query.engine import query_parquet_files_to_log_events
@@ -610,8 +610,14 @@ def _log_view_seed(
     view: Literal['logs', 'tail'],
     patterns: Sequence[str],
     presets: Mapping[str, Sequence[str]],
+    *,
+    demo: bool = False,
 ) -> ShellSeed:
     expanded = expand_presets(patterns, presets)
+    if demo:
+        # The demo has one group, so an empty pattern opens on it rather than on a
+        # browser that would list it and nothing else.
+        return ShellSeed(view=view, targets=tuple(expanded) or (DEMO_LOG_GROUP,), demo=True)
     return ShellSeed(view=view if expanded else 'groups', targets=tuple(expanded))
 
 
@@ -624,9 +630,9 @@ def seed_from_args(args: argparse.Namespace, presets: Mapping[str, Sequence[str]
     known = presets if presets is not None else {}
     match args.command:
         case 'logs':
-            return _log_view_seed('logs', args.patterns, known)
+            return _log_view_seed('logs', args.patterns, known, demo=getattr(args, 'demo', False))
         case 'tail':
-            return _log_view_seed('tail', args.patterns, known)
+            return _log_view_seed('tail', args.patterns, known, demo=getattr(args, 'demo', False))
         case 'dash' if args.demo:
             return ShellSeed(view='dashboard', targets=('demo',), demo=True)
         case 'dash' if args.name is not None:
