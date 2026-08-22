@@ -10,7 +10,7 @@ logic straightforward to test with a fake.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -21,8 +21,7 @@ from beartype.typing import Protocol
 from botocore.config import Config  # type: ignore[import-untyped]
 
 from tail_cw.aws.events import LogEvent, epoch_ms_to_datetime
-
-ProgressCallback = Callable[[int, str], None]
+from tail_cw.progress import TOTAL_UNKNOWN, ProgressCallback
 
 RETRIES: dict[str, object] = {'max_attempts': 10, 'mode': 'standard'}
 """Standard-mode retries, which back off on throttling without a custom handler."""
@@ -123,7 +122,9 @@ async def fetch_log_events(
             searches all streams in the log group.
         interleaved: Whether to interleave events from multiple streams
             chronologically. Default is True.
-        progress_callback: Optional callable invoked every 100 events fetched.
+        progress_callback: Optional callable invoked every 100 events fetched. The
+            total is unknown until the last page, so it is reported as
+            :data:`~tail_cw.progress.TOTAL_UNKNOWN`.
 
     Yields:
         LogEvent instances for each log event in the time range.
@@ -158,7 +159,7 @@ async def fetch_log_events(
         for event in page.get('events', []):
             event_count += 1
             if progress_callback and event_count % 100 == 0:
-                progress_callback(event_count, f'Fetched {event_count} events...')
+                progress_callback(event_count, TOTAL_UNKNOWN, f'Fetched {event_count} events...')
 
             ingestion_time = epoch_ms_to_datetime(event['ingestionTime']) if 'ingestionTime' in event else None
             yield LogEvent(

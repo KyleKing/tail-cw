@@ -216,3 +216,19 @@ async def consume_in_thread(
     except asyncio.CancelledError:
         bridge.cancel()
         raise
+
+
+PANIC_TYPE_NAMES = frozenset({'PanicException'})
+"""Names of exceptions that derive from ``BaseException`` rather than ``Exception``.
+
+Polars raises ``pyo3_runtime.PanicException`` when its Rust side aborts, and it is not an
+``Exception``, so every ``except Exception`` in the tool looks straight past it and a
+schema bug in the cache writer reaches the terminal as a traceback. Matched by name so
+that catching it costs no import: the module that needs the guard most is the entry point,
+whose whole job is not to load Polars.
+"""
+
+
+def is_engine_panic(err: BaseException) -> bool:
+    """Whether an escaped BaseException is a native engine panic rather than a signal."""
+    return type(err).__name__ in PANIC_TYPE_NAMES

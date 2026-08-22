@@ -10,7 +10,7 @@ import base64
 import hashlib
 import json
 import tempfile
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Iterable, Iterator
 from datetime import datetime
 from operator import itemgetter
 from pathlib import Path
@@ -22,12 +22,10 @@ from diskcache import Cache, JSONDisk
 
 from tail_cw.aws.events import LogEvent
 from tail_cw.cache.records import is_jsonl_message, readable_message
+from tail_cw.progress import TOTAL_UNKNOWN, ProgressCallback
 
-# Progress callback signature: current progress, total (or -1 when unknown), status message.
 TtlSeconds = int | float
 """Cache TTL in seconds. Explicit union because beartype does not widen int to float."""
-
-ProgressCallback = Callable[[int, int, str], None]
 
 CACHE_KEY_PREFIX = 'cache:v2'
 """Prefix of every log-event cache key.
@@ -236,7 +234,7 @@ def _log_events_to_ndjson_file(
             total_events += 1
 
             if progress_callback and total_events % 1000 == 0:
-                progress_callback(total_events, -1, 'Parsing JSONL...')
+                progress_callback(total_events, TOTAL_UNKNOWN, 'Parsing JSONL...')
 
             parsed = _parse_jsonl_message(event.message)
             if parsed is None:
@@ -415,6 +413,7 @@ class LogCache:
         >>> from datetime import datetime, timezone, timedelta
         >>> from tail_cw.aws.events import LogEvent
     from tail_cw.cache.records import is_jsonl_message, readable_message
+    from tail_cw.progress import TOTAL_UNKNOWN, ProgressCallback
         >>> from tail_cw.cache import LogCache, generate_cache_key
         >>> # Create cache with 1GB limit and 1-hour default TTL
         >>> cache_dir = Path('/tmp/my-cache')

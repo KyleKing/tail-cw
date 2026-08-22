@@ -11,11 +11,27 @@ from __future__ import annotations
 import sys
 from collections.abc import Sequence
 
+from tail_cw.concurrency import is_engine_panic
 from tail_cw.parser import build_parser
+
+
+def _write_utf8(stream: object) -> None:
+    """Make a text stream emit UTF-8 whatever the console code page says.
+
+    JSON is UTF-8 by definition, so an NDJSON line holding a non-ASCII log message is
+    correct and a console encoder that cannot represent it is not. Without this, one
+    accented character in a log line ends an export with ``UnicodeEncodeError`` on a
+    Windows console running a legacy code page.
+    """
+    reconfigure = getattr(stream, 'reconfigure', None)
+    if reconfigure is not None:
+        reconfigure(encoding='utf-8')
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the tail-cw CLI and return the process exit code."""
+    _write_utf8(sys.stdout)
+    _write_utf8(sys.stderr)
     parser = build_parser()
     args = parser.parse_args(argv)
     # The one deliberate deferred import in the package: aiobotocore (88ms),
@@ -28,6 +44,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     except Exception as err:
         sys.stderr.write(f'Error: {_readable(err)}\n')
+        return 1
+    except BaseException as err:
+        # Polars' Rust side raises outside the Exception hierarchy, so without this the
+        # tool exits on a traceback rather than a message.
+        if not is_engine_panic(err):
+            raise
+        sys.stderr.write(f'Error: the query engine panicked, which is a bug: {err}\n')
         return 1
 
 

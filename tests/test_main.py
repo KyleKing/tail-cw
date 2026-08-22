@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import io
 import subprocess  # noqa: S404 - a fresh interpreter is the only honest way to see what an import loads
 import sys
 from collections.abc import AsyncIterator, Sequence
@@ -375,3 +376,38 @@ def test_opening_a_log_view_counts_as_selecting_its_groups():
     app = _build_app(TailCWConfig(), session, seed, ShellServices())
 
     assert app.session.selected_groups == ['/aws/lambda/api', '/aws/lambda/worker']
+
+
+def test_a_non_ascii_log_message_survives_a_legacy_console(monkeypatch):
+    """JSON is UTF-8 by definition, so a console that cannot encode it is the thing at fault."""
+    stream = io.TextIOWrapper(io.BytesIO(), encoding='cp1252', newline='')
+    monkeypatch.setattr(sys, 'stdout', stream)
+
+    def fake_run(*_args: object) -> int:
+        stream.write('café ☕\n')
+        return 0
+
+    monkeypatch.setattr('tail_cw.services.run', fake_run)
+
+    assert main(['export', 'groups']) == 0
+
+    stream.flush()
+    assert stream.encoding == 'utf-8', 'the entry point reconfigures the stream before anything writes'
+    assert 'café ☕' in stream.buffer.getvalue().decode('utf-8')
+
+
+def test_a_native_engine_panic_reports_itself_instead_of_a_traceback(capsys):
+    """Polars raises outside the Exception hierarchy, so every ``except Exception`` misses it."""
+    panic = type('PanicException', (BaseException,), {})
+
+    with patch('tail_cw.services.run', side_effect=panic('called `Result::unwrap()` on an `Err`')):
+        result = main(['logs', '/g'])
+
+    assert result == 1
+    assert 'the query engine panicked' in capsys.readouterr().err
+
+
+def test_a_base_exception_that_is_not_a_panic_still_propagates():
+    """Widening the handler must not swallow a signal or an exit."""
+    with patch('tail_cw.services.run', side_effect=SystemExit(3)), pytest.raises(SystemExit):
+        main(['logs', '/g'])

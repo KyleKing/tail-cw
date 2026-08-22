@@ -31,8 +31,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        # The ends of the range the classifiers claim, on every OS. 3.12 sits between two
+        # covered versions, so one Linux job is enough to keep the claim honest.
         os: [macos-latest, ubuntu-latest, windows-latest]
-        python-version: ["3.11"]
+        python-version: ["3.11", "3.13"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup

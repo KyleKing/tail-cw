@@ -24,6 +24,7 @@ import polars as pl
 
 from tail_cw.aws.events import LogEvent
 from tail_cw.cache.records import readable_message
+from tail_cw.concurrency import is_engine_panic
 from tail_cw.cpu_budget import duckdb_threads
 from tail_cw.query.parser import FilterNode, FilterNodeType
 
@@ -74,6 +75,19 @@ def _polars_search_text(*, has_parsed: bool) -> pl.Expr:
     return pl.coalesce(pl.col('message'), encoded)
 
 
+class EnginePanicError(RuntimeError):
+    """A native engine aborted, which is a bug rather than a bad query.
+
+    Exists so callers can keep catching ``Exception``: DuckDB and Polars raise from Rust
+    outside that hierarchy, so a panic used to walk past every handler in the tool and
+    reach the terminal as a traceback, or take the TUI down mid-search.
+    """
+
+    def __init__(self, parquet_path: Path, cause: BaseException) -> None:
+        """Name the file the engine died on, which is the only lead a panic gives."""
+        super().__init__(f'{type(cause).__name__} reading {parquet_path.name}: {cause}')
+
+
 def query_parquet_file(
     parquet_path: Path,
     filter_node: FilterNode | None = None,
@@ -94,6 +108,7 @@ def query_parquet_file(
 
     Raises:
         FileNotFoundError: If the Parquet file is missing
+        EnginePanicError: If the native engine aborts, which no ``except Exception`` sees
 
     Examples:
         >>> from tail_cw.query.parser import parse_filter_pattern
@@ -105,23 +120,29 @@ def query_parquet_file(
         msg = f'Parquet file not found: {parquet_path}'
         raise FileNotFoundError(msg)
 
-    if filter_node is not None and _missing_field_path(parquet_path, filter_node):
-        return
+    # The guard spans the schema read as well as the rows: reading a file's schema is a
+    # Polars call too, so a panic there would escape a narrower handler.
+    try:
+        if filter_node is not None and _missing_field_path(parquet_path, filter_node):
+            return
 
-    # Select backend
-    selected_backend = backend
-    if backend == QueryBackend.AUTO:
-        selected_backend = _select_backend(filter_node)
+        selected_backend = backend
+        if backend == QueryBackend.AUTO:
+            selected_backend = _select_backend(filter_node)
 
-    rows = (
-        _query_with_duckdb(parquet_path, filter_node, limit)
-        if selected_backend == QueryBackend.DUCKDB
-        else _query_with_polars(parquet_path, filter_node, limit)
-    )
-    # A JSON event stores no raw line, so every consumer of a row gets the text
-    # rebuilt here rather than rediscovering that ``message`` can be null.
-    for row in rows:
-        yield {**row, 'message': readable_message(row)}
+        rows = (
+            _query_with_duckdb(parquet_path, filter_node, limit)
+            if selected_backend == QueryBackend.DUCKDB
+            else _query_with_polars(parquet_path, filter_node, limit)
+        )
+        # A JSON event stores no raw line, so every consumer of a row gets the text
+        # rebuilt here rather than rediscovering that ``message`` can be null.
+        for row in rows:
+            yield {**row, 'message': readable_message(row)}
+    except BaseException as err:
+        if not is_engine_panic(err):
+            raise
+        raise EnginePanicError(parquet_path, err) from err
 
 
 def _missing_field_path(parquet_path: Path, filter_node: FilterNode) -> bool:

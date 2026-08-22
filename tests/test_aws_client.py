@@ -11,6 +11,7 @@ from botocore.stub import ANY  # type: ignore[import-untyped]
 
 from tail_cw.aws.client import RETRIES, client_pool, fetch_log_events, retry_config
 from tail_cw.aws.events import LogEvent, epoch_ms_to_datetime
+from tail_cw.progress import TOTAL_UNKNOWN
 
 
 async def _collect(events: AsyncIterator[LogEvent]) -> list[LogEvent]:
@@ -324,8 +325,8 @@ async def test_fetch_log_events_with_progress_callback(logs_client: Any):
 
     calls = []
 
-    def progress(current, status):
-        calls.append((current, status))
+    def progress(current: int, total: int, status: str) -> None:
+        calls.append((current, total, status))
 
     start = datetime.now(tz=UTC) - timedelta(hours=1)
     end = datetime.now(tz=UTC)
@@ -343,10 +344,13 @@ async def test_fetch_log_events_with_progress_callback(logs_client: Any):
 
     assert len(results) == total_events
     assert calls, 'Expected progress callback to be invoked'
-    counts = [count for count, _ in calls]
+    counts = [count for count, _total, _status in calls]
     assert counts == sorted(counts)
     assert counts[-1] >= 200
-    for _, status in calls:
+    assert {total for _count, total, _status in calls} == {TOTAL_UNKNOWN}, (
+        'a paginated read does not know its total until the last page'
+    )
+    for _count, _total, status in calls:
         assert status.startswith('Fetched')
 
 
@@ -379,7 +383,8 @@ async def test_fetch_log_events_progress_callback_frequency(logs_client: Any):
     pages = [{'events': events}]
     calls = []
 
-    def progress(current, status):
+    def progress(current: int, total: int, status: str) -> None:
+        del total, status
         calls.append(current)
 
     start = datetime.now(tz=UTC) - timedelta(minutes=30)

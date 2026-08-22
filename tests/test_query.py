@@ -1,6 +1,7 @@
 """Tests for query module (parser and engine)."""
 
 import json
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 from tail_cw.aws.events import LogEvent
 from tail_cw.cache.storage import write_log_events_to_parquet
 from tail_cw.query.engine import (
+    EnginePanicError,
     QueryBackend,
     _select_backend,
     benchmark_backends,
@@ -846,3 +848,27 @@ def test_text_search_ignores_fields_the_event_never_carried(fix_test_cache, back
 
     assert len(matched) == 1
     assert 'Boom' in matched[0]['message']
+
+
+def test_a_native_engine_panic_becomes_an_exception_callers_can_catch(tmp_path, monkeypatch):
+    """DuckDB and Polars raise from Rust outside the Exception hierarchy."""
+    path = tmp_path / 'events.parquet'
+    write_log_events_to_parquet([make_event('hello')], path)
+    panic = type('PanicException', (BaseException,), {})
+
+    def boom(_ignored: object) -> dict[str, object]:
+        raise panic('called `Result::unwrap()` on an `Err` value')
+
+    def exploding(*_args: object, **_kwargs: object) -> Iterator[dict[str, object]]:
+        # map is lazy, so the panic lands while the rows are being pulled, which is
+        # where a real one lands too.
+        return map(boom, [None])
+
+    monkeypatch.setattr('tail_cw.query.engine._query_with_polars', exploding)
+    monkeypatch.setattr('tail_cw.query.engine._query_with_duckdb', exploding)
+
+    with pytest.raises(EnginePanicError) as caught:
+        list(query_parquet_file(path))
+
+    assert 'PanicException reading events.parquet' in str(caught.value)
+    assert isinstance(caught.value, Exception), 'the whole point is that except Exception sees it'

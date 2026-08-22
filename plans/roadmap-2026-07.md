@@ -311,20 +311,35 @@ Separately, there is no shell completion for the CLI at all, and with nine `expo
 subcommands and log group names that run past 40 characters, completing group names from
 the cached group list would save more typing than any other ergonomics change.
 
-**Plumbing and tooling.** `ProgressCallback` is defined twice with different arity, in
-`cache/storage.py` as `(current, total, status)` and in `aws/client.py` as
-`(count, message)`.
-Unify those before wiring fetch and Parquet-convert progress into the TUI, because one
-worker has to feed both; today `ProgressUpdate` exists but its only producer is
-DataTable row insertion, so the two long operations run silent, and a two-minute
-multi-group fetch reports nothing.
-`write_ndjson` opens its output with `output_path.open('w')`, so a non-ASCII log message
-fails on a Windows locale that is not UTF-8, and no test covers it.
-CI runs the test suite on macOS and Windows only, never on Linux, and only on 3.11
-despite the classifiers claiming 3.13.
-`PanicException` from Polars is not an `Exception` subclass, so nothing between
-`write_log_events_to_parquet` and the terminal catches it; the schema bug that triggered
-it is fixed but the failure mode is not, and how the TUI renders it is unverified.
+**Plumbing and tooling.** Mostly closed on 2026-08-22, and two of the four items were
+already stale when read.
+
+The two `ProgressCallback` definitions are now one, in `tail_cw/progress.py`, on the
+superset signature `(current, total, status)` with `TOTAL_UNKNOWN` for a paginated read
+that cannot know its total.
+Nothing in production passed either of them, which is why the mismatch survived.
+Still open: whether to thread it into the TUI at all.
+`ProgressUpdate` exists with only DataTable insertion behind it, so a long fetch reports
+no count, but the load clock shipped earlier the same day already fixed the part that
+mattered (a status line that cannot be told from a hang), and `ResolveLogs` has 44 call
+sites to widen for the rest.
+
+Polars' `PanicException` derives from `BaseException`, so it walked past every
+`except Exception` in the tool.
+`query_parquet_file` now converts it to `EnginePanicError`, a `RuntimeError`, which puts
+it back inside every existing handler including the TUI's; the guard spans the schema
+read
+as well as the rows, because reading a schema is a Polars call too.
+The CLI entry point catches it by type name so that catching it costs no import.
+
+CI now runs 3.11 and 3.13 on macOS, Linux, and Windows, plus 3.12 on Linux.
+It already ran on Linux, and 3.13 was verified locally against the whole suite before
+the
+matrix claimed it.
+Stdout and stderr are reconfigured to UTF-8 at the entry point, since JSON is UTF-8 by
+definition and a legacy Windows code page failed an export on one accented character;
+`write_ndjson` takes a stream rather than a path and every file write already named its
+encoding, so that half of the item no longer existed.
 
 **Declined.** YAML config: TOML stays the only format, because a second format means a
 second parser, an optional dependency, and a forked document for no capability gain.
