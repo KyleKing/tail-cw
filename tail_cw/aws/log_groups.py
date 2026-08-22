@@ -13,7 +13,7 @@ from datetime import datetime
 from fnmatch import fnmatchcase
 from typing import Any
 
-from tail_cw.aws.client import _epoch_ms_to_datetime
+from tail_cw.aws.events import epoch_ms_to_datetime
 
 GLOB_METACHARACTERS = frozenset('*?[')
 """Characters that mark a pattern as a glob rather than a name or prefix."""
@@ -46,7 +46,7 @@ def _to_log_group_info(group: dict[str, Any]) -> LogGroupInfo:
         arn=(group.get('logGroupArn') or group.get('arn', '')).removesuffix(':*'),
         stored_bytes=group.get('storedBytes'),
         retention_days=group.get('retentionInDays'),
-        created=_epoch_ms_to_datetime(created_ms) if created_ms is not None else None,
+        created=epoch_ms_to_datetime(created_ms) if created_ms is not None else None,
     )
 
 

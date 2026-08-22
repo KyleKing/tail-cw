@@ -84,6 +84,26 @@ failures.
     - Make boolean parameters keyword-only in helpers/fixtures to avoid Ruff FBT warnings and
         improve readability.
 
+## Module layering and startup cost
+
+`tail-cw --help` must not load aiobotocore, Polars, DuckDB, or Textual.
+Three rules keep it that way, and
+`tests/test_main.py::test_the_entry_point_does_not_load_the_heavy_stack` fails if one is
+broken:
+
+- `tail_cw/parser.py` owns the argparse surface and imports only light modules.
+    `tail_cw/cli.py` owns the pipelines and imports it, never the other way round
+- `tail_cw/__main__.py` holds the one deliberate deferred import in the package
+    (`from tail_cw.services import run`, inside `main`).
+    The global "never lazy import" rule stands everywhere else; this is the single
+    exception, and it is what buys 0.35s down to 0.07s per invocation
+- the record and the client are separate: `tail_cw/aws/events.py` holds `LogEvent`, and
+    `tail_cw/aws/client.py` holds the aiobotocore calls.
+    Likewise `tail_cw/cache/records.py` answers "what does this row say" with no Polars
+    behind it.
+    `tail_cw/aws/__init__.py`, `cache/__init__.py`, and `query/__init__.py` re-export
+    nothing on purpose: a facade there loads the whole subpackage for one import
+
 ## Textual-specific guidance (performance & architecture)
 
 If you introduce or modify Textual UI code:

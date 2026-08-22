@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.cli import FetchRequest, resolve_parquet_paths
 from tail_cw.concurrency import DEFAULT_BLOCKING_WORKERS, blocking_pool
 from tail_cw.config import CacheConfig, TailCWConfig

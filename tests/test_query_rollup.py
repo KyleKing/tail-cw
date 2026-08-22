@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.query.fuzzy import VARIABLE_PLACEHOLDER, merge_similar_keys
 from tail_cw.query.report import render_markdown
 from tail_cw.query.rollup import Granularity, bucket_labels_for_window, roll_up

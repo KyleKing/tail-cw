@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.query.severity import Severity, event_severity, keyword_severity
 
 NOW = datetime(2026, 8, 21, 17, 0, tzinfo=UTC)

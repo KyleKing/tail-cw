@@ -13,7 +13,7 @@ from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError  # type: ignore[import-untyped]
 
-from tail_cw.aws.client import LogEvent, _epoch_ms_to_datetime
+from tail_cw.aws.events import LogEvent, epoch_ms_to_datetime
 
 MAX_LIVE_TAIL_LOG_GROUPS = 10
 """StartLiveTail accepts at most 10 logGroupIdentifiers."""
@@ -36,9 +36,9 @@ def _live_event_to_log_event(raw: dict[str, Any]) -> LogEvent:
     return LogEvent(
         log_group=_log_group_name_from_identifier(raw.get('logGroupIdentifier', '')),
         log_stream=raw.get('logStreamName', ''),
-        timestamp=_epoch_ms_to_datetime(raw['timestamp']),
+        timestamp=epoch_ms_to_datetime(raw['timestamp']),
         message=raw.get('message', ''),
-        ingestion_time=_epoch_ms_to_datetime(ingestion_ms) if ingestion_ms is not None else None,
+        ingestion_time=epoch_ms_to_datetime(ingestion_ms) if ingestion_ms is not None else None,
     )
 
 

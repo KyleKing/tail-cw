@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 
 BASE_TIME = datetime(2025, 1, 15, 10, 0, tzinfo=UTC)
 """Fixed instant every factory counts from, so tests never depend on the clock."""

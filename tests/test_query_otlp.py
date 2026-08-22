@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.query.otlp import STATUS_CODE_ERROR, trace_error_summary, trace_groups_to_otlp
 from tail_cw.query.trace import TraceGroup, create_trace_groups, group_events_by_trace
 from tests.factories import BASE_TIME, make_event

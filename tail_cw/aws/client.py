@@ -13,12 +13,14 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, runtime_checkable
 
 from aiobotocore.session import AioSession  # type: ignore[import-untyped]
 from beartype.typing import Protocol
 from botocore.config import Config  # type: ignore[import-untyped]
+
+from tail_cw.aws.events import LogEvent, epoch_ms_to_datetime
 
 ProgressCallback = Callable[[int, str], None]
 
@@ -34,39 +36,6 @@ def retry_config() -> Config:
     so one shared instance would leak that rewrite between clients.
     """
     return Config(retries=dict(RETRIES))
-
-
-@dataclass(frozen=True)
-class LogEvent:
-    """Represents a single CloudWatch Logs event.
-
-    Attributes:
-        log_group: The CloudWatch log group name.
-        log_stream: The CloudWatch log stream name.
-        timestamp: Event timestamp as timezone-aware datetime (UTC). Converted from
-            epoch milliseconds returned by CloudWatch API.
-        message: The log message content.
-        ingestion_time: When CloudWatch ingested the event. May be None if not
-            provided in the API response.
-    """
-
-    log_group: str
-    log_stream: str
-    timestamp: datetime
-    message: str
-    ingestion_time: datetime | None
-
-
-def _epoch_ms_to_datetime(epoch_ms: int) -> datetime:
-    """Convert epoch milliseconds to timezone-aware datetime in UTC.
-
-    Args:
-        epoch_ms: Timestamp in milliseconds since Unix epoch.
-
-    Returns:
-        Timezone-aware datetime object in UTC.
-    """
-    return datetime.fromtimestamp(epoch_ms / 1000.0, tz=UTC)
 
 
 @runtime_checkable
@@ -189,11 +158,11 @@ async def fetch_log_events(
             if progress_callback and event_count % 100 == 0:
                 progress_callback(event_count, f'Fetched {event_count} events...')
 
-            ingestion_time = _epoch_ms_to_datetime(event['ingestionTime']) if 'ingestionTime' in event else None
+            ingestion_time = epoch_ms_to_datetime(event['ingestionTime']) if 'ingestionTime' in event else None
             yield LogEvent(
                 log_group=log_group_name,
                 log_stream=event['logStreamName'],
-                timestamp=_epoch_ms_to_datetime(event['timestamp']),
+                timestamp=epoch_ms_to_datetime(event['timestamp']),
                 message=event['message'],
                 ingestion_time=ingestion_time,
             )

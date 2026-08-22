@@ -9,11 +9,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from tail_cw.cache.records import is_jsonl_message
 from tail_cw.cache.storage import (
     METADATA_DIRNAME,
     LogCache,
     generate_cache_key,
-    is_jsonl_message,
     read_parquet_to_log_events,
     write_log_events_to_parquet,
 )

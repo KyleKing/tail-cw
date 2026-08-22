@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, TypedDict
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.query.engine import query_parquet_file_to_log_events
 from tail_cw.query.parser import combine_filters, parse_filter_pattern
 from tail_cw.query.severity import (

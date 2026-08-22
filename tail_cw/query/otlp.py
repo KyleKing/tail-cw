@@ -14,7 +14,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from hashlib import blake2b
 from typing import Any
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.query.severity import load_json_dict
 from tail_cw.query.trace import TraceGroup, TraceSpan
 

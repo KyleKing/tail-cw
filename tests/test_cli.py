@@ -13,8 +13,8 @@ from typing import Any
 import pytest
 
 from tail_cw.aws.alarms import AlarmSummary, AlarmTransition
-from tail_cw.aws.client import LogEvent
 from tail_cw.aws.dashboards import Dashboard, DashboardSummary, TextWidget, WidgetLayout
+from tail_cw.aws.events import LogEvent
 from tail_cw.aws.insights import InsightsQueryError, InsightsResult
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.aws.metrics import MetricSeries
@@ -24,7 +24,6 @@ from tail_cw.cli import (
     Session,
     ShellSeed,
     TailRequest,
-    build_parser,
     expand_presets,
     iter_tail_events,
     parse_time,
@@ -37,6 +36,7 @@ from tail_cw.cli import (
     write_ndjson,
 )
 from tail_cw.config import CacheConfig, TailCWConfig
+from tail_cw.parser import build_parser
 
 NOW = datetime(2026, 7, 5, 12, 0, 0, tzinfo=UTC)
 

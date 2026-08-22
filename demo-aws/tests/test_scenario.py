@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 import scenario
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.query.trace import (
     extract_service_name,
     extract_span_metadata,

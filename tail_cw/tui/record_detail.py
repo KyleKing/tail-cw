@@ -24,7 +24,7 @@ from textual.containers import Container, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.tui.log_viewer import format_log_event_detail_with_json
 
 

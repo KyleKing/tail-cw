@@ -7,7 +7,7 @@ import pytest
 from textual.app import App
 from textual.widgets import Input, Label, Tree
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.query.trace import TraceGroup, log_event_to_trace_span
 from tail_cw.tui.record_detail import RecordDetailScreen
 from tail_cw.tui.trace_viewer import TraceViewerScreen

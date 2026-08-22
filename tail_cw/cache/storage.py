@@ -9,9 +9,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import re
 import tempfile
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator
 from datetime import datetime
 from operator import itemgetter
 from pathlib import Path
@@ -21,7 +20,8 @@ from typing import Any
 import polars as pl
 from diskcache import Cache, JSONDisk
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
+from tail_cw.cache.records import is_jsonl_message, readable_message
 
 # Progress callback signature: current progress, total (or -1 when unknown), status message.
 TtlSeconds = int | float
@@ -47,13 +47,9 @@ change explicit: the old cache is simply cold, and its files are reclaimed by th
 normal orphan sweep.
 """
 
+
 # Precompiled regex for detecting ISO8601/RFC3339 timestamps at start of message
 # Matches formats like: 2025-01-01T12:00:00Z, 2025-01-01T12:00:00.123456+00:00
-_TIMESTAMP_PREFIX_RE = re.compile(
-    r'^\s*\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\s*',
-)
-
-
 def generate_cache_key(
     log_group: str,
     start_time: datetime,
@@ -180,39 +176,6 @@ def _metadata_path(metadata_value: Any) -> str:
     if isinstance(metadata_value, (tuple, list)):
         return str(metadata_value[0])
     return str(metadata_value)
-
-
-def is_jsonl_message(message: str) -> bool:
-    """Detect if a log message appears to be JSON.
-
-    Checks if the message starts with '{' after stripping leading whitespace.
-    Also handles messages with leading ISO8601/RFC3339 timestamps followed by JSON.
-
-    Args:
-        message: The log message content.
-
-    Returns:
-        True if message appears to be JSON, False otherwise.
-
-    Example:
-        >>> is_jsonl_message('{"level":"INFO","msg":"test"}')
-        True
-        >>> is_jsonl_message('  {"key":"value"}')
-        True
-        >>> is_jsonl_message('2025-01-01T12:00:00Z {"k":1}')
-        True
-        >>> is_jsonl_message('Plain text log')
-        False
-    """
-    # Fast path: check if message starts with '{' after stripping whitespace
-    stripped = message.lstrip()
-    if stripped.startswith('{'):
-        return True
-
-    # Check if message has timestamp prefix followed by '{'
-    # Remove timestamp prefix and check again
-    without_timestamp = _TIMESTAMP_PREFIX_RE.sub('', message, count=1)
-    return without_timestamp.lstrip().startswith('{')
 
 
 def _parse_jsonl_message(message: str) -> dict[str, Any] | None:
@@ -372,28 +335,6 @@ def _normalized_columns(lazy: pl.LazyFrame) -> pl.LazyFrame:
     return lazy.with_columns(*casts, *fills)
 
 
-def readable_message(row: Mapping[str, Any]) -> str:
-    """Return an event's text, rebuilt from ``parsed`` when the raw line was not stored.
-
-    Args:
-        row: One row of a cached Parquet file, keyed by column name.
-    """
-    message = row.get('message')
-    if message is not None:
-        return str(message)
-    parsed = row.get('parsed')
-    return json.dumps(_without_nulls(parsed), separators=(',', ':')) if parsed is not None else ''
-
-
-def _without_nulls(value: Any) -> Any:
-    """Drop the null fields Polars adds when widening a struct across records."""
-    if isinstance(value, dict):
-        return {key: _without_nulls(item) for key, item in value.items() if item is not None}
-    if isinstance(value, list):
-        return [_without_nulls(item) for item in value]
-    return value
-
-
 def read_parquet_to_log_events(parquet_path: Path) -> Iterator[LogEvent]:
     """Read a Parquet file written by :func:`write_log_events_to_parquet`.
 
@@ -449,7 +390,8 @@ class LogCache:
     Example:
         >>> from pathlib import Path
         >>> from datetime import datetime, timezone, timedelta
-        >>> from tail_cw.aws.client import LogEvent
+        >>> from tail_cw.aws.events import LogEvent
+    from tail_cw.cache.records import is_jsonl_message, readable_message
         >>> from tail_cw.cache import LogCache, generate_cache_key
         >>> # Create cache with 1GB limit and 1-hour default TTL
         >>> cache_dir = Path('/tmp/my-cache')

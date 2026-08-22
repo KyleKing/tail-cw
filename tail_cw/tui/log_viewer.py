@@ -27,8 +27,8 @@ from datetime import datetime
 from rich.console import RenderableType
 from rich.text import Text
 
-from tail_cw.aws.client import LogEvent
-from tail_cw.cache.storage import is_jsonl_message
+from tail_cw.aws.events import LogEvent
+from tail_cw.cache.records import is_jsonl_message
 
 
 def format_timestamp(dt: datetime, style: str = 'cyan') -> Text:

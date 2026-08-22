@@ -7,7 +7,7 @@ from textual.app import App
 from textual.pilot import Pilot
 from textual.widgets import DataTable, Static
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.cli import Session
 from tail_cw.config import TailCWConfig
 from tail_cw.tui.logs_screen import LogsScreen

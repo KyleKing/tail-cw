@@ -14,7 +14,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from tail_cw.cache.storage import is_jsonl_message
+from tail_cw.cache.records import is_jsonl_message
 
 TS_PLACEHOLDER = '<ts>'
 UUID_PLACEHOLDER = '<uuid>'

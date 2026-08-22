@@ -26,11 +26,11 @@ from textual.timer import Timer
 from textual.widgets import DataTable, Input, Label
 from textual.worker import get_current_worker
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.concurrency import closing_stream
 from tail_cw.config import TailCWConfig
-from tail_cw.query import parse_extended_filter, parse_filter_pattern, query_parquet_files_to_log_events
-from tail_cw.query.parser import FilterNode, combine_filters
+from tail_cw.query.engine import query_parquet_files_to_log_events
+from tail_cw.query.parser import FilterNode, combine_filters, parse_extended_filter, parse_filter_pattern
 from tail_cw.query.trace import TraceGroup, extract_trace_id_from_event, query_traces_from_parquet_files
 from tail_cw.tui.log_viewer import batch_format_log_events, get_column_definitions
 from tail_cw.tui.navigation import NavTarget, ViewKind

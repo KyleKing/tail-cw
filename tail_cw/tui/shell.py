@@ -23,8 +23,8 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input, Label
 
 from tail_cw.aws.alarms import AlarmSummary
-from tail_cw.aws.client import LogEvent
 from tail_cw.aws.dashboards import Dashboard, DashboardSummary, DiveCandidate, Widget
+from tail_cw.aws.events import LogEvent
 from tail_cw.aws.insights import InsightsResult
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.aws.metrics import MetricSeries

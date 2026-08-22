@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 from textual.widgets import DataTable, Label
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.cache.storage import write_log_events_to_parquet
 from tail_cw.cli import Session
 from tail_cw.config import TailCWConfig, TUIConfig

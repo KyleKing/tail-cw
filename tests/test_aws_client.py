@@ -9,14 +9,8 @@ from aiobotocore.stub import AioStubber  # type: ignore[import-untyped]
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 from botocore.stub import ANY  # type: ignore[import-untyped]
 
-from tail_cw.aws.client import (
-    RETRIES,
-    LogEvent,
-    _epoch_ms_to_datetime,
-    client_pool,
-    fetch_log_events,
-    retry_config,
-)
+from tail_cw.aws.client import RETRIES, client_pool, fetch_log_events, retry_config
+from tail_cw.aws.events import LogEvent, epoch_ms_to_datetime
 
 
 async def _collect(events: AsyncIterator[LogEvent]) -> list[LogEvent]:
@@ -63,11 +57,11 @@ def _make_cw_event(
     return event
 
 
-def test_epoch_ms_to_datetime():
+def testepoch_ms_to_datetime():
     """Test conversion from epoch milliseconds to datetime."""
     # Test basic conversion
     epoch_ms = 1700000000000  # Nov 14, 2023 22:13:20 UTC
-    result = _epoch_ms_to_datetime(epoch_ms)
+    result = epoch_ms_to_datetime(epoch_ms)
 
     assert isinstance(result, datetime)
     assert result.tzinfo == UTC
@@ -79,14 +73,14 @@ def test_epoch_ms_to_datetime():
     assert converted_back == epoch_ms
 
     # Test edge case: epoch zero
-    epoch_zero = _epoch_ms_to_datetime(0)
+    epoch_zero = epoch_ms_to_datetime(0)
     assert epoch_zero.year == 1970
     assert epoch_zero.month == 1
     assert epoch_zero.day == 1
 
     # Test large timestamp
     large_timestamp = 2000000000000  # May 18, 2033
-    result_large = _epoch_ms_to_datetime(large_timestamp)
+    result_large = epoch_ms_to_datetime(large_timestamp)
     assert result_large.year == 2033
 
 

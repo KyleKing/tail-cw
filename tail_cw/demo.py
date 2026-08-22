@@ -18,8 +18,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from tail_cw.aws.client import LogEvent
 from tail_cw.aws.dashboards import Dashboard, parse_dashboard_body
+from tail_cw.aws.events import LogEvent
 from tail_cw.aws.metrics import MetricSeries
 from tail_cw.cache.storage import write_log_events_to_parquet
 

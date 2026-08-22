@@ -22,8 +22,8 @@ from typing import Any
 import duckdb
 import polars as pl
 
-from tail_cw.aws.client import LogEvent
-from tail_cw.cache.storage import readable_message
+from tail_cw.aws.events import LogEvent
+from tail_cw.cache.records import readable_message
 from tail_cw.cpu_budget import duckdb_threads
 from tail_cw.query.parser import FilterNode, FilterNodeType
 

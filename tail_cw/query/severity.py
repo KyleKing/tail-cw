@@ -15,7 +15,7 @@ from collections.abc import Iterator, Mapping
 from enum import IntEnum
 from typing import Any
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 
 ERROR_KEYWORDS = {'error', 'fatal', 'critical', 'exception'}
 WARNING_KEYWORDS = {'warn', 'warning'}

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.cache.storage import write_log_events_to_parquet
 from tail_cw.query.engine import (
     QueryBackend,

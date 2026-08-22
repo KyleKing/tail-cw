@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.query.fuzzy import DEFAULT_SIMILARITY, merge_similar_keys
 from tail_cw.query.patterns import message_shape_key
 from tail_cw.query.severity import Severity, event_severity

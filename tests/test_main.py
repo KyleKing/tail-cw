@@ -1,8 +1,10 @@
 # ruff: file-ignore[unused-async] - the fakes conform to awaitable service signatures
-"""Unit tests for the __main__ entry point (shell wiring and exit codes)."""
+"""Unit tests for the entry point and the live service wiring."""
 
 from __future__ import annotations
 
+import subprocess  # noqa: S404 - a fresh interpreter is the only honest way to see what an import loads
+import sys
 from collections.abc import AsyncIterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import fields
@@ -12,7 +14,13 @@ from unittest.mock import patch
 
 import pytest
 
-from tail_cw.__main__ import (
+from tail_cw.__main__ import main
+from tail_cw.aws.dashboards import Dashboard
+from tail_cw.aws.events import LogEvent
+from tail_cw.cli import FetchRequest, Session, ShellSeed
+from tail_cw.config import TailCWConfig
+from tail_cw.demo import DEMO_LOG_GROUP
+from tail_cw.services import (
     _build_app,
     _demo_resolve_logs,
     _demo_services,
@@ -20,13 +28,7 @@ from tail_cw.__main__ import (
     _run_shell,
     _seed_to_target,
     _target_label,
-    main,
 )
-from tail_cw.aws.client import LogEvent
-from tail_cw.aws.dashboards import Dashboard
-from tail_cw.cli import FetchRequest, Session, ShellSeed
-from tail_cw.config import TailCWConfig
-from tail_cw.demo import DEMO_LOG_GROUP
 from tail_cw.tui.navigation import ViewKind
 from tail_cw.tui.shell import ShellServices, TailCWApp
 
@@ -66,22 +68,33 @@ def test_main_without_subcommand_prints_help(capsys):
 
 
 def test_main_returns_run_cli_exit_code():
-    with patch('tail_cw.__main__.run_cli', return_value=0) as mock_run:
+    with patch('tail_cw.services.run', return_value=0) as mock_run:
         result = main(['logs', '/g'])
 
     assert result == 0
     mock_run.assert_called_once()
 
 
+HEAVY_MODULES = ('aiobotocore', 'duckdb', 'polars', 'textual')
+
+
+def test_the_entry_point_does_not_load_the_heavy_stack():
+    """--help must not pay for aiobotocore, Polars, DuckDB, or Textual."""
+    probe = f'import sys, tail_cw.__main__;print([name for name in {HEAVY_MODULES!r} if name in sys.modules])'
+    loaded = subprocess.run([sys.executable, '-c', probe], capture_output=True, text=True, check=True)  # noqa: S603
+
+    assert loaded.stdout.strip() == '[]'
+
+
 def test_main_handles_keyboard_interrupt():
-    with patch('tail_cw.__main__.run_cli', side_effect=KeyboardInterrupt()):
+    with patch('tail_cw.services.run', side_effect=KeyboardInterrupt()):
         result = main(['logs', '/g'])
 
     assert result == 0
 
 
 def test_main_handles_generic_exception(capsys):
-    with patch('tail_cw.__main__.run_cli', side_effect=RuntimeError('test error')):
+    with patch('tail_cw.services.run', side_effect=RuntimeError('test error')):
         result = main(['logs', '/g'])
 
     assert result == 1
@@ -220,7 +233,7 @@ async def test_live_services_fetch_metrics_uses_the_pooled_cloudwatch_client():
         return []
 
     assert services.fetch_metrics is not None
-    with patch('tail_cw.__main__.fetch_metric_data', fake_fetch):
+    with patch('tail_cw.services.fetch_metric_data', fake_fetch):
         assert await services.fetch_metrics([{'Id': 'm1'}], session.start, session.end) == []
 
     assert recorded[0]['client'] == 'client:cloudwatch'
@@ -246,7 +259,7 @@ async def test_live_services_count_events_caps_the_scan():
             yield event
 
     assert services.count_events is not None
-    with patch('tail_cw.__main__.fetch_log_events', fake_fetch):
+    with patch('tail_cw.services.fetch_log_events', fake_fetch):
         assert await services.count_events('/g', session.start, session.end) == 3
 
 
@@ -262,7 +275,7 @@ async def test_live_services_resolve_logs_builds_one_request_per_group(tmp_path)
         return []
 
     assert services.resolve_logs is not None
-    with patch('tail_cw.__main__.resolve_parquet_paths', fake_resolve):
+    with patch('tail_cw.services.resolve_parquet_paths', fake_resolve):
         await services.resolve_logs(['/one', '/two'], session.start, session.end)
 
     requests = recorded[0]

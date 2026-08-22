@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from tail_cw.aws.client import LogEvent
+from tail_cw.aws.events import LogEvent
 from tail_cw.cache.storage import LogCache, generate_preview_cache_key
 from tail_cw.config.config import CacheConfig, PreviewConfig, TailCWConfig
 from tail_cw.preview import DEFAULT_VOLUME_BUCKETS, bucket_event_counts, build_group_preview

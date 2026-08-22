@@ -14,7 +14,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from tail_cw.aws.client import LogEvent, fetch_log_events
+from tail_cw.aws.client import fetch_log_events
+from tail_cw.aws.events import LogEvent
 from tail_cw.cache.storage import LogCache, generate_preview_cache_key
 from tail_cw.concurrency import take
 from tail_cw.config.config import TailCWConfig, get_default_cache_dir
