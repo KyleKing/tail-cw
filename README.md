@@ -44,7 +44,8 @@ and [AGENTS.md](AGENTS.md) for where to start.
     changed state, so a flapping alarm is visible as a count rather than as a run of Slack
     messages.
     `tail-cw export metrics` pulls any metric's datapoints without needing a dashboard to
-    hang them off
+    hang them off, and `tail-cw export dimensions` says which dimension sets a namespace
+    actually publishes, which is otherwise only readable in the emitter's source
 - `tail-cw export insights` runs a Logs Insights query for the aggregation questions a
     download cannot answer cheaply.
     A week of one busy group counted per day takes about 7 seconds and scans ~1 GB, against
@@ -175,6 +176,7 @@ uv run tail-cw export insights '/aws/*' --query '...'    # Logs Insights, billed
 uv run tail-cw export trace 1-68a1f2c3-4d5e '/aws/ecs/*' # one trace as OTLP JSON
 uv run tail-cw export alarms irm-prod --history           # alarms with their firing history
 uv run tail-cw export metrics --namespace AWS/ECS --metric MemoryUtilization --dimension ServiceName=svc
+uv run tail-cw export dimensions --namespace AWS/ECS      # the dimension sets a namespace publishes
 uv run tail-cw export dashboards                         # NDJSON dashboard list
 uv run tail-cw export dashboard my-service               # the parsed dashboard as JSON
 ```

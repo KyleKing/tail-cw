@@ -13,7 +13,7 @@ dashboard are preserved; only rows without an id get a generated one.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -228,3 +228,59 @@ async def fetch_metric_data(
         MetricSeries(id=result_id, label=labels[result_id], timestamps=timestamps[result_id], values=values[result_id])
         for result_id in ordered_ids
     ]
+
+
+@dataclass(frozen=True)
+class MetricDefinition:
+    """One metric as CloudWatch publishes it: a name and one dimension set.
+
+    ``ListMetrics`` returns an entry per distinct dimension combination, so a
+    metric published against two dimension sets appears twice. That repetition
+    is the answer to "which dimensions does this metric carry", which is
+    otherwise only readable in the emitter's source.
+
+    Attributes:
+        namespace: Metric namespace.
+        name: Metric name.
+        dimensions: Dimension name and value pairs, sorted by name.
+    """
+
+    namespace: str
+    name: str
+    dimensions: tuple[tuple[str, str], ...]
+
+    @property
+    def dimension_names(self) -> tuple[str, ...]:
+        """Just the dimension names, which is what a query has to supply."""
+        return tuple(name for name, _ in self.dimensions)
+
+
+async def list_metric_definitions(
+    client: Any,
+    *,
+    namespace: str,
+    metric_name: str | None = None,
+) -> AsyncIterator[MetricDefinition]:
+    """Stream the metrics a namespace publishes, one entry per dimension set.
+
+    Args:
+        client: An open CloudWatch client.
+        namespace: Namespace to list, e.g. ``AWS/ECS``.
+        metric_name: Restrict to one metric name.
+
+    Yields:
+        Metric definitions in the order CloudWatch returns them.
+    """
+    kwargs: dict[str, Any] = {'Namespace': namespace}
+    if metric_name is not None:
+        kwargs['MetricName'] = metric_name
+    paginator = client.get_paginator('list_metrics')
+    async for page in paginator.paginate(**kwargs):
+        for metric in page.get('Metrics', []):
+            yield MetricDefinition(
+                namespace=metric.get('Namespace', namespace),
+                name=metric['MetricName'],
+                dimensions=tuple(
+                    sorted((item['Name'], item['Value']) for item in metric.get('Dimensions', [])),
+                ),
+            )

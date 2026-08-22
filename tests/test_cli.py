@@ -17,7 +17,7 @@ from tail_cw.aws.dashboards import Dashboard, DashboardSummary, TextWidget, Widg
 from tail_cw.aws.events import LogEvent
 from tail_cw.aws.insights import InsightsQueryError, InsightsResult
 from tail_cw.aws.log_groups import LogGroupInfo
-from tail_cw.aws.metrics import MetricSeries
+from tail_cw.aws.metrics import MetricDefinition, MetricSeries
 from tail_cw.cache.storage import read_parquet_to_log_events
 from tail_cw.cli import (
     FetchRequest,
@@ -1460,6 +1460,55 @@ def test_run_cli_export_metrics_builds_a_dimensioned_query(tmp_path, capsys, mon
     assert (metric['Stat'], metric['Period']) == ('Maximum', 300)
     record = json.loads(capsys.readouterr().out)
     assert record['datapoints'] == [{'timestamp': NOW.isoformat(), 'value': pytest.approx(90.5)}]
+
+
+@pytest.mark.parametrize(
+    ('metrics', 'expected_code', 'expected'),
+    [
+        (
+            [
+                {'MetricName': 'ApiRequestLatencyMs', 'Dimensions': [{'Name': 'Method', 'Value': 'POST'}]},
+                {'MetricName': 'ApiRequestLatencyMs', 'Dimensions': [{'Name': 'StatusClass', 'Value': '5xx'}]},
+            ],
+            0,
+            ['Method', 'StatusClass'],
+        ),
+        ([], 1, []),
+    ],
+)
+def test_run_cli_export_dimensions_names_what_a_metric_publishes(
+    tmp_path,
+    capsys,
+    monkeypatch,
+    metrics,
+    expected_code,
+    expected,
+):
+    """Which dimensions a metric carries was only readable in the emitter's source."""
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    monkeypatch.setattr(
+        'tail_cw.cli.list_metric_definitions',
+        _async_iter_factory(
+            [
+                MetricDefinition(
+                    namespace='TailCwDemo',
+                    name=metric['MetricName'],
+                    dimensions=tuple(sorted((item['Name'], item['Value']) for item in metric['Dimensions'])),
+                )
+                for metric in metrics
+            ],
+        ),
+    )
+    argv = ['export', 'dimensions', '--namespace', 'TailCwDemo', '--config', str(_write_config_file(tmp_path))]
+
+    result = run_cli(argv, None, is_tty=False)
+
+    captured = capsys.readouterr()
+    assert result == expected_code
+    names = [name for line in captured.out.splitlines() for name in json.loads(line)['dimension_names']]
+    assert names == expected
+    if expected_code:
+        assert 'No metrics published' in captured.err
 
 
 def test_run_cli_export_metrics_rejects_a_dimension_without_a_value(tmp_path, capsys, monkeypatch):

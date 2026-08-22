@@ -58,6 +58,9 @@ def _add_export_parsers(export: argparse.ArgumentParser) -> None:
     )
     _configure_alarms(export_sub.add_parser('alarms', help='Write metric alarms, and their firing history, as NDJSON.'))
     _configure_metrics(export_sub.add_parser('metrics', help='Write metric datapoints as NDJSON.'))
+    _configure_dimensions(
+        export_sub.add_parser('dimensions', help='Write the dimension sets a namespace publishes as NDJSON.'),
+    )
     _configure_dashboards(export_sub.add_parser('dashboards', help='Write the account dashboard list as NDJSON.'))
     _configure_dashboard(export_sub.add_parser('dashboard', help='Write one parsed dashboard structure as JSON.'))
 
@@ -232,6 +235,12 @@ def _configure_metrics(parser: argparse.ArgumentParser) -> None:
         help=f'Start of range: duration or ISO-8601 datetime (default: {DEFAULT_DASHBOARD_WINDOW})',
     )
     parser.add_argument('--end', default=None, help='End of range: duration or ISO-8601 datetime')
+
+
+def _configure_dimensions(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('--namespace', required=True, help='Metric namespace, e.g. AWS/ECS')
+    parser.add_argument('--metric', default=None, help='Restrict to one metric name')
+    _add_aws_flags(parser)
 
 
 def _configure_dashboards(parser: argparse.ArgumentParser) -> None:

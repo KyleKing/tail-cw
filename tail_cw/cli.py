@@ -47,6 +47,7 @@ from tail_cw.aws.metrics import (
     MetricSeries,
     build_metric_data_queries,
     fetch_metric_data,
+    list_metric_definitions,
 )
 from tail_cw.cache.storage import LogCache, generate_cache_key
 from tail_cw.cache.window import Segment, plan_segments
@@ -1084,6 +1085,33 @@ async def _export_metrics(pool: ClientProvider, args: argparse.Namespace, now: d
     return 0
 
 
+async def _export_dimensions(pool: ClientProvider, args: argparse.Namespace) -> int:
+    """Write the dimension sets a namespace publishes, so a query can name one.
+
+    ``ApiRequestLatencyMs`` carrying only ``Method`` and ``StatusClass`` is
+    otherwise only visible in the emitter's source.
+    """
+    if _load_config_or_report(args.config_path) is None:
+        return 1
+    cloudwatch = await pool.client('cloudwatch')
+    definitions = list_metric_definitions(cloudwatch, namespace=args.namespace, metric_name=args.metric)
+    count = 0
+    async for definition in definitions:
+        count += 1
+        _write_json_line(
+            {
+                'namespace': definition.namespace,
+                'metric': definition.name,
+                'dimension_names': list(definition.dimension_names),
+                'dimensions': dict(definition.dimensions),
+            },
+        )
+    if not count:
+        sys.stderr.write(f'No metrics published in {args.namespace}\n')
+        return 1
+    return 0
+
+
 def _metric_series_to_record(series: MetricSeries) -> dict[str, object]:
     return {
         'id': series.id,
@@ -1141,6 +1169,7 @@ async def _dispatch_export(
         'trace': lambda: _export_trace(pool, args, now, fetch_events=fetch_events, executor=executor),
         'alarms': lambda: _export_alarms(pool, args, now),
         'metrics': lambda: _export_metrics(pool, args, now),
+        'dimensions': lambda: _export_dimensions(pool, args),
         'dashboards': lambda: _export_dashboards(pool, args),
         'dashboard': lambda: _export_dashboard(pool, args),
     }
