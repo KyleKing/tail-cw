@@ -14,10 +14,12 @@ from collections.abc import AsyncIterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
+from tail_cw.aws.alarms import AlarmSummary, describe_alarm_history, describe_alarms
 from tail_cw.aws.client import ClientProvider, LogEvent, client_pool, fetch_log_events
 from tail_cw.aws.dashboards import Dashboard, DashboardSummary, get_dashboard, list_dashboards
+from tail_cw.aws.insights import InsightsResult, run_insights_query
 from tail_cw.aws.live_tail import stream_live_tail
 from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups
 from tail_cw.aws.metrics import MetricSeries, fetch_metric_data
@@ -34,9 +36,22 @@ from tail_cw.demo import (
     demo_resolve_logs,
 )
 from tail_cw.preview import GroupPreview, bucket_event_counts, build_group_preview
+from tail_cw.query.engine import query_parquet_files_to_log_events
+from tail_cw.query.parser import parse_filter_pattern
+from tail_cw.query.rollup import RollupReport, roll_up
+from tail_cw.query.severity import Severity
 from tail_cw.query.trace import TraceGroup, query_traces_from_parquet_files
 from tail_cw.tui.navigation import NavTarget, ViewKind
-from tail_cw.tui.shell import CountEvents, LoadTraces, LogVolume, ResolveLogs, ShellServices, TailCWApp
+from tail_cw.tui.shell import (
+    CountEvents,
+    ListAlarms,
+    LoadTraces,
+    LogVolume,
+    ResolveLogs,
+    RunInsights,
+    ShellServices,
+    TailCWApp,
+)
 from tail_cw.tui.views import build_screen
 
 T = TypeVar('T')
@@ -80,8 +95,14 @@ def _demo_resolve_logs(groups: Sequence[str], start: datetime, end: datetime) ->
     return [path for path in paths if path is not None]
 
 
+def _demo_roll_up(groups: Sequence[str], start: datetime, end: datetime) -> RollupReport:
+    paths = _demo_resolve_logs(groups, start, end)
+    return roll_up(query_parquet_files_to_log_events(paths), window=(start, end), min_severity=Severity.WARNING)
+
+
 def _demo_services() -> ShellServices:
     return ShellServices(
+        roll_up_logs=lambda groups, start, end: _ready(_demo_roll_up(groups, start, end)),
         load_dashboard=lambda _name: _ready(demo_dashboard()),
         list_dashboards=lambda: _ready([DashboardSummary(name='demo', arn='arn:demo', size=0)]),
         fetch_metrics=lambda queries, start, end: _ready(demo_fetch_metrics(queries, start, end)),
@@ -163,6 +184,41 @@ def _cache_services(
     return resolve_logs, log_volume, count_events, load_traces
 
 
+def _cloudwatch_services(pool: ClientProvider) -> tuple[ListAlarms, RunInsights]:
+    """Build the services that read CloudWatch without touching the Parquet cache."""
+
+    async def count_transitions(client: Any, name: str, start: datetime, end: datetime) -> int:
+        history = describe_alarm_history(client, name, start_time=start, end_time=end)
+        return len([transition async for transition in history])
+
+    async def list_alarms(start: datetime, end: datetime) -> tuple[list[AlarmSummary], dict[str, int]]:
+        cloudwatch = await pool.client('cloudwatch')
+        alarms = [alarm async for alarm in describe_alarms(cloudwatch)]
+        # One history call per alarm, all at once: run in sequence a fifty-alarm
+        # account leaves the view saying "Running" for half a minute.
+        async with asyncio.TaskGroup() as group:
+            counts = {
+                alarm.name: group.create_task(count_transitions(cloudwatch, alarm.name, start, end)) for alarm in alarms
+            }
+        return alarms, {name: task.result() for name, task in counts.items()}
+
+    async def run_insights(
+        groups: Sequence[str],
+        query: str,
+        start: datetime,
+        end: datetime,
+    ) -> InsightsResult:
+        return await run_insights_query(
+            await pool.client('logs'),
+            log_groups=list(groups),
+            query=query,
+            start_time=start,
+            end_time=end,
+        )
+
+    return list_alarms, run_insights
+
+
 def _live_services(
     config: TailCWConfig,
     session: Session,
@@ -170,6 +226,7 @@ def _live_services(
     executor: ThreadPoolExecutor,
 ) -> ShellServices:
     resolve_logs, log_volume, count_events, load_traces = _cache_services(config, session, pool, executor)
+    list_alarms, run_insights = _cloudwatch_services(pool)
 
     async def list_groups() -> list[LogGroupInfo]:
         logs = await pool.client('logs')
@@ -205,6 +262,18 @@ def _live_services(
         async for event in stream_live_tail(client, list(groups), filter_pattern=filter_pattern):
             yield event
 
+    async def roll_up_logs(groups: Sequence[str], start: datetime, end: datetime) -> RollupReport:
+        paths = await resolve_logs(groups, start, end)
+        filter_node = parse_filter_pattern(session.filter_pattern) if session.filter_pattern else None
+        return await run_blocking(
+            executor,
+            lambda: roll_up(
+                query_parquet_files_to_log_events(paths, filter_node),
+                window=(start, end),
+                min_severity=Severity.WARNING,
+            ),
+        )
+
     return ShellServices(
         list_groups=list_groups,
         preview_group=preview_group,
@@ -216,10 +285,17 @@ def _live_services(
         log_volume=log_volume,
         count_events=count_events,
         load_traces=load_traces,
+        roll_up_logs=roll_up_logs,
+        list_alarms=list_alarms,
+        run_insights=run_insights,
     )
 
 
 def _build_app(config: TailCWConfig, session: Session, seed: ShellSeed, services: ShellServices) -> TailCWApp:
+    if seed.view in {'logs', 'tail'} and not session.selected_groups:
+        # Opening straight into a log view still counts as selecting those groups:
+        # every view that acts on the selection (rollup, Insights) reads it from here.
+        session.selected_groups = list(seed.targets)
     return TailCWApp(
         config,
         session,

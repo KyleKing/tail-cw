@@ -22,13 +22,16 @@ from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Input, Label
 
+from tail_cw.aws.alarms import AlarmSummary
 from tail_cw.aws.client import LogEvent
 from tail_cw.aws.dashboards import Dashboard, DashboardSummary, DiveCandidate, Widget
+from tail_cw.aws.insights import InsightsResult
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.aws.metrics import MetricSeries
 from tail_cw.cli import Session, expand_presets
 from tail_cw.config import TailCWConfig
 from tail_cw.preview import GroupPreview
+from tail_cw.query.rollup import RollupReport
 from tail_cw.query.trace import TraceGroup
 from tail_cw.recents import Recents, load_recents, profile_recents, record_selection, save_recents
 from tail_cw.tui.command_bar import CommandLine
@@ -59,9 +62,13 @@ LiveStream = Callable[[Sequence[str], str | None], AsyncIterator[LogEvent]]
 LogVolume = Callable[[str, datetime, datetime], Awaitable[list[float]]]
 CountEvents = Callable[[str, datetime, datetime], Awaitable[int]]
 LoadTraces = Callable[[Sequence[Path], str | None, Sequence[str], int | None], Awaitable[list[TraceGroup]]]
+RollUpLogs = Callable[[Sequence[str], datetime, datetime], Awaitable[RollupReport]]
+ListAlarms = Callable[[datetime, datetime], Awaitable[tuple[list[AlarmSummary], dict[str, int]]]]
+RunInsights = Callable[[Sequence[str], str, datetime, datetime], Awaitable[InsightsResult]]
 ScreenFactory = Callable[[NavTarget], 'ShellScreen']
 
 MAX_SELECTED_GROUPS = 10
+MAX_LABEL_CHARS = 32
 
 _RANGE_CHOICES = ('15m', '1h', '3h', '6h', '12h', '1d')
 _DURATION_UNITS = {'m': 'minutes', 'h': 'hours', 'd': 'days'}
@@ -86,6 +93,9 @@ class ShellServices:
     log_volume: LogVolume | None = None
     count_events: CountEvents | None = None
     load_traces: LoadTraces | None = None
+    roll_up_logs: RollUpLogs | None = None
+    list_alarms: ListAlarms | None = None
+    run_insights: RunInsights | None = None
 
 
 @dataclass(frozen=True)
@@ -111,10 +121,14 @@ def _global_commands() -> dict[str, ShellCommand]:
         'filter': ShellCommand('Set the shared filter pattern; empty clears it'),
         'groups': ShellCommand('Browse log groups'),
         'help': ShellCommand('List the available commands'),
+        'history': ShellCommand('Browse recorded rollups, alarm reads, and Insights queries'),
+        'insights': ShellCommand('Run a Logs Insights query over the selected groups (this one bills)'),
         'logs': ShellCommand('Search logs in the selected groups', ('<group>',)),
         'quit': ShellCommand('Leave tail-cw'),
+        'rollup': ShellCommand('Rank recurring patterns in the selected groups'),
         'range': ShellCommand('Set the time window ending now', _RANGE_CHOICES),
         'tail': ShellCommand('Stream the selected groups live', ('<group>',)),
+        'alarms': ShellCommand('Rank alarms by how often they changed state'),
     }
 
 
@@ -146,7 +160,9 @@ class ShellScreen(Screen[None]):
         Binding('ctrl+i', 'jump_forward', 'Jump fwd'),
         Binding('left_square_bracket', 'sibling_prev', 'Prev', key_display='['),
         Binding('right_square_bracket', 'sibling_next', 'Next', key_display=']'),
-        Binding('q', 'quit', 'Quit'),
+        # 'quit' alone resolves against the screen, which has no action_quit, so the
+        # key silently did nothing while the footer advertised it.
+        Binding('q', 'app.quit', 'Quit'),
         Binding('question_mark', 'which_key', 'Keys', key_display='?'),
         Binding('comma', 'which_key', 'Keys', show=False),
     ]
@@ -408,6 +424,14 @@ class TailCWApp(App[None]):
                 self.goto(NavTarget(kind=ViewKind.DASHBOARDS, label='dashboards'))
             case 'dash':
                 self._command_dash(argument)
+            case 'rollup':
+                self.open_report('summary')
+            case 'alarms':
+                self.open_report('alarms')
+            case 'history':
+                self.open_report('history')
+            case 'insights':
+                self._command_insights(argument)
             case 'logs':
                 self._command_logs(argument, live=False)
             case 'tail':
@@ -429,6 +453,29 @@ class TailCWApp(App[None]):
             self.notify('Select a group first, or name one: :logs <group>', severity='warning')
             return
         self.open_logs(groups, live=live)
+
+    def open_report(self, kind: str, *argument: str) -> None:
+        """Open one of the aggregation reports over the shared window.
+
+        The breadcrumb label is shortened because an Insights query runs long
+        enough to push the window out of the header.
+        """
+        detail = ' '.join(argument)
+        if len(detail) > MAX_LABEL_CHARS:
+            detail = detail[: MAX_LABEL_CHARS - 1] + '\u2026'
+        label = f'{kind} {detail}'.strip()
+        self.goto(NavTarget(kind=ViewKind.REPORT, label=label, payload=(kind, *argument)))
+
+    def _command_insights(self, argument: str) -> None:
+        """Run an Insights query, which is the one command here that costs money.
+
+        Deliberately typed rather than bound to a key: the query text is the
+        confirmation, so no single keypress can start a billed query.
+        """
+        if not argument:
+            self.notify('Usage: :insights <query>  (this one bills per GB scanned)', severity='warning')
+            return
+        self.open_report('insights', argument)
 
     def open_logs(self, groups: Sequence[str], *, live: bool = False) -> None:
         """Open the log view over the given groups, capped at the live-tail limit."""

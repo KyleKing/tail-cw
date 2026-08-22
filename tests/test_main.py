@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 
 from tail_cw.__main__ import (
+    _build_app,
     _demo_resolve_logs,
     _demo_services,
     _live_services,
@@ -167,6 +168,7 @@ def test_demo_services_are_callable():
         'load_dashboard',
         'log_volume',
         'resolve_logs',
+        'roll_up_logs',
     }
     assert all(callable(getattr(services, name)) for name in populated)
 
@@ -314,3 +316,13 @@ def test_run_shell_uses_demo_services_for_a_demo_seed(monkeypatch):
     assert app.services.live_stream is None
     assert app.services.log_volume is not None
     assert app.nav.stack[-1].kind == ViewKind.DASHBOARD
+
+
+def test_opening_a_log_view_counts_as_selecting_its_groups():
+    """The rollup and Insights views act on the selection, so a CLI seed must fill it."""
+    session = _make_session()
+    seed = ShellSeed(view='logs', targets=('/aws/lambda/api', '/aws/lambda/worker'))
+
+    app = _build_app(TailCWConfig(), session, seed, ShellServices())
+
+    assert app.session.selected_groups == ['/aws/lambda/api', '/aws/lambda/worker']

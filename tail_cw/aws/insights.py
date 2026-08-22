@@ -10,14 +10,48 @@ report.
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 DEFAULT_LIMIT = 1000
 DEFAULT_POLL_SECONDS = 0.5
 MAX_INSIGHTS_LOG_GROUPS = 50
+MAX_INSIGHTS_WINDOW = timedelta(days=7)
+"""Widest window a query may cover.
+
+Insights bills on the bytes it reads inside the window, so the window is the one
+input that decides the bill before the query runs.
+"""
+
 _TERMINAL_STATUSES = frozenset({'Complete', 'Failed', 'Cancelled', 'Timeout', 'Unknown'})
+_NARROWING_COMMANDS = re.compile(r'(?<![\w@])(filter|pattern|dedup)(?![\w@])', re.IGNORECASE)
+
+
+def validate_insights_request(query: str, start_time: datetime, end_time: datetime) -> None:
+    """Check a query before it is allowed to bill.
+
+    Two guards, and they do different jobs. The window cap bounds the bill,
+    because bytes scanned follow the window. Requiring a narrowing command does
+    not reduce bytes scanned at all; it stops a bare ``fields @message`` from
+    being run by accident and returning a wall of events that a cached
+    ``FilterLogEvents`` window would have answered for free.
+
+    Raises:
+        ValueError: The window is wider than :data:`MAX_INSIGHTS_WINDOW`, or the
+            query has no narrowing command.
+    """
+    window = end_time - start_time
+    if window > MAX_INSIGHTS_WINDOW:
+        msg = (
+            f'Insights window is capped at {MAX_INSIGHTS_WINDOW.days} days to bound what it bills, '
+            f'and this one covers {window.days} days'
+        )
+        raise ValueError(msg)
+    if not _NARROWING_COMMANDS.search(query):
+        msg = 'Insights queries must narrow with filter, pattern, or dedup rather than reading the whole window'
+        raise ValueError(msg)
 
 
 class InsightsQueryError(RuntimeError):

@@ -9,6 +9,7 @@ from tail_cw.aws.insights import (
     MAX_INSIGHTS_LOG_GROUPS,
     InsightsQueryError,
     run_insights_query,
+    validate_insights_request,
 )
 
 START = datetime(2026, 8, 14, tzinfo=UTC)
@@ -110,3 +111,24 @@ async def test_run_insights_query_rejects_more_groups_than_insights_accepts():
         )
 
     assert client.started == {}
+
+
+@pytest.mark.parametrize(
+    ('query', 'days', 'expected'),
+    [
+        ('filter @message like /boom/', 1, None),
+        ('pattern @message', 7, None),
+        ('fields @message', 1, 'narrow with filter'),
+        ('filter @message like /boom/', 30, 'capped at 7 days'),
+        ('stats count(*) by bin(1h)', 1, 'narrow with filter'),
+    ],
+)
+def test_validate_insights_request(query, days, expected):
+    end = datetime(2026, 8, 21, tzinfo=UTC)
+    start = end - timedelta(days=days)
+
+    if expected is None:
+        validate_insights_request(query, start, end)
+        return
+    with pytest.raises(ValueError, match=expected):
+        validate_insights_request(query, start, end)

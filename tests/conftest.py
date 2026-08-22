@@ -37,6 +37,19 @@ def recents_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     return path
 
 
+@pytest.fixture(autouse=True)
+def history_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Point the query history at tmp_path so no test writes to the user data directory.
+
+    Returns:
+        Path: Where history is read from and written to for this test
+
+    """
+    path = tmp_path / 'history.json'
+    monkeypatch.setattr('tail_cw.history.history_path', lambda: path)
+    return path
+
+
 @pytest.fixture
 def fix_test_cache(tmp_path: Path) -> Path:
     """Return a cache directory private to this test.

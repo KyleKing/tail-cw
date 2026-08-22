@@ -274,12 +274,26 @@ async def test_unknown_command_is_reported_not_raised():
         assert len(app.nav.stack) == 1
 
 
+async def test_q_quits_from_a_view():
+    """The footer advertises q, and a screen-namespaced 'quit' action silently did nothing."""
+    app = _app()
+    async with _running(app) as pilot:
+        await pilot.press('q')
+        await pilot.pause()
+
+        assert app._exit is True
+
+
 @pytest.mark.parametrize(
     ('command', 'expected'),
     [
         ('groups', ViewKind.GROUPS),
         ('dashboards', ViewKind.DASHBOARDS),
         ('dash prod', ViewKind.DASHBOARD),
+        ('rollup', ViewKind.REPORT),
+        ('alarms', ViewKind.REPORT),
+        ('history', ViewKind.REPORT),
+        ('insights filter @message like /boom/', ViewKind.REPORT),
     ],
 )
 async def test_view_switching_commands(command: str, expected: ViewKind):

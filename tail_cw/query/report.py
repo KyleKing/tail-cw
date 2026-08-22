@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from tail_cw.aws.alarms import AlarmSummary
 from tail_cw.charts.sparkline import sparkline_blocks
 from tail_cw.query.rollup import Granularity, PatternRollup, RollupReport
 
@@ -26,6 +27,27 @@ def render_markdown(report: RollupReport, *, title: str, window_label: str, sour
     for index, pattern in enumerate(report.patterns, start=1):
         lines.extend(_pattern_section(index, pattern, report))
     return '\n'.join(lines) + '\n'
+
+
+def render_alarm_markdown(alarms: Sequence[AlarmSummary], transitions: Mapping[str, int]) -> str:
+    """Render alarms as a markdown table, most-changed first.
+
+    Ranking by transition count is the view that answers "which alarm is
+    flapping", which is the question a list ordered by name cannot answer.
+    """
+    ranked = sorted(alarms, key=lambda alarm: (-transitions.get(alarm.name, 0), alarm.name))
+    columns = ('alarm', 'state', 'transitions', 'metric', 'reason')
+    rows = [
+        {
+            'alarm': _shorten(alarm.name, 44),
+            'state': alarm.state,
+            'transitions': str(transitions.get(alarm.name, '-')),
+            'metric': _shorten(f'{alarm.namespace or "-"}/{alarm.metric_name or "math"}', 36),
+            'reason': _shorten(alarm.state_reason, 60),
+        }
+        for alarm in ranked
+    ]
+    return render_rows_markdown(columns, rows)
 
 
 def render_rows_markdown(columns: Sequence[str], rows: Sequence[Mapping[str, str]]) -> str:

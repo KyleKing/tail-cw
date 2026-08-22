@@ -87,6 +87,14 @@ The widget's own filter or query text carries into the log view as the starting 
 | Cross-group Insights search as the default                   | Async, priced per GB scanned, and no live tail. Solves a problem that ranks below telling groups apart                |
 | Dive straight into the best guess                            | Cheap when right, and when wrong it hides the reasoning and costs a fetch. The candidate list is also the explanation |
 
+## Aggregations reach both surfaces (added 2026-08-22)
+
+Six production investigations were run entirely from the CLI, because the TUI had no rollup, no alarms, and no Insights. All three now sit behind one `ReportScreen`, which renders whatever markdown its loader returns, so the three views cost one screen rather than three. `s` and `a` on the group browser reach the first two; Insights is reachable only by typing `:insights <query>`, which is the point: the query text is the confirmation, so no single keypress starts a billed query.
+
+Both surfaces share the same two guards, in `validate_insights_request`. The window cap bounds the bill, because Insights bills on the bytes it reads inside the window. Requiring a narrowing command does not reduce bytes scanned at all; it stops a bare `fields @message` from being run by accident and returning a wall of events a cached window would have answered for free. Saying that plainly matters more than the guard: a filter that looks like a cost control and is not would be worse than no guard.
+
+One history (`tail_cw/history.py`) records what all three produced, and a CLI run appends to the file the TUI reads. It copies `recents.py` exactly: frozen dataclass, pure record function, atomic replace, and a corrupt file degrading to empty rather than raising, because history is never the point of the command that produced it.
+
 ## Consequences
 
 - `LogTailApp` and `DashboardApp` stop being `App` subclasses and become screens under one shell. Their bindings, workers, and tests mostly survive. What moves is ownership of the command line, the header, and the quit binding

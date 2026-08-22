@@ -82,6 +82,8 @@ class GroupsScreen(ShellScreen):
         Binding('t', 'open_tail', 'Live tail'),
         Binding('c', 'clear_selection', 'Clear selection'),
         Binding('r', 'reload', 'Reload'),
+        Binding('s', 'rollup', 'Rank patterns'),
+        Binding('a', 'alarms', 'Alarms'),
     ]
 
     def __init__(self, *, debounce_seconds: float = DEBOUNCE_SECONDS) -> None:
@@ -116,6 +118,17 @@ class GroupsScreen(ShellScreen):
         self._update_status()
         self.restore_focus()
         self._load_groups()
+
+    def action_rollup(self) -> None:
+        """Rank the recurring patterns in the selected groups."""
+        if not self.shell.session.selected_groups:
+            self.notify('Select at least one group first (space)', severity='warning')
+            return
+        self.shell.open_report('summary')
+
+    def action_alarms(self) -> None:
+        """Rank this account's alarms by how often they changed state."""
+        self.shell.open_report('alarms')
 
     def commands(self) -> dict[str, ShellCommand]:  # ruff: ignore[no-self-use]
         """Add the group-browser commands to the shared set."""

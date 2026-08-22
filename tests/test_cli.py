@@ -1236,7 +1236,7 @@ def test_run_cli_export_insights_writes_rows_and_reports_scanned_volume(tmp_path
         '--config',
         str(_write_config_file(tmp_path)),
         '--query',
-        'stats count(*) by bin(1d)',
+        'filter @message like /boom/ | stats count(*) by bin(1d)',
         '--format',
         'md',
     ]
@@ -1246,7 +1246,7 @@ def test_run_cli_export_insights_writes_rows_and_reports_scanned_volume(tmp_path
     captured_output = capsys.readouterr()
     assert result == 0
     assert captured['log_groups'] == ['/aws/lambda/one']
-    assert captured['query'] == 'stats count(*) by bin(1d)'
+    assert captured['query'] == 'filter @message like /boom/ | stats count(*) by bin(1d)'
     assert '| day | events |' in captured_output.out
     assert '| 2026-08-14 | 7 |' in captured_output.out
     # Insights bills on bytes scanned, so the caller is always told.
@@ -1260,7 +1260,7 @@ def test_run_cli_export_insights_reports_a_failed_query(tmp_path, capsys, monkey
         raise InsightsQueryError('Insights query q-1 ended as Failed')
 
     monkeypatch.setattr('tail_cw.cli.run_insights_query', failing_query)
-    argv = ['export', 'insights', '/aws/lambda/*', '--config', str(_write_config_file(tmp_path)), '--query', 'x']
+    argv = ['export', 'insights', '/aws/lambda/*', '--config', str(_write_config_file(tmp_path)), '--query', 'filter x']
 
     result = run_cli(argv, None, is_tty=False)
 

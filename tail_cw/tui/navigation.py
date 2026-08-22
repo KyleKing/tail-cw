@@ -23,6 +23,7 @@ class ViewKind(StrEnum):
     LOGS = 'logs'
     DASHBOARDS = 'dashboards'
     DASHBOARD = 'dashboard'
+    REPORT = 'report'
 
 
 @dataclass(frozen=True)

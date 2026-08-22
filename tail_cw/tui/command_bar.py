@@ -31,8 +31,14 @@ class CommandLine(Input):
     """
 
     def __init__(self, *, completer: Completer) -> None:
-        """Create the command line with a value completer."""
+        """Create the command line with a value completer, closed and unfocusable.
+
+        A hidden ``Input`` still joins the focus chain, and being the only
+        focusable widget on a view it took the initial focus and swallowed every
+        keystroke, so bindings the footer advertised did nothing.
+        """
         super().__init__(id='command_line', placeholder=': run a command (Tab completes, Enter runs, Esc cancels)')
+        self.can_focus = False
         self._completer = completer
         self._history: list[str] = []
         self._history_index = 0
@@ -42,14 +48,16 @@ class CommandLine(Input):
     def open(self) -> None:
         """Show the command line and take focus."""
         self.display = True
+        self.can_focus = True
         self.value = ''
         self._reset_completion()
         self.focus()
 
     def close(self) -> None:
-        """Hide the command line."""
+        """Hide the command line and drop out of the focus chain."""
         self.value = ''
         self.display = False
+        self.can_focus = False
 
     def remember(self, command: str) -> None:
         """Record an executed command in history."""

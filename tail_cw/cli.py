@@ -37,6 +37,7 @@ from tail_cw.aws.insights import (
     InsightsQueryError,
     InsightsResult,
     run_insights_query,
+    validate_insights_request,
 )
 from tail_cw.aws.live_tail import MAX_LIVE_TAIL_LOG_GROUPS, stream_live_tail
 from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups, resolve_group_pattern
@@ -51,10 +52,11 @@ from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import blocking_pool, closing_stream, consume_in_thread, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
 from tail_cw.demo import demo_dashboard
+from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.fuzzy import DEFAULT_SIMILARITY
 from tail_cw.query.parser import FilterNode, parse_filter_pattern
-from tail_cw.query.report import render_markdown, render_rows_markdown
+from tail_cw.query.report import render_alarm_markdown, render_markdown, render_rows_markdown
 from tail_cw.query.rollup import DEFAULT_PATTERN_LIMIT, Granularity, RollupReport, roll_up
 from tail_cw.query.severity import Severity
 
@@ -1024,19 +1026,26 @@ async def _export_summary(
             similarity=args.similarity if args.similarity > 0 else None,
         ),
     )
-    window_label = f'{start_time.isoformat()} \u2192 {end_time.isoformat()}'
+    window_label = _window_label(start_time, end_time)
     source = f'{len(paths)} of {len(names)} groups with events'
+    table = render_markdown(
+        report,
+        title=f'{args.level.capitalize()}-and-above patterns',
+        window_label=window_label,
+        source=source,
+    )
+    _remember(
+        HistoryKind.SUMMARY,
+        title=f'summary of {", ".join(names)}',
+        window=window_label,
+        detail=table,
+        args=args,
+        now=now,
+    )
     if args.output_format == 'json':
         _write_json_line(_summary_to_record(report, window_label=window_label, source=source))
         return 0
-    sys.stdout.write(
-        render_markdown(
-            report,
-            title=f'{args.level.capitalize()}-and-above patterns',
-            window_label=window_label,
-            source=source,
-        ),
-    )
+    sys.stdout.write(table)
     return 0
 
 
@@ -1062,6 +1071,7 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
         names = names[: args.max_groups]
 
     try:
+        validate_insights_request(args.query, start_time, end_time)
         result = await run_insights_query(
             logs,
             log_groups=names,
@@ -1075,12 +1085,47 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
         return 1
 
     _report_insights_cost(result, group_count=len(names))
+    table = render_rows_markdown(result.columns, result.rows)
+    _remember(
+        HistoryKind.INSIGHTS,
+        title=args.query,
+        window=_window_label(start_time, end_time),
+        detail=table,
+        args=args,
+        now=now,
+    )
     if args.output_format == 'md':
-        sys.stdout.write(render_rows_markdown(result.columns, result.rows))
+        sys.stdout.write(table)
         return 0
     for row in result.rows:
         _write_json_line(dict(row))
     return 0
+
+
+def _window_label(start_time: datetime, end_time: datetime) -> str:
+    return f'{start_time.isoformat()} \u2192 {end_time.isoformat()}'
+
+
+def _remember(
+    kind: HistoryKind,
+    *,
+    title: str,
+    window: str,
+    detail: str,
+    args: argparse.Namespace,
+    now: datetime,
+) -> None:
+    """Record one question in the history the TUI also reads."""
+    append(
+        make_entry(
+            kind,
+            recorded=now,
+            title=title,
+            window=window,
+            detail=detail,
+            profile=getattr(args, 'profile', None),
+        ),
+    )
 
 
 def _report_insights_cost(result: InsightsResult, *, group_count: int) -> None:
@@ -1123,6 +1168,7 @@ async def _export_alarms(pool: ClientProvider, args: argparse.Namespace, now: da
         return 1
     cloudwatch = await pool.client('cloudwatch')
     alarms = [alarm async for alarm in describe_alarms(cloudwatch, name_prefix=args.prefix, states=args.state)]
+    counts: dict[str, int] = {}
     for alarm in alarms:
         record = _alarm_to_record(alarm)
         if args.history:
@@ -1135,6 +1181,7 @@ async def _export_alarms(pool: ClientProvider, args: argparse.Namespace, now: da
                     end_time=end_time,
                 )
             ]
+            counts[alarm.name] = len(transitions)
             record['transitions'] = len(transitions)
             record['history'] = [
                 {'moment': transition.moment.isoformat(), 'summary': transition.summary} for transition in transitions
@@ -1142,6 +1189,15 @@ async def _export_alarms(pool: ClientProvider, args: argparse.Namespace, now: da
         _write_json_line(record)
     if not alarms:
         sys.stderr.write('No alarms matched\n')
+        return 0
+    _remember(
+        HistoryKind.ALARMS,
+        title=f'{len(alarms)} alarms' + (f', {sum(counts.values())} transitions' if counts else ''),
+        window=_window_label(start_time, end_time),
+        detail=render_alarm_markdown(alarms, counts),
+        args=args,
+        now=now,
+    )
     return 0
 
 

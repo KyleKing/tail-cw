@@ -12,6 +12,7 @@ from tail_cw.tui.dashboards_screen import DashboardsScreen
 from tail_cw.tui.groups_screen import GroupsScreen
 from tail_cw.tui.logs_screen import LogsScreen
 from tail_cw.tui.navigation import NavTarget, ViewKind
+from tail_cw.tui.report_screen import ReportKind, ReportScreen
 from tail_cw.tui.shell import ShellScreen
 
 
@@ -26,3 +27,6 @@ def build_screen(target: NavTarget) -> ShellScreen:
             return DashboardsScreen()
         case ViewKind.DASHBOARD:
             return DashboardScreen(target.payload[0] if target.payload else target.label)
+        case ViewKind.REPORT:
+            # The first payload item names the report; the rest is its argument.
+            return ReportScreen(ReportKind(target.payload[0]), target.payload[1:])
