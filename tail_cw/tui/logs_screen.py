@@ -29,22 +29,29 @@ from textual.widgets import DataTable, Input, Label
 from textual.worker import get_current_worker
 
 from tail_cw.aws.events import LogEvent
+from tail_cw.aws.xray import as_xray_trace_id
 from tail_cw.concurrency import closing_stream
 from tail_cw.config import TailCWConfig
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.parser import FilterNode, combine_filters, parse_extended_filter, parse_filter_pattern
-from tail_cw.query.trace import TraceGroup, extract_trace_id_from_event, query_traces_from_parquet_files
+from tail_cw.query.trace import (
+    TraceGroup,
+    correlation_ids,
+    extract_trace_id_from_event,
+    query_traces_from_parquet_files,
+)
 from tail_cw.tui.command_bar import SearchLine
 from tail_cw.tui.log_viewer import Column, format_rows, plan_columns
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.record_detail import RecordDetailScreen
-from tail_cw.tui.shell import ResolveLogs, ShellCommand, ShellScreen
+from tail_cw.tui.shell import MAX_LABEL_CHARS, ResolveLogs, ShellCommand, ShellScreen
 from tail_cw.tui.trace_viewer import TraceViewerScreen
 
 LiveStreamFactory = Callable[[], AsyncIterator[LogEvent]]
 
 _LIVE_FLUSH_INTERVAL_SECONDS = 0.25
 _LOAD_TICK_SECONDS = 1.0
+_PIVOT_FIELDS_NAMED = 3
 _LOADING_STATUS = 'Loading events, esc to stop'
 _HALF_PAGE = 10
 _ROW_RESERVE = 4
@@ -136,6 +143,8 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         Binding('space', 'toggle_live_pause', 'Pause/Resume', show=False),
         Binding('t', 'toggle_trace_view', 'Trace View', show=True),
         Binding('shift+t', 'show_trace_for_selected', 'Show Trace', show=True),
+        Binding('x', 'pivot_xray', 'X-Ray', show=True),
+        Binding('p', 'pivot', 'Pivot', show=True),
         # DataTable answers to the arrow keys; these are the vim motions over the
         # same cursor, so hjkl-hands never reach for the arrows.
         Binding('j', 'move(1)', 'Down', show=False),
@@ -226,6 +235,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         return {
             'live': ShellCommand('Toggle between the historical window and a live stream'),
             'trace': ShellCommand('Open the trace view, over one id or the whole window', ('<trace>',)),
+            'pivot': ShellCommand("Search every selected group for the row's own id", ('<field>',)),
         }
 
     def run_view_command(self, name: str, argument: str) -> bool:
@@ -235,6 +245,8 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
                 self.action_toggle_live()
             case 'trace':
                 self.show_trace(argument.strip() or None)
+            case 'pivot':
+                self.action_pivot(argument.strip())
             case _:
                 return False
         return True
@@ -707,6 +719,47 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             return
 
         self.show_trace(trace_id)
+
+    def action_pivot(self, field: str = '') -> None:
+        """Search every selected group for the correlation id on the current row.
+
+        The id goes into the search box rather than straight into a query, so the pivot
+        is visible, editable, and undone by clearing it like any other search.
+        """
+        event = self._selected_event()
+        if event is None:
+            self.notify('No row selected', severity='warning')
+            return
+        wanted = [field] if field else list(self._trace_id_fields)
+        found = correlation_ids(event, wanted)
+        if not found:
+            named = field or ', '.join(wanted[:_PIVOT_FIELDS_NAMED])
+            self.notify(f'This row carries no {named}', severity='information')
+            return
+        name, value = found[0]
+        if (search := self._search_input) is None:
+            return
+        search.open()
+        search.value = f'{name}:{value}'
+
+    def action_pivot_xray(self) -> None:
+        """Open the X-Ray waterfall for the row's trace, when X-Ray can answer for it."""
+        event = self._selected_event()
+        if event is None:
+            self.notify('No row selected', severity='warning')
+            return
+        trace_id = extract_trace_id_from_event(event, self._trace_id_fields)
+        if not trace_id:
+            self.notify('No trace id in the selected event', severity='information')
+            return
+        xray_id = as_xray_trace_id(trace_id, now=datetime.now(UTC))
+        if xray_id is None:
+            # Both sides of the stack log a trace_id and only one generates X-Ray ids.
+            self.notify(f'{trace_id} is not an X-Ray id; T opens the log-derived trace', severity='warning')
+            return
+        self.shell.goto(
+            NavTarget(kind=ViewKind.XRAY, label=f'xray {xray_id[:MAX_LABEL_CHARS]}', argument=xray_id),
+        )
 
     async def _open_trace_view(self, trace_id: str | None) -> None:
         """Group the loaded Parquet windows into traces, then show them.

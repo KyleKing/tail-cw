@@ -198,7 +198,8 @@ In the browser: `/` filters, `Space` multi-selects up to ten groups, `Enter` ope
 logs, `t` opens them streaming.
 
 In a log view: `/` searches, `Enter` opens the record detail, `L` toggles live, `r`
-refreshes, `t` and `T` open the trace views.
+refreshes, `t` and `T` open the trace views, `p` pivots every selected group onto the
+row's own correlation id, and `x` opens the row's trace in X-Ray.
 
 In an X-Ray waterfall (`:xray <id>`): `s` hides the segments X-Ray synthesized rather
 than received, `r` refetches.

@@ -19,15 +19,30 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 TRACE_IDS_PER_REQUEST = 5
 """``BatchGetTraces`` rejects a longer list."""
 
 DEFAULT_TRACE_CONCURRENCY = 4
+TRACE_ID_PATTERN = re.compile(r'^1-[0-9a-f]{8}-[0-9a-f]{24}$')
+"""An X-Ray id: a format version, eight hex digits of epoch, then 24 of identity."""
+
+W3C_TRACE_ID_PATTERN = re.compile(r'^[0-9a-f]{32}$')
+"""The same 32 digits with the version and the dashes gone, which is what a log line carries."""
+
+TRACE_ID_AGE_LIMIT = timedelta(days=32)
+"""How old an id's own epoch may be and still name a trace X-Ray could hold.
+
+X-Ray retains traces for 30 days. The window is what separates an X-Ray id written in W3C
+form from any other 32-digit hex id: a generator that is not X-Ray's puts no timestamp in
+the leading digits, so they decode to a nonsense date.
+"""
+
 COST_PER_MILLION_TRACES = 0.50
 """USD per million traces scanned or retrieved, past the free million a month."""
 
@@ -164,6 +179,32 @@ class TraceSummaryPage:
 
     summaries: tuple[XRayTraceSummary, ...]
     traces_processed: int
+
+
+def as_xray_trace_id(value: str, *, now: datetime) -> str | None:
+    """Read an id out of a log line as an X-Ray trace id, or None when it is not one.
+
+    Our services log the W3C form (``6a89ad51596c…``), and X-Ray only answers to the
+    dashed form, so a pivot that checked for the dashes would reject every real log line.
+    The two are the same 32 digits: the first eight are the epoch X-Ray puts there.
+
+    That timestamp is also the test. Both sides of our stack log a ``trace_id`` and only
+    one generates X-Ray ids, so a 32-digit id whose leading digits decode to a date
+    outside :data:`TRACE_ID_AGE_LIMIT` came from the other generator and is not worth a
+    request.
+    """
+    cleaned = value.strip().lower()
+    if TRACE_ID_PATTERN.match(cleaned):
+        return cleaned
+    if not W3C_TRACE_ID_PATTERN.match(cleaned):
+        return None
+    dashed = f'1-{cleaned[:8]}-{cleaned[8:]}'
+    return dashed if _epoch_is_plausible(cleaned[:8], now=now) else None
+
+
+def _epoch_is_plausible(hex_epoch: str, *, now: datetime) -> bool:
+    stamped = datetime.fromtimestamp(int(hex_epoch, 16), tz=UTC)
+    return now - TRACE_ID_AGE_LIMIT <= stamped <= now
 
 
 def scan_cost_usd(traces_processed: int) -> float:

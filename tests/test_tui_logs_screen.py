@@ -855,7 +855,7 @@ async def test_view_commands_toggle_live_and_trace():
     async with running(app) as pilot:
         screen = _logs_screen(app)
 
-        assert set(screen.commands()) == {'live', 'trace'}
+        assert set(screen.commands()) == {'live', 'pivot', 'trace'}
         assert screen.run_view_command('nope', '') is False
         assert screen.run_view_command('live', '') is True
         await pilot.pause()
@@ -1375,3 +1375,67 @@ async def test_the_search_box_only_takes_room_while_it_is_in_use():
 
         assert _search_shown(screen) is False, 'escape closes the search rather than leaving the view'
         assert len(app.nav.stack) == 1, 'and it does not pop the view out from under it'
+
+
+async def test_p_pivots_the_row_onto_its_own_correlation_id(tmp_path):
+    """The pivot lands in the search box so it is visible, editable, and clearable."""
+    events = [
+        _json_event('start', offset=0),
+        LogEvent(
+            timestamp=BASE_TIME + timedelta(seconds=1),
+            message=json.dumps({'trace_id': '1-6a89adb9-b279784d231d504c96c8815f', 'event': 'slow'}),
+            log_group=DEFAULT_GROUP,
+            log_stream='stream-1',
+            ingestion_time=None,
+        ),
+    ]
+    path = tmp_path / 'events.parquet'
+    write_log_events_to_parquet(events, path)
+    app = _make_app(services=_resolving_to([path]))
+
+    async with running(app, settled=True) as pilot:
+        screen = _logs_screen(app)
+        table = app.screen.query_one('#log_table', DataTable)
+        table.focus()
+        table.move_cursor(row=1)
+        await pilot.press('p')
+        await pilot.pause()
+
+        assert screen._search_input is not None
+        assert screen._search_input.value == 'trace_id:1-6a89adb9-b279784d231d504c96c8815f'
+        assert screen._search_input.display, 'a pivot the user cannot see is a pivot they cannot undo'
+
+
+async def test_x_opens_the_waterfall_only_for_an_id_x_ray_can_answer_for(tmp_path):
+    """Both sides of the stack log a trace_id and only one generates X-Ray ids."""
+    # Built from now, not hardcoded: the id's own epoch is what marks it as X-Ray's, so a
+    # fixed one stops being one 32 days after it is written.
+    xray_id = f'1-{int(datetime.now(UTC).timestamp()):08x}-b279784d231d504c96c8815f'
+    events = [
+        LogEvent(
+            timestamp=BASE_TIME + timedelta(seconds=index),
+            message=json.dumps({'trace_id': trace_id, 'event': 'e'}),
+            log_group=DEFAULT_GROUP,
+            log_stream='s',
+            ingestion_time=None,
+        )
+        for index, trace_id in enumerate(('7f3c1e9a4b2d', xray_id))
+    ]
+    path = tmp_path / 'events.parquet'
+    write_log_events_to_parquet(events, path)
+    app = _make_app(services=_resolving_to([path]))
+
+    async with running(app, settled=True) as pilot:
+        table = app.screen.query_one('#log_table', DataTable)
+        table.focus()
+        table.move_cursor(row=0)
+        await pilot.press('x')
+        await pilot.pause()
+        assert isinstance(app.screen, LogsScreen), 'a worker-side id is not an X-Ray id'
+
+        table.move_cursor(row=1)
+        await pilot.press('x')
+        await pilot.pause()
+
+        assert app.screen.__class__.__name__ == 'WaterfallScreen'
+        assert app.nav.stack[-1].argument == xray_id

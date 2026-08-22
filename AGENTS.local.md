@@ -250,6 +250,11 @@ References:
     parent's for a subsegment, and use `origin` for an inferred one; using `name` makes
     every
     SQL statement look like its own service
+- Our services log a trace id in W3C form (`6a89ad51596c…`), and X-Ray only answers to the
+    dashed form (`1-6a89ad51-596c…`).
+    They are the same 32 digits, and the leading eight are the epoch, which is also how
+    `as_xray_trace_id` tells an X-Ray id from any other 32-digit hex id.
+    A pivot that checks for the dashes rejects every real log line
 - Trace heuristics should inspect structured fields (levels, status, message bodies)
     before falling back to free-text keyword scans to avoid misclassifying IDs like
     `trace-error` as failures.

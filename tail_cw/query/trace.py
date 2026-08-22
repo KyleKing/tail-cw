@@ -137,6 +137,23 @@ def extract_trace_id_from_event(
     return None
 
 
+def correlation_ids(event: LogEvent, field_names: Iterable[str]) -> list[tuple[str, str]]:
+    """Every correlation key the record carries, in the order the fields are given.
+
+    A pivot needs the field name as well as the value: ``request_id`` and ``trace_id``
+    are searched differently downstream, and a record usually carries both.
+    """
+    data = next(iter_structured_event_data(event), None)
+    if data is None:
+        return []
+    found: list[tuple[str, str]] = []
+    for name in field_names:
+        value = _resolve_field_path(data, name.split('.')) if '.' in name else _get_case_insensitive(data, name)
+        if isinstance(value, (str, int)) and not isinstance(value, bool) and str(value):
+            found.append((name, str(value)))
+    return found
+
+
 def _search_for_trace_id(data: Mapping[str, Any], field_names: Iterable[str]) -> str | None:
     """Search for trace ID in a dict using field names.
 

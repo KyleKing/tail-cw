@@ -9,11 +9,14 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+
+import pytest
 
 from tail_cw.aws.xray import (
     TRACE_IDS_PER_REQUEST,
+    as_xray_trace_id,
     batch_get_traces,
     flatten_segment,
     get_trace_summaries,
@@ -215,3 +218,38 @@ async def test_batches_overlap_rather_than_running_one_after_another() -> None:
     release.set()
 
     assert await asyncio.wait_for(task, timeout=2) == []
+
+
+_NOW = datetime(2026, 8, 22, 14, 30, tzinfo=UTC)
+_DASHED = '1-6a89ad51-596cd68140b3de150546b2a7'
+
+
+@pytest.mark.parametrize(
+    ('value', 'expected'),
+    [
+        (_DASHED, _DASHED),
+        ('1-6A89AD51-596CD68140B3DE150546B2A7', _DASHED),
+        (f'  {_DASHED}  ', _DASHED),
+        ('6a89ad51596cd68140b3de150546b2a7', _DASHED),
+        ('7f3c1e9a4b2d', None),
+        ('1-6a89ad51-596cd68140b3de150546b2', None),
+        ('1-6a89ad51-zz6cd68140b3de150546b2a7', None),
+        ('', None),
+    ],
+)
+def test_a_w3c_id_from_a_log_line_reads_as_the_dashed_id_x_ray_answers_to(
+    value: str,
+    expected: str | None,
+) -> None:
+    """Our services log the W3C form, so checking for the dashes rejects every log line."""
+    assert as_xray_trace_id(value, now=_NOW) == expected
+
+
+def test_a_32_digit_id_from_another_generator_is_not_mistaken_for_an_x_ray_one() -> None:
+    """The leading eight digits are an epoch, and only X-Ray's generator puts one there."""
+    stale = '1e2f3a4b' + 'c' * 24
+    future = f'{int((_NOW + timedelta(days=2)).timestamp()):08x}' + 'c' * 24
+
+    assert as_xray_trace_id(stale, now=_NOW) is None
+    assert as_xray_trace_id(future, now=_NOW) is None
+    assert as_xray_trace_id(f'{int(_NOW.timestamp()):08x}' + 'c' * 24, now=_NOW) is not None

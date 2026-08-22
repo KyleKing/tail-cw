@@ -158,10 +158,14 @@ free tier, so `--limit` defaults to 1,000.
 
 What remains:
 
-- **correlation-ID pivot.** Select a request, trace, or Hatchet `workflow_run_id` in any
-    event and fan out across related log groups, building on `query/trace.py`.
-    Blocked cross-service by the instrumentation gap below; build it against a single
-    service's groups first
+- **correlation-ID pivot.** Shipped 2026-08-22 for one service's groups: `p` searches
+    every selected group for the row's own correlation id, and `x` opens the row's trace
+    in X-Ray.
+    Driving it against prod found the thing no test could: our API logs the W3C trace id
+    form and X-Ray answers only to the dashed one, so the first version rejected every
+    real log line.
+    Still blocked cross-service by the instrumentation gap below, and a pivot onto
+    `workflow_run_id` is pointless until worker logs carry one
 - **what X-Ray does not cover, which is most of the application.** The reader is done; the
     data is thin.
     Of 442,828 traces in three hours, 97% are Hatchet's own background loops and only 3,554
