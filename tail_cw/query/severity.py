@@ -12,6 +12,7 @@ import contextlib
 import json
 import re
 from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any
 
@@ -47,6 +48,21 @@ class Severity(IntEnum):
     ERROR = 2
 
 
+@dataclass(frozen=True)
+class Classification:
+    """A severity and whether the record declared it.
+
+    Attributes:
+        severity: The classification.
+        explicit: True when a structured level or status field decided it. A
+            keyword read out of prose is a guess, and the log table shows the
+            difference rather than colouring both the same.
+    """
+
+    severity: Severity
+    explicit: bool
+
+
 def load_json_dict(payload: str | None) -> dict[str, Any] | None:
     """Parse a JSON object from payload, or None when it is absent or not an object."""
     if not payload:
@@ -68,18 +84,25 @@ def iter_structured_event_data(event: LogEvent) -> Iterator[dict[str, Any]]:
 
 def event_severity(event: LogEvent) -> Severity:
     """Classify an event as ERROR, WARNING, or INFO."""
+    return classify_event(event).severity
+
+
+def classify_event(event: LogEvent) -> Classification:
+    """Classify an event, and say whether its record declared the level itself."""
+    highest = Classification(Severity.INFO, explicit=False)
     structured_found = False
-    highest = Severity.INFO
     for data in iter_structured_event_data(event):
         structured_found = True
-        highest = max(highest, _structured_severity(data))
-        if highest is Severity.ERROR:
+        candidate = _structured_classification(data)
+        if candidate.severity >= highest.severity:
+            highest = candidate
+        if highest.severity is Severity.ERROR:
             return highest
 
     if structured_found:
         return highest
 
-    return keyword_severity(event.message)
+    return Classification(keyword_severity(event.message), explicit=False)
 
 
 def keyword_severity(message: str) -> Severity:
@@ -95,7 +118,7 @@ def keyword_severity(message: str) -> Severity:
     return Severity.INFO
 
 
-def _structured_severity(data: Mapping[str, Any]) -> Severity:
+def _structured_classification(data: Mapping[str, Any]) -> Classification:
     """Classify a record from its level and status, scanning its text only as a last resort.
 
     A record that declares its own level is taken at its word: a service logging
@@ -104,17 +127,22 @@ def _structured_severity(data: Mapping[str, Any]) -> Severity:
     escalates, because it is structured rather than prose.
     """
     populated = {key.lower(): value for key, value in data.items() if value}
-    status = max(
-        (_status_severity(value) for key, value in populated.items() if key in STATUS_FIELDS),
-        default=Severity.INFO,
-    )
+    status_fields = [value for key, value in populated.items() if key in STATUS_FIELDS]
+    status = max((_status_severity(value) for value in status_fields), default=Severity.INFO)
     levels = [_level_severity(str(value).upper()) for key, value in populated.items() if key in ERROR_LEVEL_FIELDS]
     if levels:
-        return max(*levels, status)
-    bodies = [
-        keyword_severity(value) for key, value in populated.items() if key in MESSAGE_FIELDS and isinstance(value, str)
-    ]
-    return max([status, *bodies])
+        return Classification(max(*levels, status), explicit=True)
+    bodies = max(
+        (
+            keyword_severity(value)
+            for key, value in populated.items()
+            if key in MESSAGE_FIELDS and isinstance(value, str)
+        ),
+        default=Severity.INFO,
+    )
+    if status_fields and status >= bodies:
+        return Classification(status, explicit=True)
+    return Classification(max(status, bodies), explicit=False)
 
 
 def _level_severity(level: str) -> Severity:

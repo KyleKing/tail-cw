@@ -114,6 +114,11 @@ def _make_app(
     )
 
 
+def _cell(app: TailCWApp, key: str) -> object:
+    table = app.screen.query_one('#log_table', DataTable)
+    return table.get_cell(next(iter(table.rows.keys())), key)
+
+
 def _logs_screen(app: TailCWApp) -> LogsScreen:
     screen = app.screen
     assert isinstance(screen, LogsScreen)
@@ -235,16 +240,14 @@ async def test_progress_update_message():
 
 
 @pytest.mark.asyncio
-async def test_table_columns_setup():
+async def test_table_columns_are_budgeted_for_the_terminal_width():
+    """At the 80-column test size only the columns that carry information survive."""
     app = _make_app()
 
     async with running(app) as _:
         table = app.screen.query_one('#log_table', DataTable)
 
-        assert len(table.columns) == 4
-        column_keys = [col.key for col in table.columns.values()]
-        for expected in ('timestamp', 'log_group', 'log_stream', 'message'):
-            assert expected in column_keys
+        assert [col.key for col in table.columns.values()] == ['timestamp', 'severity', 'message']
 
 
 @pytest.mark.asyncio
@@ -572,7 +575,68 @@ async def test_load_events_updates_table_and_status():
 
 
 @pytest.mark.asyncio
-async def test_timestamp_formatting():
+@pytest.mark.parametrize(
+    ('keys', 'expected_row'),
+    [
+        (('j', 'j'), 2),
+        (('j', 'j', 'k'), 1),
+        (('G',), 4),
+        (('G', 'g'), 0),
+        (('ctrl+d',), 4),
+        (('G', 'ctrl+u'), 0),
+    ],
+)
+async def test_vim_motions_drive_the_row_cursor(keys, expected_row):
+    app = _make_app()
+
+    async with running(app) as pilot:
+        _logs_screen(app).load_events(_make_test_log_events(5))
+        await pilot.pause()
+        for key in keys:
+            await pilot.press(key)
+        await pilot.pause()
+
+        assert app.screen.query_one('#log_table', DataTable).cursor_row == expected_row
+
+
+@pytest.mark.asyncio
+async def test_a_narrower_terminal_re_budgets_the_columns():
+    app = _make_app()
+
+    async with running(app) as pilot:
+        _logs_screen(app).load_events(_make_test_log_events(2))
+        await pilot.pause()
+        assert [col.key for col in app.screen.query_one('#log_table', DataTable).columns.values()] == [
+            'timestamp',
+            'severity',
+            'message',
+        ]
+
+        await pilot.resize_terminal(200, 24)
+        await pilot.pause()
+
+        table = app.screen.query_one('#log_table', DataTable)
+        assert [col.key for col in table.columns.values()] == ['timestamp', 'severity', 'log_stream', 'message']
+        assert table.row_count == 2, 'the rows survive the re-budget'
+
+
+@pytest.mark.asyncio
+async def test_the_status_line_says_when_the_view_is_capped(tmp_path: Path):
+    """`Loaded 1000 events` hid whether that was everything."""
+    config = TailCWConfig()
+    config.tui.initial_load_limit = 3
+    path = _write_parquet(_make_test_log_events(5), tmp_path / 'events.parquet')
+    app = _make_app(config=config, services=_resolving_to([path]))
+
+    async with running(app) as pilot:
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert 'capped' in str(app.screen.query_one('#status', Label).render())
+
+
+@pytest.mark.asyncio
+async def test_timestamp_drops_the_date_the_breadcrumb_already_states():
     app = _make_app()
 
     async with running(app) as pilot:
@@ -580,13 +644,10 @@ async def test_timestamp_formatting():
         screen.load_events(_make_test_log_events(1))
         await pilot.pause()
 
-        table = app.screen.query_one('#log_table', DataTable)
-        row_key = next(iter(table.rows.keys()))
-        cells = [table.get_cell(row_key, col.key) for col in table.columns.values()]
-        timestamp_str = str(cells[0])
+        rendered = str(_cell(app, 'timestamp'))
 
-        assert '2025-01-15' in timestamp_str
-        assert '10:00:00' in timestamp_str
+        assert '10:00:00' in rendered
+        assert '2025-01-15' not in rendered, 'the date costs 11 of 80 columns and never varies'
 
 
 @pytest.mark.asyncio
@@ -605,13 +666,10 @@ async def test_message_truncation():
         screen.load_events([event])
         await pilot.pause()
 
-        table = app.screen.query_one('#log_table', DataTable)
-        row_key = next(iter(table.rows.keys()))
-        message_col = list(table.columns.values())[3]
-        message_str = str(table.get_cell(row_key, message_col.key))
+        message = str(_cell(app, 'message'))
 
-        assert len(message_str) <= 103
-        assert '...' in message_str
+        assert message.endswith('\u2026'), 'a clipped message has to say it was clipped'
+        assert len(message) < len(event.message)
 
 
 @pytest.mark.asyncio

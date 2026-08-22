@@ -17,7 +17,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar
 
-from textual import on
+from textual import events, on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
@@ -32,7 +32,7 @@ from tail_cw.config import TailCWConfig
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.parser import FilterNode, combine_filters, parse_extended_filter, parse_filter_pattern
 from tail_cw.query.trace import TraceGroup, extract_trace_id_from_event, query_traces_from_parquet_files
-from tail_cw.tui.log_viewer import batch_format_log_events, get_column_definitions
+from tail_cw.tui.log_viewer import Column, format_rows, plan_columns
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.record_detail import RecordDetailScreen
 from tail_cw.tui.shell import ResolveLogs, ShellCommand, ShellScreen
@@ -41,7 +41,7 @@ from tail_cw.tui.trace_viewer import TraceViewerScreen
 LiveStreamFactory = Callable[[], AsyncIterator[LogEvent]]
 
 _LIVE_FLUSH_INTERVAL_SECONDS = 0.25
-_MESSAGE_TRUNCATE = 100
+_HALF_PAGE = 10
 
 
 @dataclass(slots=True, init=False)
@@ -119,6 +119,14 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         Binding('space', 'toggle_live_pause', 'Pause/Resume', show=False),
         Binding('t', 'toggle_trace_view', 'Trace View', show=True),
         Binding('shift+t', 'show_trace_for_selected', 'Show Trace', show=True),
+        # DataTable answers to the arrow keys; these are the vim motions over the
+        # same cursor, so hjkl-hands never reach for the arrows.
+        Binding('j', 'move(1)', 'Down', show=False),
+        Binding('k', 'move(-1)', 'Up', show=False),
+        Binding('ctrl+d', f'move({_HALF_PAGE})', 'Half page down', show=False),
+        Binding('ctrl+u', f'move(-{_HALF_PAGE})', 'Half page up', show=False),
+        Binding('g', 'jump_top', 'Top', show=False),
+        Binding('G', 'jump_bottom', 'Bottom', show=False),
     ]
 
     def __init__(self, log_groups: Sequence[str], *, live: bool = False, trace_id: str | None = None) -> None:
@@ -134,6 +142,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._log_events: list[LogEvent] = []
         self._all_events: list[LogEvent] = []
         self._table: DataTable[Any] | None = None
+        self._columns: tuple[Column, ...] = ()
         self._search_input: Input | None = None
         self._parquet_paths: list[Path] = []
         self._trace_id_fields: list[str] = []
@@ -255,17 +264,55 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             self._table.focus()
 
     def _setup_table_columns(self) -> None:
+        """Give the table the columns this width can afford, replacing any it had."""
         if self._table is None:
             return
+        self._columns = plan_columns(self._table_width(), single_group=len(self._log_groups) <= 1)
+        self._table.clear(columns=True)
+        for column in self._columns:
+            self._table.add_column(column.label, key=column.key, width=column.width)
 
-        column_widths = {
-            'timestamp': 23,
-            'log_group': 20,
-            'log_stream': 16,
-            'message': None,
-        }
-        for key, label in get_column_definitions():
-            self._table.add_column(label, key=key, width=column_widths.get(key))
+    def _table_width(self) -> int:
+        """Width the column budget is planned against.
+
+        The screen's width rather than the table's: the table measures 0 until
+        its first layout, so planning from it would re-plan and rebuild every
+        row the moment the real size arrived.
+        """
+        return self.app.size.width
+
+    def _rows(self, events: Sequence[LogEvent]) -> list[tuple[Any, ...]]:
+        return format_rows(events, self._columns, self._config.message)
+
+    def on_resize(self, _event: events.Resize) -> None:
+        """Re-budget the columns when the terminal changes size.
+
+        Only a plan that actually differs rebuilds the table, because rebuilding
+        a thousand rows on every intermediate width of a drag is visible.
+        """
+        if self._table is None:
+            return
+        planned = plan_columns(self._table_width(), single_group=len(self._log_groups) <= 1)
+        if planned == self._columns:
+            return
+        self._setup_table_columns()
+        self._load_log_events()
+
+    def action_move(self, offset: int) -> None:
+        """Move the row cursor, which is what j, k, and the half-page keys drive."""
+        if self._table is None:
+            return
+        self._table.move_cursor(row=max(0, min(self._table.cursor_row + offset, self._table.row_count - 1)))
+
+    def action_jump_top(self) -> None:
+        """Jump to the first row."""
+        if self._table is not None:
+            self._table.move_cursor(row=0)
+
+    def action_jump_bottom(self) -> None:
+        """Jump to the last row."""
+        if self._table is not None:
+            self._table.move_cursor(row=max(0, self._table.row_count - 1))
 
     def _load_window(self) -> None:
         resolve = self.shell.services.resolve_logs
@@ -323,7 +370,9 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._log_events = events
         self._all_events = events.copy()
         self._load_log_events(events)
-        self._update_status(f'Loaded {len(events)} events (showing first {min(len(events), initial_limit)})')
+        capped = len(events) >= initial_limit
+        hint = ' · capped, narrow the window or add a filter' if capped else ''
+        self._update_status(f'Loaded {len(events):,} events{hint}')
         self._open_pending_trace()
 
     def load_events(self, events: list[LogEvent], parquet_paths: Sequence[Path] | None = None) -> None:
@@ -355,7 +404,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
                 exclusive=True,
             )
         else:
-            self._table.add_rows(batch_format_log_events(events_to_load, truncate_message=_MESSAGE_TRUNCATE))
+            self._table.add_rows(self._rows(events_to_load))
             self._table.loading = False
 
     async def _load_events_incrementally(self, events: list[LogEvent], chunk_size: int) -> None:
@@ -368,7 +417,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             end_idx = min(start_idx + chunk_size, total)
             chunk = events[start_idx:end_idx]
             if self._table is not None:
-                self._table.add_rows(batch_format_log_events(chunk, truncate_message=_MESSAGE_TRUNCATE))
+                self._table.add_rows(self._rows(chunk))
             self._post_progress(end_idx, total, 'Loading events')
 
         if self._table is not None:
@@ -544,14 +593,14 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             self._rebuild_live_table()
         else:
             self._log_events.extend(drained)
-            self._table.add_rows(batch_format_log_events(drained, truncate_message=_MESSAGE_TRUNCATE))
+            self._table.add_rows(self._rows(drained))
 
     def _rebuild_live_table(self) -> None:
         if self._table is None:
             return
         self._log_events = list(self._live_buffer)
         self._table.clear(columns=False)
-        self._table.add_rows(batch_format_log_events(self._log_events, truncate_message=_MESSAGE_TRUNCATE))
+        self._table.add_rows(self._rows(self._log_events))
 
     def _live_search_active(self) -> bool:
         return self._search_input is not None and bool(self._search_input.value.strip())

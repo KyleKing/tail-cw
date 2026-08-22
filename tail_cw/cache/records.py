@@ -16,6 +16,11 @@ _TIMESTAMP_PREFIX_RE = re.compile(
 )
 
 
+def strip_timestamp_prefix(message: str) -> str:
+    """Drop a leading ISO timestamp, which the table's own Timestamp column already shows."""
+    return _TIMESTAMP_PREFIX_RE.sub('', message, count=1)
+
+
 def is_jsonl_message(message: str) -> bool:
     """Detect if a log message appears to be JSON.
 

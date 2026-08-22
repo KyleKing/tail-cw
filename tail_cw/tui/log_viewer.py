@@ -1,230 +1,215 @@
-"""Helper functions for formatting and displaying CloudWatch log events.
+"""Turn log events into the cells the log table shows.
 
-This module provides pure functions for converting LogEvent instances into
-various display formats (table rows, detail views, etc.). Following the
-functions-over-classes approach, all logic is implemented as testable,
-side-effect-free functions.
+Two decisions live here. The column budget is spent by priority rather than on
+fixed widths, because at 80 columns four fixed columns left Message twelve
+characters wide. And a JSON record is read the way a person reads it: the phrase
+it carries first, then its remaining fields as dim ``key=value`` pairs, rather
+than as a wall of braces that clips before the interesting part.
 
-Performance considerations:
-    - batch_format_log_events() enables efficient bulk processing
-    - Rich Text objects are created on-demand for styling
-    - Message truncation reduces memory for large datasets
-
-The functions handle edge cases gracefully:
-    - None values (e.g., ingestion_time)
-    - Empty strings
-    - Special characters and unicode
-    - Very long field values
-    - Malformed JSON in messages
+Severity is shown twice over, as a glyph and as colour, so it survives
+``NO_COLOR``. A record that declares its own level is coloured strongly; one
+classified by reading its prose is dimmed, because a confident wrong colour in a
+thousand-row table is worse than a hedged right one.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from rich.console import RenderableType
 from rich.text import Text
 
 from tail_cw.aws.events import LogEvent
-from tail_cw.cache.records import is_jsonl_message
+from tail_cw.cache.records import is_jsonl_message, strip_timestamp_prefix
+from tail_cw.config import MessageConfig
+from tail_cw.query.severity import Classification, Severity, classify_event, load_json_dict
+
+FULL_TIME_WIDTH = 23
+COMPACT_TIME_WIDTH = 12
+SEVERITY_WIDTH = 1
+GROUP_WIDTH = 20
+STREAM_WIDTH = 16
+MIN_MESSAGE_WIDTH = 24
+
+COMPACT_TIME_BELOW = 100
+"""Terminal width under which the date is dropped, leaving the time of day.
+
+Every row in a view shares the window the breadcrumb already states, so the date
+repeats a thousand times to no purpose.
+"""
+
+DROP_STREAM_BELOW = 120
+"""Terminal width under which the stream column goes; the detail pane has it in full."""
+
+SEVERITY_GLYPHS = {Severity.ERROR: '✖', Severity.WARNING: '⚠', Severity.INFO: ' '}
+_EXPLICIT_STYLES = {Severity.ERROR: 'bold red', Severity.WARNING: 'bold yellow', Severity.INFO: ''}
+_INFERRED_STYLES = {Severity.ERROR: 'dim red', Severity.WARNING: 'dim yellow', Severity.INFO: ''}
+_PAIR_STYLE = 'dim'
+_ELLIPSIS = '…'
 
 
-def format_timestamp(dt: datetime, style: str = 'cyan') -> Text:
-    """Format a datetime as a styled Rich Text object.
+@dataclass(frozen=True)
+class Column:
+    """One table column and the width it was given.
+
+    Attributes:
+        key: Stable identifier, used as the DataTable column key.
+        label: Header text.
+        width: Fixed width in cells.
+    """
+
+    key: str
+    label: str
+    width: int
+
+
+def plan_columns(width: int, *, single_group: bool) -> tuple[Column, ...]:
+    """Choose the columns a table of this width can afford.
 
     Args:
-        dt: The datetime to format
-        style: Rich style string for the timestamp (default: 'cyan')
-
-    Returns:
-        Rich Text object with formatted timestamp and applied style
-
-    Example:
-        >>> from datetime import datetime, UTC
-        >>> dt = datetime(2025, 1, 15, 10, 30, 45, 123000, tzinfo=UTC)
-        >>> formatted = format_timestamp(dt)
-        >>> print(formatted.plain)
-        '2025-01-15 10:30:45.123'
+        width: Cells available to the table.
+        single_group: True when every row shares one log group, which makes the
+            group column a constant repeated on every row.
     """
-    # Format with millisecond precision (cut off microseconds to 3 digits)
-    formatted_str = dt.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-    return Text(formatted_str, style=style)
+    time_width = FULL_TIME_WIDTH if width >= COMPACT_TIME_BELOW else COMPACT_TIME_WIDTH
+    columns = [
+        Column('timestamp', 'Timestamp', time_width),
+        Column('severity', '!', SEVERITY_WIDTH),
+    ]
+    if not single_group:
+        columns.append(Column('log_group', 'Log Group', GROUP_WIDTH))
+    if width >= DROP_STREAM_BELOW:
+        columns.append(Column('log_stream', 'Log Stream', STREAM_WIDTH))
+    spent = sum(column.width + 2 for column in columns)
+    return (*columns, Column('message', 'Message', max(width - spent - 2, MIN_MESSAGE_WIDTH)))
 
 
-def format_log_event_for_table(
+def format_timestamp(moment: datetime, *, width: int = FULL_TIME_WIDTH, style: str = 'cyan') -> Text:
+    """Render an event time, dropping the date when the column is narrow."""
+    pattern = '%Y-%m-%d %H:%M:%S.%f' if width >= FULL_TIME_WIDTH else '%H:%M:%S.%f'
+    return Text(moment.strftime(pattern)[:-3], style=style)
+
+
+def format_row(
     event: LogEvent,
-    truncate_message: int = 100,
-) -> tuple[RenderableType, str, str, str]:
-    """Convert a LogEvent to a table row tuple.
-
-    Args:
-        event: The log event to format
-        truncate_message: Maximum message length for table display (default: 100)
-
-    Returns:
-        Tuple of (formatted_timestamp, log_group, log_stream, truncated_message)
-
-    Example:
-        >>> event = LogEvent(...)
-        >>> timestamp, group, stream, msg = format_log_event_for_table(event, truncate_message=50)
-    """
-    message = event.message
-    truncated_message = message[:truncate_message] + '...' if len(message) > truncate_message else message
-    return (
-        format_timestamp(event.timestamp),
-        event.log_group,
-        event.log_stream,
-        truncated_message,
-    )
+    columns: Sequence[Column],
+    config: MessageConfig,
+) -> tuple[RenderableType, ...]:
+    """Render one event as cells matching ``columns``."""
+    classification = classify_event(event)
+    cells: dict[str, RenderableType] = {
+        'timestamp': format_timestamp(event.timestamp, width=_width_of(columns, 'timestamp')),
+        'severity': Text(SEVERITY_GLYPHS[classification.severity], style=_style_for(classification)),
+        'log_group': shorten(event.log_group, _width_of(columns, 'log_group')),
+        'log_stream': shorten(event.log_stream, _width_of(columns, 'log_stream')),
+        'message': message_text(event, config, classification, width=_width_of(columns, 'message')),
+    }
+    return tuple(cells[column.key] for column in columns)
 
 
-def batch_format_log_events(
+def format_rows(
     events: Iterable[LogEvent],
-    truncate_message: int = 100,
-) -> list[tuple[RenderableType, str, str, str]]:
-    """Convert multiple LogEvents to table rows efficiently.
+    columns: Sequence[Column],
+    config: MessageConfig,
+) -> list[tuple[RenderableType, ...]]:
+    """Render many events at once, which is how the table is filled."""
+    return [format_row(event, columns, config) for event in events]
 
-    Uses list comprehension for batch processing, improving performance
-    when loading large datasets into the UI.
 
-    Args:
-        events: Iterator of log events
-        truncate_message: Maximum message length for table display (default: 100)
+def message_text(
+    event: LogEvent,
+    config: MessageConfig,
+    classification: Classification | None = None,
+    *,
+    width: int = 0,
+) -> Text:
+    """Render an event body as its phrase, then its remaining fields.
 
-    Returns:
-        List of formatted row tuples
-
-    Example:
-        >>> events = [event1, event2, event3]
-        >>> rows = batch_format_log_events(events)
-        >>> table.add_rows(rows)  # Efficient batch insertion
+    A record's own phrase (``event``, ``message``, ``msg`` by default) reads as a
+    sentence, so it leads and carries the severity colour. Everything else
+    follows as dim ``key=value``, which keeps the fields available without
+    letting braces and quotes eat the column.
     """
-    return [format_log_event_for_table(e, truncate_message) for e in events]
+    hint = classification if classification is not None else classify_event(event)
+    style = _style_for(hint)
+    data = load_json_dict(event.message)
+    if data is None:
+        text = Text(strip_timestamp_prefix(event.message), style=style)
+    else:
+        text = _structured_text(data, config, style=style)
+    if width:
+        text.truncate(width, overflow='ellipsis')
+    return text
+
+
+def shorten(text: str, limit: int) -> str:
+    """Cut text to ``limit`` cells, marking the cut so a clipped name cannot read as whole."""
+    return text if len(text) <= limit else text[: limit - 1] + _ELLIPSIS
+
+
+def _structured_text(data: Mapping[str, Any], config: MessageConfig, *, style: str) -> Text:
+    remainder = {key: value for key, value in data.items() if key not in config.hidden_fields}
+    phrase = ''
+    for candidate in config.phrase_fields:
+        value = remainder.get(candidate)
+        if isinstance(value, str) and value:
+            phrase = value
+            del remainder[candidate]
+            break
+    text = Text(phrase, style=style)
+    for key, value in remainder.items():
+        if value is None:
+            continue
+        text.append(f'{" " if text.plain else ""}{key}={_render_value(value)}', style=_PAIR_STYLE)
+    return text
+
+
+def _render_value(value: Any) -> str:
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, separators=(',', ':'))
+    return str(value)
+
+
+def _style_for(classification: Classification) -> str:
+    styles = _EXPLICIT_STYLES if classification.explicit else _INFERRED_STYLES
+    return styles[classification.severity]
+
+
+def _width_of(columns: Sequence[Column], key: str) -> int:
+    return next((column.width for column in columns if column.key == key), 0)
 
 
 def format_log_event_detail(event: LogEvent) -> str:
-    """Format a LogEvent for detailed display.
-
-    Creates a multi-line formatted string with all event fields,
-    including full (non-truncated) message.
-
-    Args:
-        event: The log event to format
-
-    Returns:
-        Multi-line formatted string for detail view
-
-    Example:
-        >>> event = LogEvent(...)
-        >>> detail = format_log_event_detail(event)
-        >>> print(detail)
-        Timestamp: 2025-01-15T10:30:45.123000+00:00
-        ...
-    """
-    # Format ingestion time, handling None
-    ingestion_time_str = event.ingestion_time.isoformat() if event.ingestion_time else 'N/A'
-
-    return f"""Timestamp: {event.timestamp.isoformat()}
-Log Group: {event.log_group}
-Log Stream: {event.log_stream}
-Ingestion Time: {ingestion_time_str}
-
-Message:
-{event.message}"""
+    """Render every field of one event, with its message in full, for the detail pane."""
+    ingestion = event.ingestion_time.isoformat() if event.ingestion_time else 'N/A'
+    return (
+        f'Timestamp: {event.timestamp.isoformat()}\n'
+        f'Log Group: {event.log_group}\n'
+        f'Log Stream: {event.log_stream}\n'
+        f'Ingestion Time: {ingestion}\n'
+        f'\nMessage:\n{event.message}'
+    )
 
 
 def parse_jsonl_message(message: str) -> str | None:
-    """Attempt to parse and pretty-print a JSONL message.
-
-    Uses the is_jsonl_message() detector from storage module to check
-    if the message is JSON, then attempts to parse and format it.
-
-    Args:
-        message: The log message to parse
-
-    Returns:
-        Pretty-printed JSON string if message is valid JSON, None otherwise
-
-    Example:
-        >>> msg = '{"level":"INFO","message":"test"}'
-        >>> parsed = parse_jsonl_message(msg)
-        >>> print(parsed)
-        {
-          "level": "INFO",
-          "message": "test"
-        }
-    """
-    # Check if message looks like JSON
+    """Pretty-print a JSON message, or return None when it is not JSON."""
     if not is_jsonl_message(message):
         return None
-
-    # Try to parse and format
     try:
-        parsed = json.loads(message)
-        return json.dumps(parsed, indent=2, sort_keys=True)
+        return json.dumps(json.loads(message), indent=2, sort_keys=True)
     except (json.JSONDecodeError, ValueError):
-        # Parsing failed, not valid JSON
         return None
 
 
 def format_log_event_detail_with_json(event: LogEvent) -> str:
-    """Enhanced detail formatter with JSON parsing.
-
-    Attempts to parse the message as JSON. If successful, displays both
-    the raw message and the pretty-printed JSON. If not JSON, displays
-    only the raw message.
-
-    Args:
-        event: The log event to format
-
-    Returns:
-        Formatted string with parsed JSON if applicable
-
-    Example:
-        >>> event = LogEvent(message='{"key":"value"}', ...)
-        >>> detail = format_log_event_detail_with_json(event)
-        >>> # Output includes both raw and parsed JSON sections
-    """
-    # Start with basic detail
-    basic_detail = format_log_event_detail(event)
-
-    # Try to parse message as JSON
-    parsed_json = parse_jsonl_message(event.message)
-
-    if parsed_json:
-        # Replace the Message section with both raw and parsed
-        parts = basic_detail.split('Message:\n', 1)
-        expected_parts = 2  # header and message content
-        if len(parts) == expected_parts:
-            header = parts[0]
-            return f"""{header}Message (raw):
-{event.message}
-
-Message (parsed JSON):
-{parsed_json}"""
-
-    # Not JSON or parsing failed, return basic detail
-    return basic_detail
-
-
-def get_column_definitions() -> list[tuple[str, str]]:
-    """Return standard column definitions for log tables.
-
-    Centralizes column configuration for consistency across the UI.
-
-    Returns:
-        List of (key, label) tuples defining table columns
-
-    Example:
-        >>> columns = get_column_definitions()
-        >>> for key, label in columns:
-        ...     table.add_column(key, label=label)
-    """
-    return [
-        ('timestamp', 'Timestamp'),
-        ('log_group', 'Log Group'),
-        ('log_stream', 'Log Stream'),
-        ('message', 'Message'),
-    ]
+    """Render one event for the detail pane, adding pretty-printed JSON when it parses."""
+    detail = format_log_event_detail(event)
+    parsed = parse_jsonl_message(event.message)
+    if parsed is None:
+        return detail
+    header, _, _ = detail.partition('Message:\n')
+    return f'{header}Message (raw):\n{event.message}\n\nMessage (parsed JSON):\n{parsed}'
