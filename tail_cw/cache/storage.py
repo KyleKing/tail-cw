@@ -11,7 +11,8 @@ import hashlib
 import json
 import tempfile
 from collections.abc import Iterable, Iterator
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from operator import itemgetter
 from pathlib import Path
 from threading import Lock
@@ -388,6 +389,46 @@ def read_parquet_to_log_events(parquet_path: Path) -> Iterator[LogEvent]:
         )
 
 
+@dataclass(frozen=True)
+class CacheStatus:
+    """What the cache holds right now, for :func:`LogCache.status`.
+
+    No hit rate and no per-group breakdown, because neither is knowable: nothing counts
+    reads, and a cache key is a BLAKE2b hash of the query, so the log group it came from
+    is not recoverable from it.
+
+    Attributes:
+        cache_dir: Root of the cache.
+        files: Parquet files on disk.
+        bytes_used: Their total size.
+        bytes_limit: The configured ceiling that eviction enforces.
+        oldest: Creation time of the earliest file, or None when empty.
+        newest: Creation time of the latest file, or None when empty.
+        entries: Metadata entries.
+        stale_entries: Entries whose Parquet file is gone.
+        orphan_files: Files no entry points at. Normally transient rather than a leak:
+            every write sweeps them, so a non-zero count usually means a fetch is in
+            flight or the last one did not finish.
+        default_ttl_seconds: Configured TTL, or None when entries never expire.
+    """
+
+    cache_dir: Path
+    files: int
+    bytes_used: int
+    bytes_limit: int
+    oldest: datetime | None
+    newest: datetime | None
+    entries: int
+    stale_entries: int
+    orphan_files: int
+    default_ttl_seconds: TtlSeconds | None
+
+    @property
+    def fraction_used(self) -> float:
+        """Share of the limit in use, 0.0 when there is no limit to speak of."""
+        return self.bytes_used / self.bytes_limit if self.bytes_limit > 0 else 0.0
+
+
 class LogCache:
     """Cache manager for CloudWatch Logs events with TTL and FIFO eviction.
 
@@ -412,8 +453,6 @@ class LogCache:
         >>> from pathlib import Path
         >>> from datetime import datetime, timezone, timedelta
         >>> from tail_cw.aws.events import LogEvent
-    from tail_cw.cache.records import is_jsonl_message, readable_message
-    from tail_cw.progress import TOTAL_UNKNOWN, ProgressCallback
         >>> from tail_cw.cache import LogCache, generate_cache_key
         >>> # Create cache with 1GB limit and 1-hour default TTL
         >>> cache_dir = Path('/tmp/my-cache')
@@ -576,6 +615,50 @@ class LogCache:
                 evicted_count += 1
 
         return evicted_count
+
+    def status(self) -> CacheStatus:
+        """Report what is on disk against the limit, without changing anything.
+
+        Counts files rather than trusting the metadata, because eviction deletes a file
+        and its entry separately and a crash between the two leaves one of each behind.
+        """
+        referenced: set[Path] = set()
+        stale = 0
+        entries = 0
+        for cache_key in list(self._metadata.iterkeys()):  # type: ignore[attr-defined]
+            metadata_value = self._metadata.get(cache_key)
+            if metadata_value is None:
+                continue
+            entries += 1
+            path = Path(_metadata_path(metadata_value))
+            referenced.add(path)
+            if not path.exists():
+                stale += 1
+
+        files = 0
+        used = 0
+        stamps: list[float] = []
+        orphans = 0
+        for parquet_file in self._parquet_dir.glob('*.parquet'):
+            stat = parquet_file.stat()
+            files += 1
+            used += stat.st_size
+            stamps.append(getattr(stat, 'st_birthtime', stat.st_ctime))
+            if parquet_file not in referenced:
+                orphans += 1
+
+        return CacheStatus(
+            cache_dir=self._cache_dir,
+            files=files,
+            bytes_used=used,
+            bytes_limit=self._size_limit_bytes,
+            oldest=datetime.fromtimestamp(min(stamps), tz=UTC) if stamps else None,
+            newest=datetime.fromtimestamp(max(stamps), tz=UTC) if stamps else None,
+            entries=entries,
+            stale_entries=stale,
+            orphan_files=orphans,
+            default_ttl_seconds=self._default_ttl,
+        )
 
     def write(
         self,

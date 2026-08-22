@@ -417,3 +417,54 @@ def test_entries_from_an_older_schema_are_reclaimed(fix_test_cache: Path):
     with LogCache(cache_dir) as cache:
         assert cache._metadata.get('cache:v1:legacy') is None
         assert not superseded.exists()
+
+
+def test_status_counts_what_is_on_disk_against_the_limit(tmp_path):
+    """The complaint this answers is not knowing either number."""
+    with LogCache(tmp_path / 'cache', size_limit_mb=1, default_ttl_seconds=90) as cache:
+        empty = cache.status()
+        assert empty.files == 0
+        assert empty.entries == 0
+        assert empty.oldest is None
+        assert not empty.fraction_used
+        assert empty.bytes_limit == 1024 * 1024
+        assert empty.default_ttl_seconds == 90
+
+        cache.write(make_events(['a', 'b', 'c']), _key())
+        status = cache.status()
+
+        assert status.files == 1
+        assert status.entries == 1
+        assert status.bytes_used > 0
+        assert status.orphan_files == 0
+        assert status.stale_entries == 0
+        assert status.oldest is not None
+        assert status.newest is not None
+        assert 0 < status.fraction_used < 1
+
+
+def test_status_names_a_file_no_entry_points_at(tmp_path):
+    """A crash between writing the Parquet and committing the entry leaves one behind."""
+    with LogCache(tmp_path / 'cache') as cache:
+        cache.write(make_events(['a', 'b']), _key())
+        (cache.get_parquet_path(_key()) or tmp_path).parent.joinpath('cache_v2_stray.parquet').write_bytes(b'x')
+
+        status = cache.status()
+
+        assert status.files == 2
+        assert status.entries == 1
+        assert status.orphan_files == 1
+
+
+def test_status_names_an_entry_whose_file_is_gone(tmp_path):
+    with LogCache(tmp_path / 'cache') as cache:
+        cache.write(make_events(['a', 'b']), _key())
+        path = cache.get_parquet_path(_key())
+        assert path is not None
+        path.unlink()
+
+        status = cache.status()
+
+        assert status.files == 0
+        assert status.stale_entries == 1
+        assert status.entries == 1

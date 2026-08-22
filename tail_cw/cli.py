@@ -51,7 +51,7 @@ from tail_cw.aws.metrics import (
     list_metric_definitions,
 )
 from tail_cw.aws.xray import XRayTraceSummary, batch_get_traces, iter_trace_summary_pages, scan_cost_usd
-from tail_cw.cache.storage import LogCache, generate_cache_key
+from tail_cw.cache.storage import CacheStatus, LogCache, generate_cache_key
 from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import closing_stream, consume_in_thread, fetch_pool, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
@@ -1262,6 +1262,35 @@ async def _export_dashboard(pool: ClientProvider, args: argparse.Namespace) -> i
     return 0
 
 
+def _cache_status_record(status: CacheStatus) -> dict[str, object]:
+    return {
+        'cache_dir': str(status.cache_dir),
+        'files': status.files,
+        'bytes_used': status.bytes_used,
+        'bytes_limit': status.bytes_limit,
+        'fraction_used': round(status.fraction_used, 4),
+        'oldest': status.oldest.isoformat() if status.oldest is not None else None,
+        'newest': status.newest.isoformat() if status.newest is not None else None,
+        'entries': status.entries,
+        'stale_entries': status.stale_entries,
+        'orphan_files': status.orphan_files,
+        'default_ttl_seconds': status.default_ttl_seconds,
+    }
+
+
+def _run_cache_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Report on the local cache. Reads only, so nothing here evicts or writes."""
+    if args.cache_command is None:
+        parser.print_help(sys.stderr)
+        return 2
+    config = _load_config_or_report(args.config_path)
+    if config is None:
+        return 1
+    with open_log_cache(config) as cache:
+        _write_json_line(_cache_status_record(cache.status()))
+    return 0
+
+
 async def _dispatch_export(
     pool: ClientProvider,
     args: argparse.Namespace,
@@ -1357,6 +1386,8 @@ def dispatch(
             return asyncio.run(
                 _run_export_command(args, now, parser, fetch_events=fetch_events, stream_events=stream_events),
             )
+        case 'cache':
+            return _run_cache_command(args, parser)
         case 'logs' | 'tail' | 'dash':
             return _run_shell_command(args, now, run_shell)
         case _ if interactive:

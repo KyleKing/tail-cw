@@ -1621,3 +1621,35 @@ def test_run_cli_export_xray_trace_names_the_ids_xray_has_no_segments_for(tmp_pa
     assert result == 0
     assert 'no segments for 1-bbbb-2' in captured.err
     assert json.loads(captured.out) == {'resourceSpans': []}
+
+
+def test_run_cli_cache_status_reports_the_size_against_the_limit(tmp_path, capsys):
+    """The complaint this answers is that neither number was visible anywhere."""
+    config_path = _write_config_file(tmp_path)
+
+    result = run_cli(['cache', 'status', '--config', str(config_path)], None, is_tty=False)
+
+    assert result == 0
+    record = json.loads(capsys.readouterr().out)
+    assert record['files'] == 0
+    assert record['bytes_limit'] > 0
+    assert record['oldest'] is None
+    assert set(record) == {
+        'cache_dir',
+        'files',
+        'bytes_used',
+        'bytes_limit',
+        'fraction_used',
+        'oldest',
+        'newest',
+        'entries',
+        'stale_entries',
+        'orphan_files',
+        'default_ttl_seconds',
+    }
+
+
+def test_run_cli_cache_with_no_subcommand_prints_help(tmp_path, capsys):
+    del tmp_path
+    assert run_cli(['cache'], None, is_tty=False) == 2
+    assert 'usage' in capsys.readouterr().err

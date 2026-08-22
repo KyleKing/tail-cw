@@ -186,6 +186,7 @@ uv run tail-cw export metrics --namespace AWS/ECS --metric MemoryUtilization --d
 uv run tail-cw export dimensions --namespace AWS/ECS      # the dimension sets a namespace publishes
 uv run tail-cw export dashboards                         # NDJSON dashboard list
 uv run tail-cw export dashboard my-service               # the parsed dashboard as JSON
+uv run tail-cw cache status                              # what the local cache holds, as JSON
 ```
 
 ### Keys

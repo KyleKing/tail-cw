@@ -346,6 +346,11 @@ def build_parser() -> argparse.ArgumentParser:
         help='Open a synthetic dashboard with generated seed data (no AWS calls)',
     )
 
+    cache = subparsers.add_parser('cache', help='Inspect the local Parquet cache.')
+    cache_sub = cache.add_subparsers(dest='cache_command')
+    status = cache_sub.add_parser('status', help='Write what the cache holds against its limit, as JSON.')
+    status.add_argument('--config', dest='config_path', type=Path, default=None, help='Config file path override')
+
     export = subparsers.add_parser('export', help='Write CloudWatch data to stdout as NDJSON or JSON.')
     _add_export_parsers(export)
 

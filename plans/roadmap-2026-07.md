@@ -283,11 +283,19 @@ uncompressed 0.60s.
 A pretty-printed payload is the trap: it is valid JSON, so it takes the parsed path, and
 its newlines would end the NDJSON line early and make the whole file unreadable.
 `tests/test_cache.py` covers it.
-Still open here: `tail-cw cache status` for size and hit rate, since no cache
-introspection
-exists and the cache sits at 115 MB against a 1000 MB limit with no way to see either;
-and benchmark targets gated in CI, because ADR 0003's claim that the local engine is
-better at re-filtering was unmeasured until 2026-08-21 and is now measured only once.
+`tail-cw cache status` shipped on 2026-08-22 and reports files, bytes against the limit,
+the oldest and newest window, entries, stale entries, and orphan files as one JSON
+object.
+Not a hit rate, and not a per-group breakdown: nothing counts reads, and a cache key is
+a
+BLAKE2b hash of the query, so the group it came from cannot be recovered from it.
+It earned itself on the first run by reporting 12 orphan files out of 91, which the next
+write swept, so a non-zero orphan count reads as a fetch in flight rather than a leak.
+Still open: benchmark targets gated in CI, because ADR 0003's claim that the local
+engine
+is better at re-filtering was unmeasured until 2026-08-21 and is now measured only once.
+A wall-clock threshold on a shared runner is a flake generator, so decide what the gate
+actually asserts before writing one.
 Memory-aware backend selection was proposed on the grounds that DuckDB spills and Polars
 does not, but the Polars path already does `scan_parquet` into
 `collect(engine='streaming')`, so the premise is weak; if pursued, use a configured byte
