@@ -5,13 +5,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator, Sequence
-from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
-from textual.pilot import Pilot
 from textual.widgets import DataTable, Label
 
 from tail_cw.aws.client import LogEvent
@@ -23,6 +21,7 @@ from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.shell import ShellServices, TailCWApp
 from tail_cw.tui.trace_viewer import TraceViewerScreen
 from tail_cw.tui.views import build_screen
+from tests.tui_support import running
 
 from .asyncsupport import streams
 
@@ -114,18 +113,6 @@ def _make_app(
     )
 
 
-@asynccontextmanager
-async def _running(app: TailCWApp) -> AsyncIterator[Pilot[None]]:
-    """Run the app and wait for the opening view to be pushed over the base screen.
-
-    Yields:
-        The pilot driving the running app.
-    """
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        yield pilot
-
-
 def _logs_screen(app: TailCWApp) -> LogsScreen:
     screen = app.screen
     assert isinstance(screen, LogsScreen)
@@ -201,7 +188,7 @@ async def test_screen_reads_config_from_shell():
     config.trace.trace_id_fields = ['traceId', 'context.trace_id']
     app = _make_app(config=config)
 
-    async with _running(app) as _:
+    async with running(app) as _:
         screen = _logs_screen(app)
 
         assert screen._config is config
@@ -213,7 +200,7 @@ async def test_screen_reads_config_from_shell():
 async def test_screen_uses_default_config():
     app = _make_app()
 
-    async with _running(app) as _:
+    async with running(app) as _:
         screen = _logs_screen(app)
 
         assert isinstance(screen._config, TailCWConfig)
@@ -225,7 +212,7 @@ async def test_screen_uses_default_config():
 async def test_compose_structure():
     app = _make_app()
 
-    async with _running(app) as _:
+    async with running(app) as _:
         assert app.screen.query_one('Footer') is not None
         assert app.screen.query_one('#log_table') is not None
         assert app.screen.query_one('#status') is not None
@@ -236,7 +223,7 @@ async def test_compose_structure():
 async def test_progress_update_message():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.post_message(ProgressUpdate(current=25, total=100, status='Loading'))
         await pilot.pause()
@@ -250,7 +237,7 @@ async def test_progress_update_message():
 async def test_table_columns_setup():
     app = _make_app()
 
-    async with _running(app) as _:
+    async with running(app) as _:
         table = app.screen.query_one('#log_table', DataTable)
 
         assert len(table.columns) == 4
@@ -265,7 +252,7 @@ async def test_resolved_events_load_on_mount(tmp_path: Path):
     path = _write_parquet(events, tmp_path / 'events.parquet')
     app = _make_app(services=_resolving_to([path]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
 
@@ -305,7 +292,7 @@ async def test_multiple_groups_merge_by_timestamp(tmp_path: Path):
     ]
     app = _make_app(['/aws/test/a', '/aws/test/b'], services=_resolving_to(paths))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
 
@@ -320,7 +307,7 @@ async def test_multiple_groups_merge_by_timestamp(tmp_path: Path):
 async def test_missing_parquet_paths_report_no_events():
     app = _make_app(services=_resolving_to([]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
 
@@ -339,7 +326,7 @@ async def test_resolve_failure_reports_error(tmp_path: Path):
 
     app = _make_app(services=ShellServices(resolve_logs=failing_resolve))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
 
@@ -352,7 +339,7 @@ async def test_incremental_loading_with_progress(monkeypatch):
     app = _make_app(config=_small_chunk_config())
     messages: list[str] = []
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         original_update = screen._update_status
 
@@ -380,7 +367,7 @@ async def test_incremental_loading_with_progress(monkeypatch):
 async def test_no_service_shows_no_source_message():
     app = _make_app()
 
-    async with _running(app) as _:
+    async with running(app) as _:
         assert app.screen.query_one('#log_table', DataTable).row_count == 0
         assert 'no log source' in str(app.screen.query_one('#status', Label).render()).lower()
 
@@ -390,7 +377,7 @@ async def test_config_chunk_threshold_drives_worker(monkeypatch):
     app = _make_app(config=_small_chunk_config(chunk_threshold=3, chunk_size=1))
     events = _make_test_log_events(5)
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         original_run_worker = screen.run_worker
         flags = {'called': False}
@@ -421,7 +408,7 @@ async def test_search_respects_config_limit(monkeypatch, tmp_path: Path):
     monkeypatch.setattr('tail_cw.tui.logs_screen.query_parquet_files_to_log_events', fake_query)
     app = _make_app(config=_small_chunk_config(chunk_threshold=5000, chunk_size=1000, search_limit=15))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events([], parquet_paths=[parquet_path])
         await screen._execute_search_query('message')
@@ -436,7 +423,7 @@ async def test_search_respects_config_limit(monkeypatch, tmp_path: Path):
 async def test_search_in_memory_without_parquet():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events(_make_test_log_events(4))
         await screen._execute_search_query('Test log message 2')
@@ -450,7 +437,7 @@ async def test_search_in_memory_without_parquet():
 async def test_empty_search_restores_all_events():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events(_make_test_log_events(4))
         assert screen._search_input is not None
@@ -467,7 +454,7 @@ async def test_empty_search_restores_all_events():
 async def test_search_submit_moves_focus_to_table():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events(_make_test_log_events(3))
         assert screen._search_input is not None
@@ -485,7 +472,7 @@ async def test_search_submit_moves_focus_to_table():
 async def test_keyboard_navigation():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events(_make_test_log_events(5))
         table = app.screen.query_one('#log_table', DataTable)
@@ -505,7 +492,7 @@ async def test_keyboard_navigation():
 async def test_quit_binding():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await pilot.press('q')
 
 
@@ -513,7 +500,7 @@ async def test_quit_binding():
 async def test_show_detail_with_no_events_pushes_no_modal():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await pilot.press('enter')
         await pilot.pause()
 
@@ -524,7 +511,7 @@ async def test_show_detail_with_no_events_pushes_no_modal():
 async def test_show_detail_opens_modal():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events(_make_test_log_events(3))
         await pilot.pause()
@@ -538,7 +525,7 @@ async def test_show_detail_opens_modal():
 async def test_focus_search_without_data_notifies():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         await pilot.press('/')
         await pilot.pause()
@@ -551,7 +538,7 @@ async def test_focus_search_without_data_notifies():
 async def test_focus_search_with_data_focuses_input():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events(_make_test_log_events(2))
         await pilot.pause()
@@ -566,7 +553,7 @@ async def test_focus_search_with_data_focuses_input():
 async def test_load_events_updates_table_and_status():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events(_make_test_log_events(3))
         await pilot.pause()
@@ -587,7 +574,7 @@ async def test_load_events_updates_table_and_status():
 async def test_timestamp_formatting():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events(_make_test_log_events(1))
         await pilot.pause()
@@ -612,7 +599,7 @@ async def test_message_truncation():
     )
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events([event])
         await pilot.pause()
@@ -630,7 +617,7 @@ async def test_message_truncation():
 async def test_batch_loading_many_events():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events(_make_test_log_events(1000))
         await pilot.pause()
@@ -653,7 +640,7 @@ async def test_awkward_messages_load(message: str):
     )
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen.load_events([event])
         await pilot.pause()
@@ -675,7 +662,7 @@ async def test_refresh_extends_window_and_reloads(tmp_path: Path):
     session = _session()
     app = _make_app(services=ShellServices(resolve_logs=resolve), session=session)
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
         await pilot.press('r')
@@ -693,7 +680,7 @@ async def test_refresh_extends_window_and_reloads(tmp_path: Path):
 async def test_refresh_without_service_reports_no_source():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await pilot.press('r')
         await pilot.pause()
 
@@ -707,7 +694,7 @@ async def test_the_session_filter_narrows_the_view_on_read(tmp_path: Path):
     path = _write_parquet(events, tmp_path / 'events.parquet')
     app = _make_app(services=_resolving_to([path]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
         assert app.screen.query_one('#log_table', DataTable).row_count == 2
@@ -724,7 +711,7 @@ async def test_the_session_filter_narrows_the_view_on_read(tmp_path: Path):
 async def test_view_commands_toggle_live_and_trace():
     app = _make_app(services=ShellServices(live_stream=streams(())))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
 
         assert set(screen.commands()) == {'live', 'trace'}
@@ -739,7 +726,7 @@ async def test_view_commands_toggle_live_and_trace():
 async def test_nav_siblings_cycle_selected_groups():
     app = _make_app(['a'], session=_session(selected_groups=['a', 'b', 'c']))
 
-    async with _running(app) as _:
+    async with running(app) as _:
         targets = _logs_screen(app).nav_siblings()
 
         assert [target.label for target in targets] == ['logs a', 'logs b', 'logs c']
@@ -750,7 +737,7 @@ async def test_nav_siblings_cycle_selected_groups():
 async def test_nav_siblings_lead_with_a_merged_view():
     app = _make_app(['a', 'b'])
 
-    async with _running(app) as _:
+    async with running(app) as _:
         targets = _logs_screen(app).nav_siblings()
 
         assert targets[0].label == 'logs 2 groups'
@@ -761,7 +748,7 @@ async def test_nav_siblings_lead_with_a_merged_view():
 async def test_nav_siblings_use_tail_labels_when_live():
     app = _make_app(['a'], live=True, session=_session(selected_groups=['a', 'b']))
 
-    async with _running(app) as _:
+    async with running(app) as _:
         targets = _logs_screen(app).nav_siblings()
 
         assert [target.label for target in targets] == ['tail a', 'tail b']
@@ -776,7 +763,7 @@ async def test_live_worker_streams_events_into_table():
         services=ShellServices(live_stream=streams(events)),
     )
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
 
@@ -796,7 +783,7 @@ async def test_live_worker_streams_events_into_table():
 async def test_live_batched_flush_and_pause_resume():
     app = _make_app(config=TailCWConfig(tui=TUIConfig(live_buffer_limit=100)))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen._live_stream_factory = streams(())
         screen._live_active = True
@@ -832,7 +819,7 @@ async def test_live_batched_flush_and_pause_resume():
 async def test_live_buffer_evicts_oldest_and_rebuilds_table():
     app = _make_app(config=TailCWConfig(tui=TUIConfig(live_buffer_limit=10)))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen._live_stream_factory = streams(())
         screen._live_active = True
@@ -852,7 +839,7 @@ async def test_live_buffer_evicts_oldest_and_rebuilds_table():
 async def test_live_search_filters_buffered_events():
     app = _make_app(config=TailCWConfig(tui=TUIConfig(live_buffer_limit=100)))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         screen._live_stream_factory = streams(())
         screen._live_active = True
@@ -885,7 +872,7 @@ async def test_live_worker_error_keeps_buffer_browsable():
 
     app = _make_app(live=True, services=ShellServices(live_stream=failing_stream))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
 
@@ -900,7 +887,7 @@ async def test_live_worker_error_keeps_buffer_browsable():
 async def test_note_live_sampled_sets_flag():
     app = _make_app()
 
-    async with _running(app) as _:
+    async with running(app) as _:
         screen = _logs_screen(app)
         screen.note_live_sampled(sampled=True)
 
@@ -930,7 +917,7 @@ async def test_live_toggle_round_trip_preserves_filter(tmp_path: Path):
         session=session,
     )
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
         screen = _logs_screen(app)
@@ -959,7 +946,7 @@ async def test_live_toggle_round_trip_preserves_filter(tmp_path: Path):
 async def test_live_toggle_without_service_notifies():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         await pilot.press('L')
         await pilot.pause()
@@ -971,7 +958,7 @@ async def test_live_toggle_without_service_notifies():
 async def test_refresh_while_live_is_a_no_op():
     app = _make_app(live=True, services=ShellServices(live_stream=streams(())))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         await pilot.press('r')
         await pilot.pause()
@@ -991,7 +978,7 @@ async def test_live_refresh_view_restarts_stream():
 
     app = _make_app(live=True, services=ShellServices(live_stream=live_stream))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         screen = _logs_screen(app)
         app.session.filter_pattern = 'timeout'
@@ -1006,7 +993,7 @@ async def test_live_refresh_view_restarts_stream():
 async def test_restore_focus_returns_to_table():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         screen = _logs_screen(app)
         assert screen._search_input is not None
         screen._search_input.focus()
@@ -1024,7 +1011,7 @@ async def test_toggle_trace_view(tmp_path: Path):
     _create_parquet_with_traces(parquet_path, trace_count=2)
     app = _make_app(services=_resolving_to([parquet_path]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
         await pilot.press('t')
@@ -1037,7 +1024,7 @@ async def test_toggle_trace_view(tmp_path: Path):
 async def test_toggle_trace_view_no_data():
     app = _make_app()
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await pilot.pause()
         await pilot.press('t')
         await pilot.pause()
@@ -1051,7 +1038,7 @@ async def test_show_trace_for_selected(tmp_path: Path):
     _create_parquet_with_traces(parquet_path, trace_count=2, spans_per_trace=3)
     app = _make_app(services=_resolving_to([parquet_path]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
 
@@ -1081,7 +1068,7 @@ async def test_show_trace_for_selected_no_trace_id(tmp_path: Path):
     parquet_path = _write_parquet(events, tmp_path / 'logs.parquet')
     app = _make_app(services=_resolving_to([parquet_path]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
 
@@ -1100,7 +1087,7 @@ async def test_trace_view_back_to_logs(tmp_path: Path):
     _create_parquet_with_traces(parquet_path, trace_count=1)
     app = _make_app(services=_resolving_to([parquet_path]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
         await pilot.press('t')
@@ -1127,7 +1114,7 @@ async def test_trace_view_empty_results(tmp_path: Path):
     parquet_path = _write_parquet(events, tmp_path / 'logs.parquet')
     app = _make_app(services=_resolving_to([parquet_path]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
         await pilot.press('t')
@@ -1159,7 +1146,7 @@ async def test_trace_view_with_errors(tmp_path: Path):
     parquet_path = _write_parquet(events, tmp_path / 'logs.parquet')
     app = _make_app(services=_resolving_to([parquet_path]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
         await pilot.press('t')
@@ -1176,7 +1163,7 @@ async def test_trace_view_multiple_toggles(tmp_path: Path):
     _create_parquet_with_traces(parquet_path, trace_count=1)
     app = _make_app(services=_resolving_to([parquet_path]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
         await pilot.press('t')
@@ -1203,7 +1190,7 @@ async def test_trace_view_performance(tmp_path: Path):
     _create_parquet_with_traces(parquet_path, trace_count=50, spans_per_trace=10)
     app = _make_app(services=_resolving_to([parquet_path]))
 
-    async with _running(app) as pilot:
+    async with running(app) as pilot:
         await app.workers.wait_for_complete()
         await pilot.pause()
         await pilot.press('t')

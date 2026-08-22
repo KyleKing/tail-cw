@@ -13,7 +13,7 @@ import heapq
 import re
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from itertools import islice
 from pathlib import Path
@@ -37,6 +37,9 @@ class QueryBackend(Enum):
     POLARS = 'polars'  # Use Polars for querying
     AUTO = 'auto'  # Automatically select based on query characteristics
 
+
+_TIME_COLUMNS = ('timestamp', 'ingestion_time')
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 SEARCH_TEXT = '_text'
 """Column holding the text a free-text filter matches against.
@@ -207,7 +210,7 @@ def _query_with_duckdb(
         limit: Result limit
 
     Yields:
-        Dict for each matching row
+        Dict for each matching row, timestamps as UTC datetimes
 
     Raises:
         ValueError: If query fails
@@ -215,29 +218,49 @@ def _query_with_duckdb(
     try:
         with duckdb.connect() as con:
             con.execute(f'SET threads = {duckdb_threads()}')
-            sql = 'SELECT * FROM read_parquet(?)'
+            described = con.execute('DESCRIBE SELECT * FROM read_parquet(?)', [str(parquet_path)]).fetchall()
+            columns = [row[0] for row in described]
+            source = 'read_parquet(?)'
             params: list[Any] = [str(parquet_path)]
+            where = ''
 
             if filter_node is not None and filter_node.node_type != FilterNodeType.MATCH_ALL:
-                described = con.execute('DESCRIBE SELECT * FROM read_parquet(?)', [str(parquet_path)]).fetchall()
-                text_sql = _search_text_sql(has_parsed=any(row[0] == 'parsed' for row in described))
+                text_sql = _search_text_sql(has_parsed='parsed' in columns)
+                source = f'(SELECT *, {text_sql} AS {SEARCH_TEXT} FROM read_parquet(?))'  # noqa: S608
                 # Values reaching the clause are escaped by _escape_sql_string; the
                 # identifiers are module constants.
-                source = f'(SELECT *, {text_sql} AS {SEARCH_TEXT} FROM read_parquet(?))'  # noqa: S608
-                where_clause = _build_duckdb_where_clause(filter_node)
-                sql = f'SELECT * EXCLUDE ({SEARCH_TEXT}) FROM {source} WHERE {where_clause}'  # noqa: S608
+                where = f' WHERE {_build_duckdb_where_clause(filter_node)}'
+
+            # Datetimes come back as epoch microseconds and are rebuilt below. DuckDB's
+            # own conversion of a timezone-aware timestamp needs pytz, and reading
+            # through Arrow needs pyarrow; neither is worth a dependency.
+            projection = ', '.join(
+                [
+                    f'* EXCLUDE ({", ".join([*_TIME_COLUMNS, SEARCH_TEXT])})'
+                    if where
+                    else f'* EXCLUDE ({", ".join(_TIME_COLUMNS)})'
+                ]
+                + [f'epoch_us({name}) AS {name}' for name in _TIME_COLUMNS],
+            )
+            sql = f'SELECT {projection} FROM {source}{where}'  # noqa: S608
 
             if limit is not None:
                 sql += ' LIMIT ?'
                 params.append(limit)
 
-            # Read through Polars rather than fetchall: DuckDB's own conversion of a
-            # timezone-aware timestamp to a Python datetime needs pytz installed.
-            yield from con.execute(sql, params).pl().iter_rows(named=True)
+            cursor = con.execute(sql, params)
+            names = [description[0] for description in cursor.description or []]
+            for row in cursor.fetchall():
+                record = dict(zip(names, row, strict=False))
+                yield {**record, **{name: _from_epoch_us(record.get(name)) for name in _TIME_COLUMNS}}
 
     except duckdb.Error as e:
         msg = f'DuckDB query failed: {e}'
         raise ValueError(msg) from e
+
+
+def _from_epoch_us(microseconds: Any) -> datetime | None:
+    return None if microseconds is None else _EPOCH + timedelta(microseconds=int(microseconds))
 
 
 def _build_duckdb_where_clause(node: FilterNode) -> str:
@@ -431,20 +454,10 @@ def _query_with_polars(
                 .drop(SEARCH_TEXT)
             )
 
-        # Apply limit if specified
         if limit is not None:
             lf = lf.limit(limit)
 
-        # Collect with streaming engine
-        try:
-            # Try new engine parameter (Polars >= 1.25.0)
-            df = lf.collect(engine='streaming')
-        except TypeError:
-            # Fall back to deprecated streaming parameter for older Polars versions
-            df = lf.collect(streaming=True)  # type: ignore[call-overload]
-
-        # Iterate through rows and yield as dicts
-        yield from df.iter_rows(named=True)
+        yield from lf.collect(engine='streaming').iter_rows(named=True)
 
     except pl.exceptions.PolarsError as e:
         msg = f'Polars query failed: {e}'
