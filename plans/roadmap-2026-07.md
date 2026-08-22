@@ -247,23 +247,37 @@ options 1 and 2 reach both.
 Ordered within each group by value against effort.
 Nothing here is scheduled.
 
-**The filter surface.** The AST already holds `OR`, `NOT`, and `combine_filters`, and no
-surface syntax reaches them, so `ERROR OR WARNING` parses as three text terms including
-the literal `OR`.
-Completing that is the largest gap. It carries one real decision rather than a coding
-cost: CloudWatch's own filter pattern syntax has no `OR` for text terms, so a filter
-accepted locally would fail when sent as a server-side `filterPattern`, and a filter
-that works on cached data but not live data is worse than no `OR` at all.
-Settle the divergence before writing the parser, and note that queue item 2 changes the
-stakes, because dropping `filter_pattern` from the cache key moves filtering local by
-default and makes local-only syntax defensible.
-Smaller items, in order: a `FilterParseError` carrying suggestions (unbalanced brace,
-`$..`, odd quote count, and `/re/` where the delimiter is `%re%`), which today surfaces
-as terse bare `ValueError` text; named filter presets extending the `@name` convention
-`[presets]` already uses for group sets; persisted per-profile filter history, which
-should share whatever storage queue item 3 builds for query history rather than
-inventing a second one; and a `FILTER_GUIDE.md`, since the syntax currently lives only
-in `parser.py` docstrings.
+**The filter surface.** Done on 2026-08-22, and the premise the roadmap recorded was
+wrong in a way that made the answer better rather than worse.
+`tail_cw/query/expression.py` now parses `AND`, `OR`, `NOT`, and parentheses over the
+existing terms, with a space still meaning `AND` because that is what CloudWatch means
+by
+it, and uppercase keywords because a log line saying "timed out or retried" must stay a
+text search.
+`FilterParseError` carries the fix (unclosed paren, unbalanced quote, `$..`, a trailing
+operator), and the two filters that parse cleanly yet can never match (`key=value` and
+`/re/`) are suggested against in the zero-result hint instead.
+
+The recorded premise was that CloudWatch has no `OR` for text terms.
+It does: `?a ?b` is an any-of, and `a -b` excludes.
+What it actually has is worse than absence, and it is what settles the design.
+Combining `?` terms with anything else makes CloudWatch **ignore the `?` terms** rather
+than reject the pattern, so a mixed expression sent as a `filterPattern` returns the
+wrong
+events with no error.
+So `portable_filter_pattern` translates only what CloudWatch can mean exactly (a single
+term, an AND of text, an OR of text, an AND with exclusions, a JSON-only tree with real
+`&&` and `||`) and refuses the rest by name at the one boundary that sends a pattern,
+which is live tail.
+That refusal also fixed a live bug: `--filter level:error` used to reach AWS verbatim,
+where it matched no JSON record at all, and is now translated to
+`{ $.level = "error" }`.
+
+`docs/docs/FILTER_GUIDE.md` is the reference, since the syntax previously lived only in
+`parser.py` docstrings.
+Still open: named filter presets extending the `@name` convention `[presets]` already
+uses, and persisted per-profile filter history, which should share whatever storage the
+query history uses rather than inventing a second one.
 
 **Cache and query performance.** Done on 2026-08-22, and the framing was wrong.
 Parsing was already in Rust: Polars does the real decode, and the write path measured

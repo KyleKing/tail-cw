@@ -22,6 +22,7 @@ One Textual-free core (`tail_cw/cli.py`) owns argument parsing, the cache, and t
 pipelines; the TUI and `tail-cw export` sit on top of the same functions, so agents and
 humans drive one code path.
 See the [ADRs](docs/docs/adr) for the decisions,
+[the filter guide](docs/docs/FILTER_GUIDE.md) for the query syntax,
 [plans/roadmap-2026-07.md](plans/roadmap-2026-07.md) for what is built and what is next,
 and [AGENTS.md](AGENTS.md) for where to start.
 
