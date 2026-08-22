@@ -14,6 +14,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Any
 
 from tail_cw.aws.log_groups import LogGroupInfo
@@ -63,10 +64,28 @@ _MIN_MEASURABLE_SPAN_SECONDS = 1.0
 
 _BYTES_PER_GB = 1_000_000_000
 _TERMINAL_STATUSES = frozenset({'Complete', 'Failed', 'Cancelled', 'Timeout', 'Unknown'})
-_NARROWING_COMMANDS = re.compile(r'(?<![\w@])(filter|pattern|dedup)(?![\w@])', re.IGNORECASE)
+_NARROWING_COMMANDS = {
+    'CWLI': ('filter', 'pattern', 'dedup'),
+    'PPL': ('where', 'stats', 'dedup', 'patterns'),
+    'SQL': ('where', 'group by', 'having'),
+}
+"""What counts as narrowing, per language. Each says the same thing its own way."""
+
+_NARROWING_PATTERNS = {
+    language: re.compile(
+        r'(?<![\w@])(' + '|'.join(command.replace(' ', r'\s+') for command in commands) + r')(?![\w@])',
+        re.IGNORECASE,
+    )
+    for language, commands in _NARROWING_COMMANDS.items()
+}
 
 
-def validate_insights_request(query: str, start_time: datetime, end_time: datetime) -> None:
+def validate_insights_request(
+    query: str,
+    start_time: datetime,
+    end_time: datetime,
+    language: str = 'CWLI',
+) -> None:
     """Check a query before it is allowed to bill.
 
     Two guards, and they do different jobs. The window cap bounds the bill,
@@ -75,9 +94,13 @@ def validate_insights_request(query: str, start_time: datetime, end_time: dateti
     being run by accident and returning a wall of events that a cached
     ``FilterLogEvents`` window would have answered for free.
 
+    The narrowing check is per language, because each says the same thing its own way:
+    ``filter`` in CWLI, ``where`` in PPL and SQL. Checking for the CWLI words alone
+    rejected a ``GROUP BY`` that narrows perfectly well.
+
     Raises:
         ValueError: The window is wider than :data:`MAX_INSIGHTS_WINDOW`, or the
-            query has no narrowing command.
+            query has no narrowing command in ``language``.
     """
     window = end_time - start_time
     if window > MAX_INSIGHTS_WINDOW:
@@ -86,8 +109,9 @@ def validate_insights_request(query: str, start_time: datetime, end_time: dateti
             f'and this one covers {window.days} days'
         )
         raise ValueError(msg)
-    if not _NARROWING_COMMANDS.search(query):
-        msg = 'Insights queries must narrow with filter, pattern, or dedup rather than reading the whole window'
+    if not _NARROWING_PATTERNS[language].search(query):
+        wanted = ', '.join(_NARROWING_COMMANDS[language])
+        msg = f'A {language} query must narrow with {wanted} rather than reading the whole window'
         raise ValueError(msg)
 
 
@@ -290,6 +314,36 @@ class InsightsResult:
     bytes_scanned: int
 
 
+class QueryLanguage(StrEnum):
+    """Which Insights language a query is written in.
+
+    ``CWLI`` is the original pipe-delimited language and the default, so an existing
+    query keeps meaning what it meant. ``SQL`` and ``PPL`` are the OpenSearch languages
+    CloudWatch made generally available, and they bring JOIN and sub-queries that the
+    local engine deliberately does not implement
+    ([ADR 0010](../../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md)).
+    """
+
+    CWLI = 'CWLI'
+    PPL = 'PPL'
+    SQL = 'SQL'
+
+
+SOURCE_COMMAND = re.compile(r'\b(?:SOURCE|FROM)\b', re.IGNORECASE)
+"""Whether a query names its own log groups, which decides how ``StartQuery`` is called.
+
+``StartQuery`` takes the groups either as a parameter or from a ``SOURCE``/``FROM`` clause
+in the query, and rejects being given both. SQL always names them itself; PPL may.
+"""
+
+
+def names_its_own_groups(query: str, language: QueryLanguage) -> bool:
+    """Whether ``query`` selects its log groups itself rather than taking them as a parameter."""
+    if language is QueryLanguage.CWLI:
+        return False
+    return language is QueryLanguage.SQL or bool(SOURCE_COMMAND.search(query))
+
+
 async def run_insights_query(
     client: Any,
     *,
@@ -299,26 +353,50 @@ async def run_insights_query(
     end_time: datetime,
     limit: int = DEFAULT_LIMIT,
     poll_seconds: float = DEFAULT_POLL_SECONDS,
+    language: QueryLanguage = QueryLanguage.CWLI,
 ) -> InsightsResult:
     """Start a Logs Insights query, wait for it, and return its rows.
 
     Cancelling the caller stops the query rather than leaving it running and billing.
 
+    Args:
+        client: An open CloudWatch Logs client, from :meth:`ClientPool.client`.
+        log_groups: Groups to query. Must be empty when the query names its own, since
+            ``StartQuery`` rejects being told twice.
+        query: The query text, in ``language``.
+        start_time: Window start.
+        end_time: Window end.
+        limit: Maximum rows returned.
+        poll_seconds: How often to ask whether the query finished.
+        language: Which Insights language ``query`` is written in.
+
     Raises:
         InsightsQueryError: The query failed, timed out, or was cancelled by AWS.
-        ValueError: More log groups than Insights accepts in one query.
+        ValueError: More log groups than Insights accepts, or a group list given for a
+            query that selects its own.
     """
     if len(log_groups) > MAX_INSIGHTS_LOG_GROUPS:
         msg = f'Insights accepts at most {MAX_INSIGHTS_LOG_GROUPS} log groups, got {len(log_groups)}'
         raise ValueError(msg)
+    selects_own = names_its_own_groups(query, language)
+    if selects_own and log_groups:
+        msg = f'A {language.value} query naming its own sources cannot also be given log groups'
+        raise ValueError(msg)
+    if not selects_own and not log_groups:
+        msg = f'A {language.value} query needs either log groups or a SOURCE clause'
+        raise ValueError(msg)
 
-    started = await client.start_query(
-        logGroupNames=log_groups,
-        startTime=int(start_time.timestamp()),
-        endTime=int(end_time.timestamp()),
-        queryString=query,
-        limit=limit,
-    )
+    kwargs: dict[str, Any] = {
+        'startTime': int(start_time.timestamp()),
+        'endTime': int(end_time.timestamp()),
+        'queryString': query,
+        'limit': limit,
+    }
+    if language is not QueryLanguage.CWLI:
+        kwargs['queryLanguage'] = language.value
+    if not selects_own:
+        kwargs['logGroupNames'] = log_groups
+    started = await client.start_query(**kwargs)
     query_id = started['queryId']
     try:
         response = await _poll_until_terminal(client, query_id, poll_seconds=poll_seconds)

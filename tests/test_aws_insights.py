@@ -13,8 +13,10 @@ from tail_cw.aws.insights import (
     SAMPLE_SLICE,
     SAMPLE_SLICES,
     InsightsQueryError,
+    QueryLanguage,
     estimate_scan,
     measure_group_rates,
+    names_its_own_groups,
     run_insights_query,
     validate_insights_request,
 )
@@ -269,3 +271,98 @@ def test_a_measured_rate_replaces_the_average_for_that_group_alone() -> None:
     assert estimate.gigabytes == pytest.approx(1.0 + 86_400_000 / 10**9)
     assert estimate.measured_groups == 1
     assert 'measured from recent traffic' in estimate.label()
+
+
+@pytest.mark.parametrize(
+    ('language', 'query', 'expected'),
+    [
+        (QueryLanguage.CWLI, 'filter @message like /x/', False),
+        (QueryLanguage.CWLI, 'SOURCE logGroups() | filter x', False),
+        (QueryLanguage.SQL, 'SELECT * FROM `g` WHERE level = "x"', True),
+        (QueryLanguage.PPL, 'source=g | where level="x"', True),
+        (QueryLanguage.PPL, 'where level="x" | stats count()', False),
+    ],
+)
+def test_only_a_query_naming_its_sources_forgoes_the_group_parameter(language, query, *, expected):
+    """StartQuery takes the groups as a parameter or from the query, and rejects both."""
+    assert names_its_own_groups(query, language) is expected
+
+
+async def test_a_cwli_query_still_sends_its_groups_and_no_language():
+    """The default has to keep meaning what it meant, so nothing new goes on the wire."""
+    client = _FakeInsightsClient(['Complete'])
+
+    await _run(client)
+
+    assert client.started['logGroupNames'] == ['/g']
+    assert 'queryLanguage' not in client.started
+
+
+async def test_a_sql_query_sends_the_language_and_no_groups():
+    client = _FakeInsightsClient(['Complete'])
+
+    await run_insights_query(
+        client,
+        log_groups=[],
+        query='SELECT level FROM `g` WHERE level = "error"',
+        start_time=START,
+        end_time=END,
+        poll_seconds=_NO_POLL_DELAY,
+        language=QueryLanguage.SQL,
+    )
+
+    assert client.started['queryLanguage'] == 'SQL'
+    assert 'logGroupNames' not in client.started, 'AWS rejects being told the groups twice'
+
+
+async def test_naming_the_groups_twice_is_refused_before_it_bills():
+    client = _FakeInsightsClient(['Complete'])
+
+    with pytest.raises(ValueError, match='cannot also be given log groups'):
+        await run_insights_query(
+            client,
+            log_groups=['/g'],
+            query='SELECT level FROM `g` WHERE level = "error"',
+            start_time=START,
+            end_time=END,
+            poll_seconds=_NO_POLL_DELAY,
+            language=QueryLanguage.SQL,
+        )
+    assert client.started == {}
+
+
+async def test_naming_them_nowhere_is_refused_too():
+    client = _FakeInsightsClient(['Complete'])
+
+    with pytest.raises(ValueError, match='needs either log groups or a SOURCE clause'):
+        await run_insights_query(
+            client,
+            log_groups=[],
+            query='where level="error"',
+            start_time=START,
+            end_time=END,
+            poll_seconds=_NO_POLL_DELAY,
+            language=QueryLanguage.PPL,
+        )
+
+
+@pytest.mark.parametrize(
+    ('language', 'query', 'accepted'),
+    [
+        ('CWLI', 'filter @message like /x/', True),
+        ('CWLI', 'fields @message', False),
+        ('SQL', 'SELECT level, count(*) FROM `g` GROUP BY level', True),
+        ('SQL', 'SELECT level, count(*) FROM `g` group  by level', True),
+        ('SQL', 'SELECT * FROM `g`', False),
+        ('PPL', 'source=g | where level="x"', True),
+        ('PPL', 'source=g | fields level', False),
+    ],
+)
+def test_narrowing_is_checked_in_the_language_the_query_is_written_in(language, query, *, accepted):
+    """The CWLI words alone rejected a GROUP BY that narrows perfectly well."""
+    window = (START, START + timedelta(minutes=5))
+    if accepted:
+        validate_insights_request(query, *window, language)
+        return
+    with pytest.raises(ValueError, match='must narrow with'):
+        validate_insights_request(query, *window, language)

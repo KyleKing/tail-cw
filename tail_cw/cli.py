@@ -34,10 +34,13 @@ from tail_cw.aws.dashboards import (
 )
 from tail_cw.aws.events import LogEvent
 from tail_cw.aws.insights import (
+    DOLLARS_PER_GB,
     InsightsQueryError,
     InsightsResult,
+    QueryLanguage,
     estimate_scan,
     measure_group_rates,
+    names_its_own_groups,
     run_insights_query,
     validate_insights_request,
 )
@@ -910,26 +913,15 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
     config = _load_config_or_report(args.config_path)
     if config is None:
         return 1
+    language = QueryLanguage(args.language.upper())
     logs = await pool.client('logs')
-    groups = await _resolve_summary_groups(logs, args.patterns, config.presets)
-    if not groups:
-        sys.stderr.write('No log groups matched\n')
-        return 1
-    if len(groups) > args.max_groups:
-        sys.stderr.write(
-            f'Capped at {args.max_groups} of {len(groups)} matching groups; '
-            f'not queried: {", ".join(group.name for group in groups[args.max_groups :])}\n',
-        )
-        groups = groups[: args.max_groups]
-    names = [group.name for group in groups]
-
-    rates = await measure_group_rates(logs, names, start=start_time, end=end_time)
-    refusal = _insights_preflight(groups, args, config, window=end_time - start_time, now=now, rates=rates)
-    if refusal is not None:
-        return refusal
+    resolved = await _insights_targets(logs, args, config, language, window=(start_time, end_time), now=now)
+    if isinstance(resolved, int):
+        return resolved
+    names = resolved
 
     try:
-        validate_insights_request(args.query, start_time, end_time)
+        validate_insights_request(args.query, start_time, end_time, language.value)
         result = await run_insights_query(
             logs,
             log_groups=names,
@@ -937,6 +929,7 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
             start_time=start_time,
             end_time=end_time,
             limit=args.limit,
+            language=language,
         )
     except (InsightsQueryError, ValueError) as err:
         sys.stderr.write(f'{err}\n')
@@ -1105,6 +1098,71 @@ async def _export_xray_trace(pool: ClientProvider, args: argparse.Namespace) -> 
     return 0
 
 
+async def _insights_targets(
+    logs: Any,
+    args: argparse.Namespace,
+    config: TailCWConfig,
+    language: QueryLanguage,
+    *,
+    window: tuple[datetime, datetime],
+    now: datetime,
+) -> list[str] | int:
+    """Resolve the groups to query and run the cost gate, or return an exit code.
+
+    Two paths, because ``StartQuery`` takes the groups either as a parameter or from a
+    clause inside the query, never both.
+    """
+    if names_its_own_groups(args.query, language):
+        refusal = _self_selecting_preflight(args, language)
+        return refusal if refusal is not None else []
+    groups = await _resolve_summary_groups(logs, args.patterns, config.presets)
+    if not groups:
+        sys.stderr.write('No log groups matched\n')
+        return 1
+    if len(groups) > args.max_groups:
+        sys.stderr.write(
+            f'Capped at {args.max_groups} of {len(groups)} matching groups; '
+            f'not queried: {", ".join(group.name for group in groups[args.max_groups :])}\n',
+        )
+        groups = groups[: args.max_groups]
+    names = [group.name for group in groups]
+    start_time, end_time = window
+    rates = await measure_group_rates(logs, names, start=start_time, end=end_time)
+    refusal = _insights_preflight(groups, args, config, window=end_time - start_time, now=now, rates=rates)
+    return refusal if refusal is not None else names
+
+
+def _self_selecting_preflight(args: argparse.Namespace, language: QueryLanguage) -> int | None:
+    """Gate a query whose sources are inside it, where no estimate is possible.
+
+    The scan estimate samples the log groups it was told about, and a SQL ``FROM`` or a
+    PPL ``SOURCE`` names them in text this tool does not parse. So the ceiling that
+    normally protects a billed query cannot be applied, and the honest response is to say
+    so and require ``--yes`` rather than to run blind or to pretend at a number.
+
+    Returns an exit code when the query must not run, or None to go ahead.
+    """
+    if args.patterns:
+        sys.stderr.write(
+            f'A {language.value} query naming its own sources takes no log group arguments; '
+            f'drop {", ".join(args.patterns)}\n',
+        )
+        return 2
+    sys.stderr.write(
+        f'No scan estimate: this {language.value} query selects its own log groups, '
+        'so there is nothing to sample before running it.\n',
+    )
+    if args.dry_run:
+        return 0
+    if not args.yes:
+        sys.stderr.write(
+            f'Re-run with --yes to run it anyway, or use --language cwli with log group '
+            f'arguments to get an estimate first. Insights bills ${DOLLARS_PER_GB:g} per GB scanned.\n',
+        )
+        return 1
+    return None
+
+
 def _insights_preflight(
     groups: Sequence[LogGroupInfo],
     args: argparse.Namespace,
@@ -1161,8 +1219,10 @@ def _remember(
 def _report_insights_cost(result: InsightsResult, *, group_count: int) -> None:
     """Write what the query scanned to stderr, because Insights bills on it."""
     gigabytes = result.bytes_scanned / 1_000_000_000
+    # A self-selecting query passes no group list, so counting it would report zero.
+    source = f'{group_count} groups' if group_count else 'the groups the query named'
     sys.stderr.write(
-        f'{len(result.rows)} rows from {group_count} groups; '
+        f'{len(result.rows)} rows from {source}; '
         f'{result.records_matched:,} of {result.records_scanned:,} records matched, '
         f'{gigabytes:.3f} GB scanned\n',
     )

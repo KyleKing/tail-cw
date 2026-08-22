@@ -1724,3 +1724,38 @@ def test_an_unknown_named_filter_names_the_ones_that_exist():
 
     with pytest.raises(ValueError, match='none configured'):
         expand_filter('@errors', {})
+
+
+def test_a_sql_insights_query_is_gated_by_yes_because_nothing_can_be_estimated(tmp_path, capsys, monkeypatch):
+    """The estimate samples the groups it was told; a FROM clause names them in text we do not parse."""
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    query = 'SELECT level, count(*) FROM `g` GROUP BY level'
+    argv = ['export', 'insights', '--language', 'sql', '--query', query, '--config', str(_write_config_file(tmp_path))]
+
+    assert run_cli(argv, None, is_tty=False) == 1
+    err = capsys.readouterr().err
+    assert 'No scan estimate' in err
+    assert 'Re-run with --yes' in err
+
+    assert run_cli([*argv, '--dry-run'], None, is_tty=False) == 0
+
+
+def test_a_sql_insights_query_refuses_log_group_arguments(tmp_path, capsys, monkeypatch):
+    """AWS rejects being told the groups twice, so this is caught before the request."""
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    query = 'SELECT level FROM `g` WHERE level = "error"'
+    argv = [
+        'export',
+        'insights',
+        'irm-ecs-api-prod',
+        '--language',
+        'sql',
+        '--query',
+        query,
+        '--yes',
+        '--config',
+        str(_write_config_file(tmp_path)),
+    ]
+
+    assert run_cli(argv, None, is_tty=False) == 2
+    assert 'takes no log group arguments' in capsys.readouterr().err

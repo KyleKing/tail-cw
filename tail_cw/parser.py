@@ -13,7 +13,7 @@ import argparse
 from pathlib import Path
 
 from tail_cw.aws.alarms import ALARM_STATES
-from tail_cw.aws.insights import MAX_INSIGHTS_LOG_GROUPS
+from tail_cw.aws.insights import MAX_INSIGHTS_LOG_GROUPS, QueryLanguage
 from tail_cw.completion import log_group_completer
 from tail_cw.query.fuzzy import DEFAULT_SIMILARITY
 from tail_cw.query.rollup import DEFAULT_PATTERN_LIMIT, Granularity
@@ -222,6 +222,15 @@ def _configure_insights(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument('--end', default=None, help='End of range: duration or ISO-8601 datetime')
     parser.add_argument('--query', required=True, help='Logs Insights query string')
+    parser.add_argument(
+        '--language',
+        choices=[language.value.lower() for language in QueryLanguage],
+        default=QueryLanguage.CWLI.value.lower(),
+        help=(
+            'Query language (default: cwli). sql and ppl are the OpenSearch languages, '
+            'which bring JOIN and sub-queries; a sql query names its own log groups in FROM'
+        ),
+    )
     parser.add_argument(
         '--limit',
         type=int,

@@ -179,6 +179,7 @@ uv run tail-cw export tail /aws/lambda/my-fn             # NDJSON, flushed per l
 uv run tail-cw export groups '/aws/lambda/*'             # NDJSON group metadata
 uv run tail-cw export summary '/aws/*' --start 1h        # markdown rollup of errors and warnings
 uv run tail-cw export insights '/aws/*' --query '...'    # Logs Insights, billed per GB scanned
+uv run tail-cw export insights --language sql --query 'SELECT level, count(*) FROM `g` GROUP BY level'
 uv run tail-cw export trace 1-68a1f2c3-4d5e '/aws/ecs/*' # one trace as OTLP JSON, from log lines
 uv run tail-cw export xray --start 1h --expression 'service("api")'  # X-Ray trace summaries as NDJSON
 uv run tail-cw export xray-trace 1-68a1f2c3-4d5e         # its segment documents as OTLP JSON
