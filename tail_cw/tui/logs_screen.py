@@ -31,11 +31,13 @@ from textual.worker import get_current_worker
 from tail_cw.aws.events import LogEvent
 from tail_cw.aws.xray import as_xray_trace_id
 from tail_cw.charts.sparkline import sparkline_blocks
+from tail_cw.cli import server_side_pattern
 from tail_cw.concurrency import closing_stream
 from tail_cw.config import TailCWConfig
 from tail_cw.histogram import bucket_events, histogram_headline
 from tail_cw.query.engine import query_parquet_files_to_log_events
-from tail_cw.query.parser import FilterNode, combine_filters, parse_extended_filter, parse_filter_pattern
+from tail_cw.query.expression import parse_query
+from tail_cw.query.parser import FilterNode, combine_filters, parse_filter_pattern
 from tail_cw.query.severity import Severity
 from tail_cw.query.trace import (
     TraceGroup,
@@ -92,12 +94,16 @@ class ProgressUpdate(Message):
 
 
 def _field_syntax_hint(query: str) -> str:
-    """Suggest the field syntax when a fruitless search reads like one.
+    """Suggest the syntax a fruitless search looks like it meant.
 
-    The table renders a record as ``key=value``, so that is what gets typed into
-    the search box, where the field operator is ``:`` and ``=`` falls through to a
-    text match that a JSON record can never satisfy.
+    Two searches parse cleanly and can never match. ``key=value`` is what the table
+    renders, so it is what gets typed, but the field operator is ``:`` and ``=`` falls
+    through to a text match no JSON record satisfies. And ``/re/`` is a text search for
+    those slashes, because the regex delimiter here is ``%``.
     """
+    stripped = query.strip()
+    if len(stripped) > 1 and stripped.startswith('/') and stripped.endswith('/'):
+        return f' · try %{stripped[1:-1]}% for a regex'
     field, separator, value = query.partition('=')
     if not (separator and field and value) or any(character in query for character in ' \t:'):
         return ''
@@ -599,10 +605,17 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         if stream is None:
             self._update_status('Live tail unavailable')
             return
+        try:
+            # CloudWatch applies this one, so a local-only expression has to be refused
+            # rather than sent: it would silently drop its own any-of terms.
+            sent_pattern = server_side_pattern(self.shell.session.filter_pattern)
+        except ValueError as err:
+            self._update_status(f'Live tail cannot use this filter: {err}')
+            return
         self._log_events = []
         self._all_events = []
         self._load_log_events([])
-        self.start_live_tail(partial(stream, tuple(self._log_groups), self.shell.session.filter_pattern))
+        self.start_live_tail(partial(stream, tuple(self._log_groups), sent_pattern))
 
     def _stop_live(self) -> None:
         self.workers.cancel_group(self, 'live_tail')
@@ -914,12 +927,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         try:
             self._update_status(f'Searching for: {query}...')
 
-            if query.startswith(('{', '"')) or (query.startswith('%') and query.endswith('%')):
-                filter_node = parse_filter_pattern(query)
-            elif ':' in query:
-                filter_node = parse_extended_filter(query)
-            else:
-                filter_node = parse_filter_pattern(query)
+            filter_node = parse_query(query)
 
             if self._parquet_paths:
                 results = list(

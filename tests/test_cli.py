@@ -32,6 +32,7 @@ from tail_cw.cli import (
     resolve_parquet_paths,
     run_cli,
     seed_from_args,
+    server_side_pattern,
     session_from_args,
     stream_ndjson,
     write_ndjson,
@@ -1653,3 +1654,39 @@ def test_run_cli_cache_with_no_subcommand_prints_help(tmp_path, capsys):
     del tmp_path
     assert run_cli(['cache'], None, is_tty=False) == 2
     assert 'usage' in capsys.readouterr().err
+
+
+def test_export_tail_refuses_a_filter_cloudwatch_would_answer_wrongly(tmp_path, capsys, monkeypatch):
+    """CloudWatch ignores its ?any-of terms when mixed, so sending this returns wrong events."""
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    argv = [
+        'export',
+        'tail',
+        '/aws/x',
+        '--filter',
+        'ERROR OR level:debug',
+        '--config',
+        str(_write_config_file(tmp_path)),
+    ]
+
+    result = run_cli(argv, None, is_tty=False)
+
+    assert result == 2
+    assert 'cannot be sent to CloudWatch' in capsys.readouterr().err
+
+
+def test_export_tail_translates_a_field_filter_into_a_pattern_cloudwatch_understands(tmp_path, monkeypatch):
+    """`level:error` used to reach AWS verbatim, where it matched no JSON record at all."""
+    streamer = _FakeStreamer([])
+    monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
+    argv = ['export', 'tail', '/aws/x', '--filter', 'level:error', '--config', str(_write_config_file(tmp_path))]
+
+    assert run_cli(argv, None, is_tty=False, stream_events=streamer) == 0
+    assert streamer.calls[0]['filter_pattern'] == '{ $.level = "error" }'
+
+
+def test_server_side_pattern_passes_through_what_cloudwatch_can_mean():
+    assert server_side_pattern(None) is None
+    assert server_side_pattern('ERROR OR WARNING') == '?ERROR ?WARNING'
+    with pytest.raises(ValueError, match='cannot be sent to CloudWatch'):
+        server_side_pattern('NOT ERROR')

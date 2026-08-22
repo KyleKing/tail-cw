@@ -59,8 +59,9 @@ from tail_cw.demo import demo_dashboard
 from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.parser import DEFAULT_WINDOW, build_parser
 from tail_cw.query.engine import query_parquet_files_to_log_events
+from tail_cw.query.expression import parse_query, portable_filter_pattern
 from tail_cw.query.otlp import trace_error_summary, trace_groups_to_otlp, xray_trace_summary, xray_traces_to_otlp
-from tail_cw.query.parser import FilterNode, parse_filter_pattern
+from tail_cw.query.parser import FilterNode
 from tail_cw.query.report import render_alarm_markdown, render_markdown, render_rows_markdown
 from tail_cw.query.rollup import Granularity, RollupReport, roll_up
 from tail_cw.query.severity import Severity
@@ -253,9 +254,44 @@ async def iter_tail_events(
         yield event
 
 
+def _tail_backfill(backfill: str | None, *, now: datetime) -> datetime | None:
+    """Parse the backfill window, which has to be in the past to mean anything.
+
+    Raises:
+        ValueError: If the value is unparseable or not in the past.
+    """
+    if backfill is None:
+        return None
+    start = parse_time(backfill, now=now)
+    if start >= now:
+        msg = f'--backfill ({start.isoformat()}) must be in the past'
+        raise ValueError(msg)
+    return start
+
+
+def server_side_pattern(filter_pattern: str | None) -> str | None:
+    """Translate a filter for AWS, refusing what CloudWatch would answer wrongly.
+
+    A live tail is the one path that hands a pattern to CloudWatch, and CloudWatch
+    silently ignores its ``?`` any-of terms when they are mixed with anything else. So a
+    local-only expression is rejected here rather than sent and quietly mismatched; the
+    events it would have filtered are still filtered locally.
+
+    Raises:
+        ValueError: If the filter cannot be expressed as a CloudWatch pattern.
+    """
+    if not filter_pattern:
+        return None
+    portable = portable_filter_pattern(parse_query(filter_pattern))
+    if portable.pattern is None:
+        msg = f'{filter_pattern!r} cannot be sent to CloudWatch: {portable.reason}'
+        raise ValueError(msg)
+    return portable.pattern
+
+
 def _local_filter(filter_pattern: str | None) -> FilterNode | None:
     """Parse a ``--filter`` value for local evaluation against cached events."""
-    return parse_filter_pattern(filter_pattern) if filter_pattern else None
+    return parse_query(filter_pattern) if filter_pattern else None
 
 
 def open_log_cache(config: TailCWConfig) -> LogCache:
@@ -648,18 +684,16 @@ async def _export_tail(
         sys.stderr.write(f'At most {MAX_LIVE_TAIL_LOG_GROUPS} log groups are supported, got {len(args.log_groups)}\n')
         return 2
     try:
-        backfill_start = parse_time(args.backfill, now=now) if args.backfill is not None else None
+        backfill_start = _tail_backfill(args.backfill, now=now)
+        sent_pattern = server_side_pattern(args.filter_pattern)
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
-        return 2
-    if backfill_start is not None and backfill_start >= now:
-        sys.stderr.write(f'--backfill ({backfill_start.isoformat()}) must be in the past\n')
         return 2
     if _load_config_or_report(args.config_path) is None:
         return 1
     request = TailRequest(
         log_groups=tuple(args.log_groups),
-        filter_pattern=args.filter_pattern,
+        filter_pattern=sent_pattern,
         backfill_start=backfill_start,
         profile=args.profile,
         region=args.region,

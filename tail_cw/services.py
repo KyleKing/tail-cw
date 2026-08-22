@@ -40,7 +40,7 @@ from tail_cw.demo import (
 )
 from tail_cw.preview import GroupPreview, bucket_event_counts, build_group_preview
 from tail_cw.query.engine import query_parquet_files_to_log_events
-from tail_cw.query.parser import parse_filter_pattern
+from tail_cw.query.expression import parse_query
 from tail_cw.query.rollup import RollupReport, roll_up
 from tail_cw.query.severity import Severity
 from tail_cw.query.trace import TraceGroup, query_traces_from_parquet_files
@@ -291,7 +291,7 @@ def _live_services(
 
     async def roll_up_logs(groups: Sequence[str], start: datetime, end: datetime) -> RollupReport:
         paths = await resolve_logs(groups, start, end)
-        filter_node = parse_filter_pattern(session.filter_pattern) if session.filter_pattern else None
+        filter_node = parse_query(session.filter_pattern) if session.filter_pattern else None
         return await run_blocking(
             executor,
             lambda: roll_up(
