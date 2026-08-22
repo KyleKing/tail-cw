@@ -156,10 +156,28 @@ If you introduce or modify Textual UI code:
     - Use `deque(maxlen=...)` as a ring buffer for tailing logs.
     - Chunk incoming lines; coalesce updates to reduce render churn.
     - Consider backpressure when sources outpace UI frame rate.
+- Prompts and one-row inputs
+    - A prompt must not `dock`.
+        A docked input lands on the same row as the docked `Footer` or breadcrumb and is
+        painted over, so it reads and runs what you type while showing nothing
+    - A one-row `Input` must restate `PROMPT_CSS` (`tail_cw/tui/command_bar.py`) in its own
+        leaf selector, `border: none !important` included.
+        `Input` sets a tall border and a height of 3, `Input:focus` outranks a plain type
+        selector, and an inherited rule loses the tie
+    - A hidden `Input` left in the focus chain takes the initial focus and swallows every
+        keystroke the footer advertises, so `HiddenInput` flips `can_focus` with `display`
+    - Never handle `on_descendant_blur` to restore focus.
+        It fires when another control opens
+        and steals the focus straight back; watch the one widget you mean
 - Testing Textual
     - Structure UI logic so state transitions are driven by pure functions you can unit-test.
     - Use Textual’s test utilities (Pilot) for interaction tests; assert on widget state, not
         pixel-perfect frames.
+    - A binding is not covered until a test *presses the key*.
+        Three dead bindings shipped with passing tests that called the action directly
+    - Pilot cannot see a control that renders nothing, so a prompt's test asserts its
+        `content_region` has a row.
+        Drive the app under tmux before believing a new control works
 
 References:
 

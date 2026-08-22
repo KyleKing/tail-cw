@@ -212,3 +212,41 @@ point of the command that produced it.
 - ADR 0007 is unaffected. Nothing here builds tracing, and a smaller CLI surface makes the
     hybrid option easier, not harder, because the terminal path gets sharper while heavy
     historical analysis stays out of scope
+
+## The log table spends its width by priority (added 2026-08-22)
+
+The table a reader spends the most time looking at was the least designed surface in the
+app: four fixed columns totalling 71 characters left Message twelve characters wide at
+80
+columns, so every row read `{"method":"G`.
+`tail_cw/tui/log_viewer.py` now budgets the columns against the terminal width and drops
+them in priority order, and `plan_columns` is a pure function so the budget is testable
+without a terminal.
+The date goes first (every row shares the window the breadcrumb states), then the stream
+below 120 columns, and the group whenever the view has one.
+Whatever is left goes to the message, and anything a fixed width can clip is cut with
+`…`
+so a truncated log group name cannot read as a whole one.
+
+A record is rendered the way a person reads it rather than as JSON: the phrase it
+carries
+(`event`, `message`, `msg`, configurable in `[message]`) leads, and its remaining fields
+follow as dim `key=value`, which is the shape `tail-jsonl` established.
+Severity is shown twice over, as a glyph and as colour, so it survives `NO_COLOR`.
+A record that declares its own level or status is coloured strongly and one classified
+by
+reading its prose is dimmed, because a confident wrong colour in a thousand-row table is
+worse than a hedged right one.
+
+Three layout rules came out of testing this in a real terminal rather than under Pilot,
+and each had produced a control that worked while showing nothing:
+
+- a prompt must not dock. A docked input lands on the same row as the docked `Footer` or
+    breadcrumb and is painted over
+- a prompt must restate the whole rule in its own leaf selector, `border: none !important`
+    included.
+    `Input` sets a tall border and a height of 3, and `Input:focus` outranks a
+    plain type selector, so an inherited rule loses and a bordered one-row input has no row
+    left for its text
+- a handler on every descendant blur steals focus back the moment another control opens.
+    The search box watches only its own blur now

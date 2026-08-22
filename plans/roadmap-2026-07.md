@@ -12,15 +12,16 @@ audit's output, and the evidence for each item is in
 
 ## Delivered
 
-| Milestone                      | Outcome                                                                                                                           | Record                                                                                                                                        |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0 wire the drivetrain         | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                              | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
-| M1 live tail                   | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached       | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
-| M2 navigation-first discovery  | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets                | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
-| M4 dashboards and metrics      | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs    | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
-| M5 async AWS I/O               | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests     | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
-| M6 aggregation surface         | `export summary` with fuzzy-merged pattern rollups, `export insights`, `export alarms --history`, `export metrics`, CPU budget    | this file's queue, plus [the evaluation](evaluation-2026-08-21-vs-aws-cli.md)                                                                 |
-| M7 cache v2 and one front door | segmented cache windows, a schema at 25 bytes per event, rollup/alarms/Insights in the TUI behind a cost gate, one shared history | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
+| Milestone                      | Outcome                                                                                                                                                            | Record                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 wire the drivetrain         | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                                                               | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
+| M1 live tail                   | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached                                        | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
+| M2 navigation-first discovery  | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets                                                 | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
+| M4 dashboards and metrics      | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs                                     | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
+| M5 async AWS I/O               | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests                                      | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
+| M6 aggregation surface         | `export summary` with fuzzy-merged pattern rollups, `export insights`, `export alarms --history`, `export metrics`, CPU budget                                     | this file's queue, plus [the evaluation](evaluation-2026-08-21-vs-aws-cli.md)                                                                 |
+| M7 cache v2 and one front door | segmented cache windows, a schema at 25 bytes per event, rollup/alarms/Insights in the TUI behind a cost gate, one shared history                                  | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
+| M8 the queue's last five       | Insights scan estimate and a confirmation ceiling, `:trace <id>` and `export trace` as OTLP, a 0.07s CLI start, a log table budgeted by width, `export dimensions` | [0008](../docs/docs/adr/0008-single-interactive-tui.md), [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)               |
 
 Two deviations from the original plans are worth carrying forward, because they change
 what a reader should expect to find.
@@ -31,98 +32,60 @@ return it (that would be a `DescribeLogStreams` call per group); your own select
 recency sorts the list instead, which is what the console's "recently accessed" actually
 gives you.
 
-## Next up, in priority order
+## Next up
 
-Six investigations on 2026-08-21 produced five new commands and four correctness fixes,
-and a ranking of what the tool got wrong.
-Items 1 to 4 of that ranking shipped on 2026-08-22 (see Delivered above); what remains
-is below, still in order.
+The 2026-08-21 audit's five remaining items all shipped on 2026-08-22 (M8 above).
+What follows is what they measured, because half the numbers were wrong.
 
-### 1. Cost preflight for Insights
+### What items 1 to 5 measured after shipping
 
-[ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md) and this file
-both promised a scan estimate before any paid query.
-Today the size prints after the bill is incurred:
-`292,676 of 3,293,189 records matched, 1.149 GB scanned`.
-There is no AWS preflight API, and the console's own estimate is not exposed, so
-estimate it from what `DescribeLogGroups` already returns: `storedBytes` divided by the
-retention period gives bytes per day, multiplied by the requested window and the group
-count gives an honest order of magnitude.
-Show it, and the dollar figure at $0.005/GB, before `StartQuery`.
-Label it an estimate, because stored bytes are compressed and Insights bills
-uncompressed, so it reads low.
+- **the scan estimate is a scale, not a number.** Stored bytes over retention was
+    predicted to read low, because CloudWatch stores compressed and Insights bills
+    uncompressed.
+    Measured against three production groups it was out by up to 8x in *both* directions:
+    `irm-ecs-api-prod` estimated 0.002 GB against 0.017 GB actual, and
+    `/aws/ecs/irm-metrics`
+    estimated 0.007 GB against 0.001 GB.
+    Averaging a group's whole life over its window is the larger error, so the label says so
+    and the ceiling only catches the genuinely huge cases
+- **72 spans sharing one id is not a trace.** The first real `export trace` against prod
+    returned 72 spans that all carried the same `span_id`, because every line a service logs
+    inside a span carries that span's id.
+    They are the span's events, so that is what the export emits now: one span, 72 events,
+    7.6s wide.
+    An X-Ray id also needs its version prefix dropped rather than truncated off the far end,
+    which would name a different trace
+- **the startup cost was mostly structural, not lazy loading.** `tail-cw --help` went from
+    0.35s to 0.07s, and most of it came from three layering fixes rather than from deferring
+    imports: `LogEvent` moved out of the aiobotocore-importing client module, the pure
+    record
+    helpers moved out of the Polars-importing storage module, and three package `__init__`
+    facades that re-exported everything (and so loaded everything) were emptied.
+    Exactly one deferred import remains, in `tail_cw/__main__.py`
+- **the log table's 12 characters were a symptom.** Budgeting the columns by width gets
+    Message from 12 to about 60 characters at 80 columns, and dropping the date, the group,
+    and the search box's border gets the row count from 17 to 19.
+    Rendering a record as its phrase plus dim `key=value` pairs (the `tail-jsonl` shape)
+    matters more than the width did
+- **three more controls that worked while showing nothing.** The command line ran what you
+    typed into it and displayed none of it, at every width, because a docked prompt lands on
+    the footer's row and a one-row `Input` keeps the border `Input:focus` gives it.
+    `tail_cw/tui/picker.py` had already solved this with `border: none !important` and a
+    comment, and the fix was not reused.
+    Look for the reference implementation first
 
-### 2. An entry point that takes a trace ID
+### Still open, and worth doing next
 
-`TraceViewerScreen` works and is reachable with `t` from the log view, and it was
-useless for the investigation that needed it, because the real workflow starts with an
-identifier pasted out of a Slack alarm and there is no way to hand the tool one.
-That gap cost four hand-written Insights queries on the Bedrock `ReadTimeoutError`
-investigation.
-Add `:trace <id>` in the TUI and `tail-cw export trace <id>` emitting OTLP JSON per
-[ADR 0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md).
-The fan-out and the timestamp-merged read already exist from the M2 browser work, so
-this is an entry point rather than a subsystem.
-An error summary over the trace (first service to error, total errors, services touched)
-is one status line in the same screen and needs no parent links.
-
-### 3. Lazy imports so the CLI starts in a tenth of a second
-
-`tail-cw --help` takes 0.34s against 0.03s for a bare interpreter, and 277ms of that is
-import: aiobotocore at 86ms, Polars at 34ms, and `beartype.typing` at 31ms, none of
-which argparse needs to reject a typo.
-Defer them behind the dispatch and the startup penalty against the AWS CLI (0.35s per
-invocation, measured) mostly disappears, which matters because the tool gets called in
-loops from shell scripts.
-One constraint: `apply_native_thread_limits()` must still run before anything imports
-Polars, and moving the Polars import later makes that easier rather than harder.
-
-### 4. The log table, the most-looked-at and least-designed surface
-
-Detailed in [the critique](tui-critique-2026-08-21.md).
-Responsive column widths, drop `log_group` when the view has one group, drop
-`log_stream` and `event_id` below roughly 120 columns since the detail pane shows both
-in full, truncate with `…` everywhere a fixed width can clip, and colour the message by
-`query.severity.event_severity` with a level glyph so it survives `NO_COLOR`.
-At 80x24 the Message column currently renders 12 characters wide, which makes the view
-unusable over SSH from a phone.
-The severity question worth settling first: colour only records carrying an explicit
-`level`, or colour inferred ones too.
-A wrong colour in a live table is worse than no colour.
-
-### 5. Metric dimension discovery
-
-The latency investigation could not name the slow endpoint from metrics, because
-`ApiRequestLatencyMs` carries only `Method` and `StatusClass` and no route, and there
-was no way to learn that without reading the emitter's source.
-`ListMetrics` returns the dimension sets a metric actually publishes.
-Surfacing them turns "which dimensions does this metric have" from a code-reading
-exercise into a command, and it is the blocker that recurred most across the six
-investigations.
-
-### What items 1 to 4 measured after shipping
-
-Worth keeping, because two of the four predictions were wrong in the useful direction:
-
-- **disk.** The schema predicted 38% of v1.
-    On the same log group it landed at 25 bytes per event against 72, so 35%, and the whole
-    local cache fell from 119 MB to 3.2 MB once the superseded v1 entries were reclaimed
-- **repeat latency.** A cold hour costs 24.6s.
-    Repeating it with a window that has moved costs 6.3s, because the aligned interior is
-    reused and only the ragged ends and the unsettled tail are refetched.
-    The 13.8x figure needed identical ISO timestamps; 3.9x is what a relative window
-    actually gets
-- **the filter.** Dropping it from the key made a local filter mandatory, which exposed a
-    real defect: Polars widens the `parsed` struct across the whole file, so re-encoding one
-    record emits every field any record had.
-    A search for `ERROR` matched all 100,292 events in an hour because some other event
-    carried `error_type`.
-    Null fields are stripped from the search text now, and the same query returns 125
-- **two dead keybindings.** `q` never quit and Enter never opened the record detail.
-    Both were bindings whose action the screen did not have or whose key a child widget had
-    already claimed, and both had passing tests, because the tests called the action instead
-    of pressing the key.
-    A binding is not covered until a test presses the key
+- **cancelling an in-flight fetch.** A two-minute multi-group fetch reports no progress
+    and
+    the footer offers no way out (heuristic 1 and 3 in
+    [the critique](tui-critique-2026-08-21.md))
+- **the estimate could be measured rather than averaged.** `DescribeLogStreams` or a small
+    `FilterLogEvents` sample would give a recent rate instead of a lifetime average, at the
+    cost of a request before the query
+- **`export metrics` emits local time** while every other surface emits UTC.
+    One tool, two
+    conventions
 
 ## Then: M3 investigation tools
 
