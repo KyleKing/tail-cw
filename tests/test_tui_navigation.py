@@ -137,4 +137,4 @@ def test_breadcrumb_of_the_root_is_one_label() -> None:
 
 
 def test_view_kind_values_are_command_names() -> None:
-    assert [str(kind) for kind in ViewKind] == ['groups', 'logs', 'dashboards', 'dashboard', 'report']
+    assert [str(kind) for kind in ViewKind] == ['groups', 'logs', 'dashboards', 'dashboard', 'report', 'xray']

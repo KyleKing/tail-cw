@@ -24,6 +24,7 @@ class ViewKind(StrEnum):
     DASHBOARDS = 'dashboards'
     DASHBOARD = 'dashboard'
     REPORT = 'report'
+    XRAY = 'xray'
 
 
 @dataclass(frozen=True)

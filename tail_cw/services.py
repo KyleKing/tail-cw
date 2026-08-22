@@ -25,6 +25,7 @@ from tail_cw.aws.insights import InsightsResult, measure_group_rates, run_insigh
 from tail_cw.aws.live_tail import stream_live_tail
 from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups
 from tail_cw.aws.metrics import MetricSeries, fetch_metric_data
+from tail_cw.aws.xray import XRayTrace, batch_get_traces
 from tail_cw.cache.storage import read_parquet_to_log_events
 from tail_cw.cli import FetchRequest, Session, ShellSeed, dispatch, resolve_parquet_paths
 from tail_cw.concurrency import blocking_pool, fetch_pool, run_blocking, take
@@ -46,6 +47,7 @@ from tail_cw.query.trace import TraceGroup, query_traces_from_parquet_files
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.shell import (
     CountEvents,
+    FetchXRayTrace,
     ListAlarms,
     LoadTraces,
     LogVolume,
@@ -192,7 +194,7 @@ def _cache_services(
     return resolve_logs, log_volume, count_events, load_traces
 
 
-def _cloudwatch_services(pool: ClientProvider) -> tuple[ListAlarms, RunInsights, SampleRates]:
+def _cloudwatch_services(pool: ClientProvider) -> tuple[ListAlarms, RunInsights, SampleRates, FetchXRayTrace]:
     """Build the services that read CloudWatch without touching the Parquet cache."""
 
     async def count_transitions(client: Any, name: str, start: datetime, end: datetime) -> int:
@@ -227,7 +229,14 @@ def _cloudwatch_services(pool: ClientProvider) -> tuple[ListAlarms, RunInsights,
     async def sample_rates(groups: Sequence[str], start: datetime, end: datetime) -> dict[str, float]:
         return await measure_group_rates(await pool.client('logs'), list(groups), start=start, end=end)
 
-    return list_alarms, run_insights, sample_rates
+    async def fetch_xray_trace(trace_id: str) -> XRayTrace:
+        traces = await batch_get_traces(await pool.client('xray'), [trace_id])
+        if not traces:
+            msg = f'X-Ray has no segments for {trace_id}'
+            raise LookupError(msg)
+        return traces[0]
+
+    return list_alarms, run_insights, sample_rates, fetch_xray_trace
 
 
 def _live_services(
@@ -244,7 +253,7 @@ def _live_services(
         executor,
         fetch_executor,
     )
-    list_alarms, run_insights, sample_rates = _cloudwatch_services(pool)
+    list_alarms, run_insights, sample_rates, fetch_xray_trace = _cloudwatch_services(pool)
 
     async def list_groups() -> list[LogGroupInfo]:
         logs = await pool.client('logs')
@@ -307,6 +316,7 @@ def _live_services(
         list_alarms=list_alarms,
         run_insights=run_insights,
         sample_rates=sample_rates,
+        fetch_xray_trace=fetch_xray_trace,
     )
 
 

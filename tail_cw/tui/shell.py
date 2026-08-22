@@ -28,6 +28,7 @@ from tail_cw.aws.events import LogEvent
 from tail_cw.aws.insights import InsightsResult
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.aws.metrics import MetricSeries
+from tail_cw.aws.xray import XRayTrace
 from tail_cw.cli import Session, expand_presets
 from tail_cw.config import TailCWConfig
 from tail_cw.preview import GroupPreview
@@ -66,6 +67,7 @@ RollUpLogs = Callable[[Sequence[str], datetime, datetime], Awaitable[RollupRepor
 ListAlarms = Callable[[datetime, datetime], Awaitable[tuple[list[AlarmSummary], dict[str, int]]]]
 RunInsights = Callable[[Sequence[str], str, datetime, datetime], Awaitable[InsightsResult]]
 SampleRates = Callable[[Sequence[str], datetime, datetime], Awaitable[dict[str, float]]]
+FetchXRayTrace = Callable[[str], Awaitable[XRayTrace]]
 ScreenFactory = Callable[[NavTarget], 'ShellScreen']
 
 MAX_SELECTED_GROUPS = 10
@@ -99,6 +101,7 @@ class ShellServices:
     list_alarms: ListAlarms | None = None
     run_insights: RunInsights | None = None
     sample_rates: SampleRates | None = None
+    fetch_xray_trace: FetchXRayTrace | None = None
 
 
 @dataclass(frozen=True)
@@ -132,6 +135,7 @@ def _global_commands() -> dict[str, ShellCommand]:
         'range': ShellCommand('Set the time window ending now', _RANGE_CHOICES),
         'tail': ShellCommand('Stream the selected groups live', ('<group>',)),
         'trace': ShellCommand('Open a trace by id across the selected groups', ('<trace>',)),
+        'xray': ShellCommand('Draw one X-Ray trace as a waterfall', ('<trace>',)),
         'alarms': ShellCommand('Rank alarms by how often they changed state'),
     }
 
@@ -437,6 +441,8 @@ class TailCWApp(App[None]):
                 self._command_logs(argument, live=False)
             case 'trace':
                 self._command_trace(argument)
+            case 'xray':
+                self._command_xray(argument)
             case 'tail':
                 self._command_logs(argument, live=True)
             case _:
@@ -472,6 +478,20 @@ class TailCWApp(App[None]):
                 kind=ViewKind.LOGS,
                 label=f'trace {trace_id[:MAX_LABEL_CHARS]}',
                 payload=tuple(groups),
+                argument=trace_id,
+            ),
+        )
+
+    def _command_xray(self, argument: str) -> None:
+        """Open one X-Ray trace, which needs no group selection: X-Ray is not per group."""
+        trace_id = argument.strip()
+        if not trace_id:
+            self.notify('Usage: :xray <id>', severity='warning')
+            return
+        self.goto(
+            NavTarget(
+                kind=ViewKind.XRAY,
+                label=f'xray {trace_id[:MAX_LABEL_CHARS]}',
                 argument=trace_id,
             ),
         )

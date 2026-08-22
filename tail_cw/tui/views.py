@@ -14,6 +14,7 @@ from tail_cw.tui.logs_screen import LogsScreen
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.report_screen import ReportKind, ReportScreen
 from tail_cw.tui.shell import ShellScreen
+from tail_cw.tui.waterfall_screen import WaterfallScreen
 
 
 def build_screen(target: NavTarget) -> ShellScreen:
@@ -31,6 +32,8 @@ def build_screen(target: NavTarget) -> ShellScreen:
             return DashboardsScreen()
         case ViewKind.DASHBOARD:
             return DashboardScreen(target.payload[0] if target.payload else target.label)
+        case ViewKind.XRAY:
+            return WaterfallScreen(target.argument)
         case ViewKind.REPORT:
             # The first payload item names the report; the rest is its argument.
             return ReportScreen(ReportKind(target.payload[0]), target.payload[1:])
