@@ -1,6 +1,7 @@
 """Tests for cache storage: key generation, the v2 Parquet schema, and eviction."""
 
 import hashlib
+import locale
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -322,6 +323,16 @@ def test_separate_keys_stay_independent(fix_test_cache: Path):
     ],
 )
 def test_text_that_is_not_json_survives_the_round_trip(fix_test_cache: Path, message):
+    with LogCache(fix_test_cache / 'text') as cache:
+        key = _key('/aws/lambda/my-function_v2-test')
+        cache.write([make_event(message)], key)
+
+        assert [event.message for event in cache.read(key)] == [message]
+
+
+def test_unicode_message_survives_a_non_utf8_preferred_encoding(fix_test_cache: Path, monkeypatch):
+    monkeypatch.setattr(locale, 'getpreferredencoding', lambda do_setlocale=True: 'ascii')  # noqa: ARG005
+    message = 'Message with unicode: 你好世界'
     with LogCache(fix_test_cache / 'text') as cache:
         key = _key('/aws/lambda/my-function_v2-test')
         cache.write([make_event(message)], key)

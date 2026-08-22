@@ -253,7 +253,7 @@ def _log_events_to_ndjson_file(
     total_events = 0
     jsonl_events = 0
 
-    with output_path.open('w') as f:
+    with output_path.open('w', encoding='utf-8') as f:
         for event in log_events:
             total_events += 1
 
