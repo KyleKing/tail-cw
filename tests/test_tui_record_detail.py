@@ -294,7 +294,7 @@ async def test_modal_from_app_integration():
         assert table.cursor_row >= 0
         initial_depth = len(app.screen_stack)
 
-        screen.action_show_detail()
+        await pilot.press('enter')
         await pilot.pause()
 
         assert len(app.screen_stack) == initial_depth + 1

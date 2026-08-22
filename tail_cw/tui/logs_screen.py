@@ -372,6 +372,16 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._update_status(status_text)
         message.stop()
 
+    @on(DataTable.RowSelected, '#log_table')
+    def on_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Open the detail modal for the row Enter was pressed on.
+
+        DataTable binds Enter itself, so the screen's own binding never sees the
+        key and the footer's Detail hint would otherwise do nothing.
+        """
+        event.stop()
+        self.action_show_detail()
+
     def action_show_detail(self) -> None:
         """Open the detail modal for the row under the cursor."""
         event = self._selected_event()
