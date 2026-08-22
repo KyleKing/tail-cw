@@ -37,6 +37,9 @@ Retrieve this location programmatically via `tail_cw.config.get_default_cache_di
     a number rather than a scale.
 - `[message]` names the record fields the log table reads as the human-readable phrase,
     and the ones it drops from the tabulated remainder.
+- `[filters]` names filter expressions so `@name` stands in for one, the same convention
+    `[presets]` uses.
+    See [the filter guide](FILTER_GUIDE.md).
 - `[presets]` names groups of log groups so `@name` stands in for the whole set.
 - `[preview]` bounds the log group previews shown in the browser.
 - `[tui]` exposes pagination and search limits for the Textual UI.
@@ -60,6 +63,9 @@ confirm_above_gb = 1.0 # estimated GB before a query needs --yes or a keypress
 [message]
 phrase_fields = ["event", "message", "msg"]
 hidden_fields = ["timestamp", "level"]
+
+[filters]
+errors = "level:error OR level:critical" # then --filter @errors, or :filter @errors
 
 [presets]
 api = ["/aws/lambda/api-a", "/ecs/api-b"]

@@ -170,6 +170,9 @@ class TailCWConfig:
         [presets]
         api = ["/aws/lambda/api-a", "/ecs/api-b"]
 
+        [filters]
+        errors = "level:error OR level:critical"
+
     Attributes:
         cache: Cache persistence configuration.
         fetch: How many segment fetches run at once.
@@ -180,6 +183,8 @@ class TailCWConfig:
         trace: Trace extraction configuration.
         presets: Named log group sets, referenced as ``@name`` wherever a log
             group pattern is accepted.
+        filters: Named filter expressions, referenced as ``@name`` wherever a
+            filter is accepted, extending the same convention as ``presets``.
     """
 
     cache: CacheConfig = field(default_factory=CacheConfig)
@@ -190,6 +195,7 @@ class TailCWConfig:
     tui: TUIConfig = field(default_factory=TUIConfig)
     trace: TraceConfig = field(default_factory=TraceConfig)
     presets: dict[str, list[str]] = field(default_factory=dict)
+    filters: dict[str, str] = field(default_factory=dict)
 
 
 def get_default_config_path() -> Path:
@@ -242,6 +248,24 @@ def _load_presets(section: Any) -> dict[str, list[str]]:
             raise ValueError(msg)
         presets[name] = list(value)
     return presets
+
+
+def _load_named_filters(section: Any) -> dict[str, str]:
+    match section:
+        case None:
+            return {}
+        case dict():
+            table: dict[str, Any] = section
+        case _:
+            msg = '[filters] must be a table mapping each name to a filter expression'
+            raise ValueError(msg)
+    filters: dict[str, str] = {}
+    for name, value in table.items():
+        if not isinstance(value, str) or not value.strip():
+            msg = f'Filter {name!r} must be a non-empty filter expression'
+            raise ValueError(msg)
+        filters[name] = value
+    return filters
 
 
 def load_config(config_path: Path | None = None) -> TailCWConfig:
@@ -307,6 +331,7 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
         tui=TUIConfig(**tui_kwargs),
         trace=TraceConfig(**trace_kwargs),
         presets=_load_presets(data.get('presets')),
+        filters=_load_named_filters(data.get('filters')),
     )
 
     if config.cache.cache_dir is None:
@@ -373,7 +398,10 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'trace_id_fields = ["trace_id", "traceId", "x-trace-id"]\n\n'
             '[presets]\n'
             '# Reference a preset as @api wherever a log group pattern is accepted.\n'
-            '# api = ["/aws/lambda/api-a", "/ecs/api-b"]\n'
+            '# api = ["/aws/lambda/api-a", "/ecs/api-b"]\n\n'
+            '[filters]\n'
+            '# Reference a filter as @errors wherever a filter is accepted.\n'
+            '# errors = "level:error OR level:critical"\n'
         )
 
         temp_path = path.with_suffix('.tmp')

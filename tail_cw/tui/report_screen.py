@@ -236,7 +236,7 @@ async def _estimate_scan(screen: ReportScreen, groups: Sequence[str]) -> ScanEst
 async def _load_history(_screen: ReportScreen) -> str:  # noqa: RUF029 - conforms to the loader signature
     entries = load_history()
     if not entries:
-        return 'Nothing recorded yet. Rollups, alarm reads, and Insights queries land here.\n'
+        return 'Nothing recorded yet. Rollups, alarm reads, Insights queries, and filters land here.\n'
     return '# History\n\n' + '\n'.join(_history_section(entry) for entry in entries)
 
 

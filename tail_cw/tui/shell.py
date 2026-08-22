@@ -29,8 +29,9 @@ from tail_cw.aws.insights import InsightsResult
 from tail_cw.aws.log_groups import LogGroupInfo
 from tail_cw.aws.metrics import MetricSeries
 from tail_cw.aws.xray import XRayTrace
-from tail_cw.cli import Session, expand_presets
+from tail_cw.cli import Session, expand_filter, expand_presets
 from tail_cw.config import TailCWConfig
+from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.preview import GroupPreview
 from tail_cw.query.rollup import RollupReport
 from tail_cw.query.trace import TraceGroup
@@ -124,7 +125,7 @@ def _global_commands() -> dict[str, ShellCommand]:
     return {
         'dash': ShellCommand('Open a dashboard by name', ('<dashboard>',)),
         'dashboards': ShellCommand('List the dashboards in this account'),
-        'filter': ShellCommand('Set the shared filter pattern; empty clears it'),
+        'filter': ShellCommand('Set the shared filter; @name uses a configured one, empty clears', ('<filter>',)),
         'groups': ShellCommand('Browse log groups'),
         'help': ShellCommand('List the available commands'),
         'history': ShellCommand('Browse recorded rollups, alarm reads, and Insights queries'),
@@ -401,6 +402,8 @@ class TailCWApp(App[None]):
                 return self.session.dashboard_names
             case ('<group>',):
                 return [f'@{name}' for name in sorted(self.config_data.presets)] + self.session.group_names
+            case ('<filter>',):
+                return [f'@{name}' for name in sorted(self.config_data.filters)]
             case _:
                 return list(args)
 
@@ -563,8 +566,27 @@ class TailCWApp(App[None]):
         self._refresh_current()
 
     def _command_filter(self, argument: str) -> None:
-        self.session.filter_pattern = argument or None
-        self.notify(f'Filter -> {argument}' if argument else 'Filter cleared', severity='information')
+        """Set the filter every view shares, expanding an ``@name`` reference."""
+        try:
+            expanded = expand_filter(argument or None, self.config_data.filters)
+        except ValueError as err:
+            self.notify(str(err), severity='warning')
+            return
+        self.session.filter_pattern = expanded
+        if expanded is None:
+            self.notify('Filter cleared', severity='information')
+        else:
+            self.notify(f'Filter -> {expanded}', severity='information')
+            append(
+                make_entry(
+                    HistoryKind.FILTER,
+                    recorded=datetime.now(tz=UTC),
+                    title=expanded,
+                    window=self.session.window_label(),
+                    detail=f'set on {", ".join(self.session.selected_groups) or "no selection"}',
+                    profile=self.session.profile,
+                ),
+            )
         self._refresh_current()
 
     def _refresh_current(self) -> None:

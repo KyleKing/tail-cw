@@ -34,6 +34,7 @@ class HistoryKind(StrEnum):
     """Which surface produced an entry."""
 
     ALARMS = 'alarms'
+    FILTER = 'filter'
     INSIGHTS = 'insights'
     SUMMARY = 'summary'
 

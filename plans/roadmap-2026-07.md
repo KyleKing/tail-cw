@@ -275,9 +275,13 @@ where it matched no JSON record at all, and is now translated to
 
 `docs/docs/FILTER_GUIDE.md` is the reference, since the syntax previously lived only in
 `parser.py` docstrings.
-Still open: named filter presets extending the `@name` convention `[presets]` already
-uses, and persisted per-profile filter history, which should share whatever storage the
-query history uses rather than inventing a second one.
+Named filters shipped too, as a `[filters]` table read through the same `@name`
+convention `[presets]` uses, expanded once where the filter is set rather than at every
+reader.
+Only a whole filter can be a reference, because a filter is one expression rather than a
+list and there is no position where half a substitution would be unambiguous.
+Filter history reuses `history.py` as the roadmap required, as a new `HistoryKind`, so
+`:history` shows filters beside the rollups and Insights queries with no second store.
 
 **Cache and query performance.** Done on 2026-08-22, and the framing was wrong.
 Parsing was already in Rust: Polars does the real decode, and the write path measured

@@ -552,6 +552,28 @@ def session_from_args(args: argparse.Namespace, now: datetime) -> Session:
     )
 
 
+def expand_filter(text: str | None, filters: Mapping[str, str]) -> str | None:
+    """Replace a whole-filter ``@name`` reference with its configured expression.
+
+    Only the whole filter, not a term inside one: a filter is one expression rather than
+    a list, so there is no position where a partial substitution would be unambiguous.
+    Anything not starting with ``@`` passes through untouched.
+
+    Raises:
+        ValueError: When the reference names no configured filter. Expanding to nothing
+            would silently search for everything.
+    """
+    if text is None or not text.startswith('@'):
+        return text
+    name = text.removeprefix('@').strip()
+    expression = filters.get(name)
+    if expression is None:
+        known = ', '.join(f'@{key}' for key in sorted(filters)) or 'none configured'
+        msg = f'Unknown filter {text!r}; configured filters: {known}'
+        raise ValueError(msg)
+    return expression
+
+
 def expand_presets(patterns: Sequence[str], presets: Mapping[str, Sequence[str]]) -> list[str]:
     """Replace every ``@name`` reference with the log groups of that named preset.
 
@@ -626,6 +648,7 @@ def _run_shell_command(args: argparse.Namespace, now: datetime, run_shell: RunSh
         return 1
     try:
         seed = seed_from_args(args, config.presets)
+        session.filter_pattern = expand_filter(session.filter_pattern, config.filters)
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
@@ -661,15 +684,15 @@ async def _export_logs(
     fetch_events: FetchEvents | None,
     executor: ThreadPoolExecutor,
 ) -> int:
-    try:
-        start_time, end_time = _window_from_args(args, now)
-        filter_node = _local_filter(args.filter_pattern)
-    except ValueError as err:
-        sys.stderr.write(f'{err}\n')
-        return 2
     config = _load_config_or_report(args.config_path)
     if config is None:
         return 1
+    try:
+        start_time, end_time = _window_from_args(args, now)
+        filter_node = _local_filter(expand_filter(args.filter_pattern, config.filters))
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
     request = FetchRequest(
         log_group=args.log_group,
         start_time=start_time,

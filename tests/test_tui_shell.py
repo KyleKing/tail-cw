@@ -581,3 +581,30 @@ def test_parse_duration(text: str, expected: timedelta | None):
 def test_session_window_label_is_compact():
     """The window renders as a single status-line fragment."""
     assert _session().window_label() == '2026-07-24 11:00->12:00 UTC'
+
+
+async def test_the_filter_command_expands_a_named_filter_and_records_it(monkeypatch):
+    """A binding is not covered until a test drives it, and `:filter` is the whole surface."""
+    recorded: list[object] = []
+    monkeypatch.setattr('tail_cw.tui.shell.append', recorded.append)
+    config = TailCWConfig(filters={'errors': 'level:error OR level:critical'})
+    app = _app(config=config)
+
+    async with running(app) as pilot:
+        screen = app.screen
+        assert isinstance(screen, StubScreen)
+        app.run_command(screen, 'filter @errors')
+        await pilot.pause()
+
+        assert app.session.filter_pattern == 'level:error OR level:critical'
+        assert len(recorded) == 1
+
+        app.run_command(screen, 'filter @typo')
+        await pilot.pause()
+        unchanged = app.session.filter_pattern
+        assert unchanged == 'level:error OR level:critical', 'an unknown name changes nothing'
+
+        app.run_command(screen, 'filter')
+        await pilot.pause()
+        assert not app.session.filter_pattern
+        assert len(recorded) == 1, 'clearing the filter is not a question worth recording'

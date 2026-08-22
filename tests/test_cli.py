@@ -25,6 +25,7 @@ from tail_cw.cli import (
     Session,
     ShellSeed,
     TailRequest,
+    expand_filter,
     expand_presets,
     iter_tail_events,
     parse_time,
@@ -1707,3 +1708,19 @@ def test_a_named_group_is_recorded_so_completion_can_offer_it_back(tmp_path, mon
 
     assert run_cli([*argv, str(_write_config_file(tmp_path))], shell, is_tty=False) == 0
     assert recorded == [(('irm-ecs-api-prod',), 'read-prod')], 'a glob is not a group name'
+
+
+def test_a_named_filter_expands_to_its_expression():
+    filters = {'errors': 'level:error OR level:critical'}
+
+    assert expand_filter('@errors', filters) == 'level:error OR level:critical'
+    assert expand_filter('level:warning', filters) == 'level:warning'
+    assert expand_filter(None, filters) is None
+
+
+def test_an_unknown_named_filter_names_the_ones_that_exist():
+    with pytest.raises(ValueError, match='configured filters: @errors, @slow'):
+        expand_filter('@typo', {'errors': 'a', 'slow': 'b'})
+
+    with pytest.raises(ValueError, match='none configured'):
+        expand_filter('@errors', {})

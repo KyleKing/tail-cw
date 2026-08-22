@@ -85,6 +85,25 @@ Mismatched braces in filter. A JSON filter looks like { $.level = "ERROR" }
 Filter ends after an operator. Every AND, OR, and NOT needs a term after it
 ```
 
+## Named filters
+
+Give a filter you keep retyping a name in `config.toml`, using the same `@name`
+convention `[presets]` uses for log group sets:
+
+```toml
+[filters]
+errors = "level:error OR level:critical"
+slow = "duration_ms:>=1000"
+```
+
+Then `--filter @errors` or `:filter @errors` anywhere a filter is accepted. Only a whole
+filter can be a reference, not a term inside one: a filter is a single expression rather
+than a list, so there is no position where half a substitution would be unambiguous. An
+unknown name lists the ones that exist rather than quietly matching everything.
+
+Every filter you set with `:filter` is recorded in the same history `:history` shows, per
+profile, alongside the rollups and Insights queries.
+
 ## Where filters come from
 
 The `--filter` flag on `export logs`, `export tail`, and `export summary`; the `/` search

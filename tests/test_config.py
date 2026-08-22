@@ -328,3 +328,22 @@ def test_config_xdg_compliance(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
 
     assert config_path.parent.exists()
     assert cache_path.exists()
+
+
+def test_named_filters_load_from_their_own_table(tmp_path):
+    """Extends the `@name` convention `[presets]` already uses, rather than a second one."""
+    path = tmp_path / 'config.toml'
+    path.write_text('[filters]\nerrors = "level:error OR level:critical"\n', encoding='utf-8')
+
+    config = load_config(path)
+
+    assert config.filters == {'errors': 'level:error OR level:critical'}
+
+
+@pytest.mark.parametrize('body', ['[filters]\nerrors = 3\n', '[filters]\nerrors = ""\n', 'filters = "x"\n'])
+def test_a_malformed_filters_table_is_rejected(tmp_path, body):
+    path = tmp_path / 'config.toml'
+    path.write_text(body, encoding='utf-8')
+
+    with pytest.raises(ValueError, match='filter'):
+        load_config(path)
