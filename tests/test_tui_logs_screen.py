@@ -46,11 +46,21 @@ def _make_test_log_events(count: int = 5) -> list[LogEvent]:
                 message=message,
                 log_group=f'/aws/test/group{index % 2}',
                 log_stream=f'stream-{index}',
-                event_id=f'event-{index:04d}',
                 ingestion_time=timestamp + timedelta(milliseconds=1),
             ),
         )
     return events
+
+
+def _json_event(event: str, *, level: str = 'INFO', offset: int = 0) -> LogEvent:
+    timestamp = BASE_TIME + timedelta(seconds=offset)
+    return LogEvent(
+        timestamp=timestamp,
+        message=f'{{"level":"{level}","event":"{event}"}}',
+        log_group=DEFAULT_GROUP,
+        log_stream='stream-0',
+        ingestion_time=None,
+    )
 
 
 def _make_live_events(count: int, *, offset: int = 0) -> list[LogEvent]:
@@ -60,7 +70,6 @@ def _make_live_events(count: int, *, offset: int = 0) -> list[LogEvent]:
             log_stream='stream-live',
             timestamp=LIVE_BASE_TIME + timedelta(seconds=offset + index),
             message=f'live message {offset + index}',
-            event_id=f'live-{offset + index:04d}',
             ingestion_time=None,
         )
         for index in range(count)
@@ -78,13 +87,8 @@ def _session(**overrides: Any) -> Session:
 
 
 def _resolving_to(paths: Sequence[Path]) -> ShellServices:
-    async def resolve(
-        groups: Sequence[str],
-        start: datetime,
-        end: datetime,
-        filter_pattern: str | None,
-    ) -> list[Path]:
-        del groups, start, end, filter_pattern
+    async def resolve(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
+        del groups, start, end
         return list(paths)
 
     return ShellServices(resolve_logs=resolve)
@@ -168,7 +172,6 @@ def _create_parquet_with_traces(
                     ingestion_time=base_time,
                     log_stream='test-stream',
                     log_group='/aws/lambda/test-function',
-                    event_id=f'event-{trace_idx}-{span_idx}',
                 ),
             )
 
@@ -250,9 +253,9 @@ async def test_table_columns_setup():
     async with _running(app) as _:
         table = app.screen.query_one('#log_table', DataTable)
 
-        assert len(table.columns) == 5
+        assert len(table.columns) == 4
         column_keys = [col.key for col in table.columns.values()]
-        for expected in ('timestamp', 'log_group', 'log_stream', 'message', 'event_id'):
+        for expected in ('timestamp', 'log_group', 'log_stream', 'message'):
             assert expected in column_keys
 
 
@@ -282,7 +285,6 @@ async def test_multiple_groups_merge_by_timestamp(tmp_path: Path):
             log_stream='stream-a',
             timestamp=BASE_TIME + timedelta(seconds=index * 2),
             message=f'a-{index}',
-            event_id=f'a-{index}',
             ingestion_time=None,
         )
         for index in range(3)
@@ -293,7 +295,6 @@ async def test_multiple_groups_merge_by_timestamp(tmp_path: Path):
             log_stream='stream-b',
             timestamp=BASE_TIME + timedelta(seconds=index * 2 + 1),
             message=f'b-{index}',
-            event_id=f'b-{index}',
             ingestion_time=None,
         )
         for index in range(3)
@@ -311,7 +312,7 @@ async def test_multiple_groups_merge_by_timestamp(tmp_path: Path):
         screen = _logs_screen(app)
 
         assert screen._parquet_paths == paths
-        assert [event.event_id for event in screen._log_events] == ['a-0', 'b-0', 'a-1', 'b-1', 'a-2', 'b-2']
+        assert [event.message for event in screen._log_events] == ['a-0', 'b-0', 'a-1', 'b-1', 'a-2', 'b-2']
         assert app.screen.query_one('#log_table', DataTable).row_count == 6
 
 
@@ -331,13 +332,8 @@ async def test_missing_parquet_paths_report_no_events():
 async def test_resolve_failure_reports_error(tmp_path: Path):
     del tmp_path
 
-    async def failing_resolve(
-        groups: Sequence[str],
-        start: datetime,
-        end: datetime,
-        filter_pattern: str | None,
-    ) -> list[Path]:
-        del groups, start, end, filter_pattern
+    async def failing_resolve(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
+        del groups, start, end
         msg = 'throttled'
         raise RuntimeError(msg)
 
@@ -446,7 +442,7 @@ async def test_search_in_memory_without_parquet():
         await screen._execute_search_query('Test log message 2')
         await pilot.pause()
 
-        assert [event.event_id for event in screen._log_events] == ['event-0002']
+        assert [event.message for event in screen._log_events] == ['Test log message 2']
         assert 'Found 1 matching events' in str(app.screen.query_one('#status', Label).render())
 
 
@@ -612,7 +608,6 @@ async def test_message_truncation():
         message='A' * 200,
         log_group='/aws/test/group',
         log_stream='stream-0',
-        event_id='event-0001',
         ingestion_time=BASE_TIME + timedelta(seconds=1),
     )
     app = _make_app()
@@ -654,7 +649,6 @@ async def test_awkward_messages_load(message: str):
         message=message,
         log_group='/aws/test/group',
         log_stream='stream-0',
-        event_id='event-0001',
         ingestion_time=None,
     )
     app = _make_app()
@@ -671,16 +665,11 @@ async def test_awkward_messages_load(message: str):
 async def test_refresh_extends_window_and_reloads(tmp_path: Path):
     events = _make_test_log_events(4)
     path = _write_parquet(events, tmp_path / 'events.parquet')
-    calls: list[tuple[datetime, datetime, str | None]] = []
+    calls: list[tuple[datetime, datetime]] = []
 
-    async def resolve(
-        groups: Sequence[str],
-        start: datetime,
-        end: datetime,
-        filter_pattern: str | None,
-    ) -> list[Path]:
+    async def resolve(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
         del groups
-        calls.append((start, end, filter_pattern))
+        calls.append((start, end))
         return [path]
 
     session = _session()
@@ -712,31 +701,23 @@ async def test_refresh_without_service_reports_no_source():
 
 
 @pytest.mark.asyncio
-async def test_shared_filter_change_reresolves(tmp_path: Path):
-    path = _write_parquet(_make_test_log_events(2), tmp_path / 'events.parquet')
-    calls: list[str | None] = []
-
-    async def resolve(
-        groups: Sequence[str],
-        start: datetime,
-        end: datetime,
-        filter_pattern: str | None,
-    ) -> list[Path]:
-        del groups, start, end
-        calls.append(filter_pattern)
-        return [path]
-
-    app = _make_app(services=ShellServices(resolve_logs=resolve))
+async def test_the_session_filter_narrows_the_view_on_read(tmp_path: Path):
+    """The cached window holds every event, so the filter is applied locally."""
+    events = [_json_event('one', level='INFO'), _json_event('two', level='ERROR')]
+    path = _write_parquet(events, tmp_path / 'events.parquet')
+    app = _make_app(services=_resolving_to([path]))
 
     async with _running(app) as pilot:
         await app.workers.wait_for_complete()
-        screen = _logs_screen(app)
+        await pilot.pause()
+        assert app.screen.query_one('#log_table', DataTable).row_count == 2
+
         app.session.filter_pattern = 'ERROR'
-        screen.refresh_view()
+        _logs_screen(app).refresh_view()
         await app.workers.wait_for_complete()
         await pilot.pause()
 
-    assert calls == [None, 'ERROR']
+        assert app.screen.query_one('#log_table', DataTable).row_count == 1
 
 
 @pytest.mark.asyncio
@@ -864,7 +845,7 @@ async def test_live_buffer_evicts_oldest_and_rebuilds_table():
         assert len(screen._live_buffer) == 10
         assert table.row_count == 10
         assert screen._log_events == _make_live_events(10, offset=110)
-        assert screen._all_events[-1].event_id == 'live-0119'
+        assert screen._all_events[-1].message == 'live message 119'
 
 
 @pytest.mark.asyncio
@@ -880,7 +861,7 @@ async def test_live_search_filters_buffered_events():
         screen._flush_live_events()
 
         results = screen._filter_events_in_memory('live message 2')
-        assert [event.event_id for event in results] == ['live-0002']
+        assert [event.message for event in results] == ['live message 2']
 
         assert screen._search_input is not None
         screen._search_input.value = 'live message'
@@ -929,17 +910,12 @@ async def test_note_live_sampled_sets_flag():
 @pytest.mark.asyncio
 async def test_live_toggle_round_trip_preserves_filter(tmp_path: Path):
     path = _write_parquet(_make_test_log_events(3), tmp_path / 'events.parquet')
-    resolve_calls: list[tuple[tuple[str, ...], str | None]] = []
+    resolve_calls: list[tuple[str, ...]] = []
     live_calls: list[tuple[tuple[str, ...], str | None]] = []
 
-    async def resolve(
-        groups: Sequence[str],
-        start: datetime,
-        end: datetime,
-        filter_pattern: str | None,
-    ) -> list[Path]:
+    async def resolve(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
         del start, end
-        resolve_calls.append((tuple(groups), filter_pattern))
+        resolve_calls.append(tuple(groups))
         return [path]
 
     async def live_stream(groups: Sequence[str], filter_pattern: str | None) -> AsyncIterator[LogEvent]:
@@ -959,7 +935,7 @@ async def test_live_toggle_round_trip_preserves_filter(tmp_path: Path):
         await pilot.pause()
         screen = _logs_screen(app)
 
-        assert resolve_calls == [(('/aws/test/a', '/aws/test/b'), 'ERROR')]
+        assert resolve_calls == [('/aws/test/a', '/aws/test/b')]
 
         await pilot.press('L')
         await app.workers.wait_for_complete()
@@ -975,7 +951,7 @@ async def test_live_toggle_round_trip_preserves_filter(tmp_path: Path):
         assert screen._live_mode is False
         assert screen._live_active is False
         assert len(resolve_calls) == 2
-        assert resolve_calls[1] == (('/aws/test/a', '/aws/test/b'), 'ERROR')
+        assert resolve_calls[1] == ('/aws/test/a', '/aws/test/b')
         assert app.session.filter_pattern == 'ERROR'
 
 
@@ -1099,7 +1075,6 @@ async def test_show_trace_for_selected_no_trace_id(tmp_path: Path):
             ingestion_time=BASE_TIME,
             log_stream='test-stream',
             log_group='test-group',
-            event_id=f'test-event-{index}',
         )
         for index in range(3)
     ]
@@ -1147,7 +1122,6 @@ async def test_trace_view_empty_results(tmp_path: Path):
             ingestion_time=BASE_TIME,
             log_stream='test-stream',
             log_group='test-group',
-            event_id='test-event-id',
         ),
     ]
     parquet_path = _write_parquet(events, tmp_path / 'logs.parquet')
@@ -1179,7 +1153,6 @@ async def test_trace_view_with_errors(tmp_path: Path):
             ingestion_time=base_time,
             log_stream='test-stream',
             log_group='test-group',
-            event_id=f'test-event-{index}',
         )
         for index in range(3)
     ]

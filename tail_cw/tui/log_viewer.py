@@ -56,7 +56,7 @@ def format_timestamp(dt: datetime, style: str = 'cyan') -> Text:
 def format_log_event_for_table(
     event: LogEvent,
     truncate_message: int = 100,
-) -> tuple[RenderableType, str, str, str, str]:
+) -> tuple[RenderableType, str, str, str]:
     """Convert a LogEvent to a table row tuple.
 
     Args:
@@ -64,35 +64,26 @@ def format_log_event_for_table(
         truncate_message: Maximum message length for table display (default: 100)
 
     Returns:
-        Tuple of (formatted_timestamp, log_group, log_stream, truncated_message, event_id)
+        Tuple of (formatted_timestamp, log_group, log_stream, truncated_message)
 
     Example:
         >>> event = LogEvent(...)
-        >>> row = format_log_event_for_table(event, truncate_message=50)
-        >>> timestamp, group, stream, msg, event_id = row
+        >>> timestamp, group, stream, msg = format_log_event_for_table(event, truncate_message=50)
     """
-    # Format timestamp as Rich Text
-    formatted_timestamp = format_timestamp(event.timestamp)
-
-    # Truncate message if needed
-    if len(event.message) > truncate_message:
-        truncated_message = event.message[:truncate_message] + '...'
-    else:
-        truncated_message = event.message
-
+    message = event.message
+    truncated_message = message[:truncate_message] + '...' if len(message) > truncate_message else message
     return (
-        formatted_timestamp,
+        format_timestamp(event.timestamp),
         event.log_group,
         event.log_stream,
         truncated_message,
-        event.event_id,
     )
 
 
 def batch_format_log_events(
     events: Iterable[LogEvent],
     truncate_message: int = 100,
-) -> list[tuple[RenderableType, str, str, str, str]]:
+) -> list[tuple[RenderableType, str, str, str]]:
     """Convert multiple LogEvents to table rows efficiently.
 
     Uses list comprehension for batch processing, improving performance
@@ -129,15 +120,13 @@ def format_log_event_detail(event: LogEvent) -> str:
         >>> event = LogEvent(...)
         >>> detail = format_log_event_detail(event)
         >>> print(detail)
-        Event ID: abc-123
         Timestamp: 2025-01-15T10:30:45.123000+00:00
         ...
     """
     # Format ingestion time, handling None
     ingestion_time_str = event.ingestion_time.isoformat() if event.ingestion_time else 'N/A'
 
-    return f"""Event ID: {event.event_id}
-Timestamp: {event.timestamp.isoformat()}
+    return f"""Timestamp: {event.timestamp.isoformat()}
 Log Group: {event.log_group}
 Log Stream: {event.log_stream}
 Ingestion Time: {ingestion_time_str}
@@ -238,5 +227,4 @@ def get_column_definitions() -> list[tuple[str, str]]:
         ('log_group', 'Log Group'),
         ('log_stream', 'Log Stream'),
         ('message', 'Message'),
-        ('event_id', 'Event ID'),
     ]

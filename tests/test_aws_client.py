@@ -38,7 +38,6 @@ def _make_cw_event(
     log_stream_name: str = 'test-stream',
     timestamp: int = 1700000000000,
     message: str = 'Test log message',
-    event_id: str = 'event-123',
     *,
     include_ingestion_time: bool = True,
 ):
@@ -48,7 +47,6 @@ def _make_cw_event(
         log_stream_name: The log stream name.
         timestamp: Event timestamp in epoch milliseconds.
         message: The log message content.
-        event_id: Unique event identifier.
         include_ingestion_time: Whether to include ingestionTime field.
 
     Returns:
@@ -58,7 +56,7 @@ def _make_cw_event(
         'logStreamName': log_stream_name,
         'timestamp': timestamp,
         'message': message,
-        'eventId': event_id,
+        'eventId': 'event-123',
     }
     if include_ingestion_time:
         event['ingestionTime'] = timestamp + 1000  # 1 second later
@@ -135,13 +133,11 @@ async def test_fetch_log_events_single_page(logs_client: Any):
             log_stream_name='stream-1',
             timestamp=1700000000000,
             message='First message',
-            event_id='event-1',
         ),
         _make_cw_event(
             log_stream_name='stream-2',
             timestamp=1700000001000,
             message='Second message',
-            event_id='event-2',
         ),
     ]
 
@@ -175,7 +171,6 @@ async def test_fetch_log_events_single_page(logs_client: Any):
     assert results[0].log_group == '/test/log-group'
     assert results[0].log_stream == 'stream-1'
     assert results[0].message == 'First message'
-    assert results[0].event_id == 'event-1'
     assert isinstance(results[0].timestamp, datetime)
     assert results[0].timestamp.tzinfo == UTC
     assert isinstance(results[0].ingestion_time, datetime)
@@ -194,8 +189,8 @@ async def test_fetch_log_events_multiple_pages(logs_client: Any):
 
     # First page with nextToken
     events_page1 = [
-        _make_cw_event(event_id='event-1', message='Page 1 Event 1'),
-        _make_cw_event(event_id='event-2', message='Page 1 Event 2'),
+        _make_cw_event(message='Page 1 Event 1'),
+        _make_cw_event(message='Page 1 Event 2'),
     ]
 
     stub.add_response(
@@ -216,7 +211,7 @@ async def test_fetch_log_events_multiple_pages(logs_client: Any):
 
     # Second page without nextToken (last page)
     events_page2 = [
-        _make_cw_event(event_id='event-3', message='Page 2 Event 1'),
+        _make_cw_event(message='Page 2 Event 1'),
     ]
 
     stub.add_response(
@@ -244,9 +239,7 @@ async def test_fetch_log_events_multiple_pages(logs_client: Any):
 
     # Should have all events from both pages
     assert len(results) == 3
-    assert results[0].event_id == 'event-1'
-    assert results[1].event_id == 'event-2'
-    assert results[2].event_id == 'event-3'
+    assert [event.message for event in results] == ['Page 1 Event 1', 'Page 1 Event 2', 'Page 2 Event 1']
 
     stub.deactivate()
 
@@ -274,7 +267,7 @@ async def test_fetch_log_events_empty_page(logs_client: Any):
     )
 
     # Second page: has events
-    events = [_make_cw_event(event_id='event-1')]
+    events = [_make_cw_event(message='Second page event')]
     stub.add_response(
         'filter_log_events',
         {
@@ -300,7 +293,7 @@ async def test_fetch_log_events_empty_page(logs_client: Any):
 
     # Should only have events from second page
     assert len(results) == 1
-    assert results[0].event_id == 'event-1'
+    assert results[0].message == 'Second page event'
 
     stub.deactivate()
 
@@ -328,7 +321,6 @@ async def test_fetch_log_events_with_progress_callback(logs_client: Any):
     total_events = 250
     events = [
         _make_cw_event(
-            event_id=f'event-{i}',
             timestamp=1700000000000 + i,
             message=f'Event {i}',
         )
@@ -385,7 +377,6 @@ async def test_fetch_log_events_progress_callback_frequency(logs_client: Any):
 
     events = [
         _make_cw_event(
-            event_id=f'event-{i}',
             timestamp=1700000000000 + i,
             message=f'Event {i}',
         )
@@ -435,7 +426,6 @@ async def test_fetch_log_events_without_progress_callback(logs_client: Any):
 
     events = [
         _make_cw_event(
-            event_id=f'event-{i}',
             timestamp=1700000000000 + i,
             message=f'Event {i}',
         )
@@ -642,7 +632,6 @@ def test_log_event_dataclass_immutability():
         log_stream='test-stream',
         timestamp=datetime.now(tz=UTC),
         message='test',
-        event_id='123',
         ingestion_time=None,
     )
 

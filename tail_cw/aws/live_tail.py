@@ -8,7 +8,6 @@ with bounded automatic reconnects. This module has no Textual dependency.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import AsyncIterator, Callable, Sequence
 from typing import Any
 
@@ -32,27 +31,13 @@ def _log_group_name_from_identifier(identifier: str) -> str:
     return identifier
 
 
-def _synthesize_event_id(log_stream: str, timestamp_ms: int, message: str) -> str:
-    digest = hashlib.sha256(f'{log_stream}\x00{timestamp_ms}\x00{message}'.encode()).hexdigest()
-    return f'live-{timestamp_ms}-{digest[:16]}'
-
-
 def _live_event_to_log_event(raw: dict[str, Any]) -> LogEvent:
-    """Convert a LiveTailSessionLogEvent dict to a LogEvent.
-
-    Live tail events carry no ``eventId``, so a deterministic identifier is
-    synthesized from the stream, timestamp, and message.
-    """
-    timestamp_ms = raw['timestamp']
-    log_stream = raw.get('logStreamName', '')
-    message = raw.get('message', '')
     ingestion_ms = raw.get('ingestionTime')
     return LogEvent(
         log_group=_log_group_name_from_identifier(raw.get('logGroupIdentifier', '')),
-        log_stream=log_stream,
-        timestamp=_epoch_ms_to_datetime(timestamp_ms),
-        message=message,
-        event_id=_synthesize_event_id(log_stream, timestamp_ms, message),
+        log_stream=raw.get('logStreamName', ''),
+        timestamp=_epoch_ms_to_datetime(raw['timestamp']),
+        message=raw.get('message', ''),
         ingestion_time=_epoch_ms_to_datetime(ingestion_ms) if ingestion_ms is not None else None,
     )
 

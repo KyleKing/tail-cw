@@ -24,7 +24,6 @@ def _event(record: dict[str, object], log_group: str = '/aws/lambda/tail-cw-demo
         log_stream='2026/07/25/[$LATEST]abc',
         timestamp=datetime(2026, 7, 25, 12, 0, tzinfo=UTC),
         message=json.dumps(record),
-        event_id='1',
         ingestion_time=None,
     )
 

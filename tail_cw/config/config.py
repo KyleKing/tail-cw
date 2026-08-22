@@ -2,9 +2,8 @@
 
 This module exposes dataclasses describing the configurable aspects of the
 application along with helpers for loading user-supplied TOML files from
-XDG-compliant locations. Consumers can customize cache behaviour, Parquet
-storage parameters, TUI pagination, and trace extraction without modifying
-source code.
+XDG-compliant locations. Consumers can customize cache behaviour, TUI
+pagination, and trace extraction without modifying source code.
 """
 
 from __future__ import annotations
@@ -49,21 +48,6 @@ class CacheConfig:
     size_limit_mb: int = 1000
     default_ttl_seconds: int | None = None
     eviction_policy: str = 'least-recently-stored'
-
-
-@dataclass(slots=True)
-class ParquetConfig:
-    """Parquet conversion tuning parameters.
-
-    Attributes:
-        row_group_size: Number of rows per Parquet row group. Larger groups
-            improve scan performance at the cost of memory.
-        compression_level: ZSTD compression level (1-22). Higher levels trade
-            speed for reduced file size.
-    """
-
-    row_group_size: int = 100_000
-    compression_level: int = 3
 
 
 @dataclass(slots=True)
@@ -129,10 +113,6 @@ class TailCWConfig:
         size_limit_mb = 1000
         eviction_policy = "least-recently-stored"
 
-        [parquet]
-        row_group_size = 100000
-        compression_level = 3
-
         [preview]
         sample_limit = 500
         window_seconds = 900
@@ -149,7 +129,6 @@ class TailCWConfig:
 
     Attributes:
         cache: Cache persistence configuration.
-        parquet: Parquet conversion configuration.
         preview: Log group preview sampling configuration.
         tui: TUI incremental loading configuration.
         trace: Trace extraction configuration.
@@ -158,7 +137,6 @@ class TailCWConfig:
     """
 
     cache: CacheConfig = field(default_factory=CacheConfig)
-    parquet: ParquetConfig = field(default_factory=ParquetConfig)
     preview: PreviewConfig = field(default_factory=PreviewConfig)
     tui: TUIConfig = field(default_factory=TUIConfig)
     trace: TraceConfig = field(default_factory=TraceConfig)
@@ -236,8 +214,8 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
 
     Examples:
         >>> config = load_config(Path('config.toml'))
-        >>> config.parquet.row_group_size
-        100000
+        >>> config.cache.size_limit_mb
+        1000
     """
     path = config_path or get_default_config_path()
     if not path.exists():
@@ -256,7 +234,6 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
         raise
 
     cache_kwargs = _load_section(data.get('cache'), CacheConfig)
-    parquet_kwargs = _load_section(data.get('parquet'), ParquetConfig)
     preview_kwargs = _load_section(data.get('preview'), PreviewConfig)
     tui_kwargs = _load_section(data.get('tui'), TUIConfig)
     trace_kwargs = _load_section(data.get('trace'), TraceConfig)
@@ -271,7 +248,6 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
 
     config = TailCWConfig(
         cache=CacheConfig(**cache_kwargs),
-        parquet=ParquetConfig(**parquet_kwargs),
         preview=PreviewConfig(**preview_kwargs),
         tui=TUIConfig(**tui_kwargs),
         trace=TraceConfig(**trace_kwargs),
@@ -319,9 +295,6 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'size_limit_mb = 1000\n'
             'default_ttl_seconds = 3600  # 1 hour\n'
             'eviction_policy = "least-recently-stored"\n\n'
-            '[parquet]\n'
-            'row_group_size = 100000\n'
-            'compression_level = 3\n\n'
             '[preview]\n'
             'sample_limit = 500\n'
             'window_seconds = 900  # 15 minutes\n'

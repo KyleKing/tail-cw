@@ -150,16 +150,13 @@ def _event(log_group: str) -> LogEvent:
         log_stream='stream',
         timestamp=NOW,
         message='hello',
-        event_id=f'event-{log_group}',
         ingestion_time=None,
     )
 
 
-def _requests(count: int) -> list[FetchRequest]:
-    return [
-        FetchRequest(log_group=f'/group/{index}', start_time=NOW - timedelta(hours=1), end_time=NOW)
-        for index in range(count)
-    ]
+def _requests(count: int, *, window: timedelta = timedelta(minutes=2)) -> list[FetchRequest]:
+    """Requests over a window short enough to plan as a single cache segment."""
+    return [FetchRequest(log_group=f'/group/{index}', start_time=NOW - window, end_time=NOW) for index in range(count)]
 
 
 async def test_resolve_parquet_paths_fetches_every_group_concurrently(tmp_path: Path) -> None:
@@ -176,6 +173,35 @@ async def test_resolve_parquet_paths_fetches_every_group_concurrently(tmp_path: 
         paths = await resolve_parquet_paths(object(), _requests(count), config, fetch_events=fetch, executor=pool)
 
     assert len(paths) == count
+
+
+async def test_segments_of_one_request_are_fetched_one_at_a_time(tmp_path: Path) -> None:
+    """FilterLogEvents is quota-limited per account; the fan-out across groups already saturates it."""
+    active = 0
+    peak = 0
+
+    async def fetch(_client: object, log_group: str, *_args: object, **_kwargs: object) -> AsyncIterator[LogEvent]:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            await asyncio.sleep(0)
+            yield _event(log_group)
+        finally:
+            active -= 1
+
+    config = TailCWConfig(cache=CacheConfig(cache_dir=tmp_path / 'cache'))
+    with blocking_pool(max_workers=2) as pool:
+        paths = await resolve_parquet_paths(
+            object(),
+            _requests(1, window=timedelta(hours=1)),
+            config,
+            fetch_events=fetch,
+            executor=pool,
+        )
+
+    assert len(paths) > 1, 'an hour-long window should split into several segments'
+    assert peak == 1
 
 
 async def test_resolve_parquet_paths_cancels_siblings_when_one_fails(tmp_path: Path) -> None:

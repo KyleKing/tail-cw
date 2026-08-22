@@ -46,7 +46,6 @@ class LogEvent:
         timestamp: Event timestamp as timezone-aware datetime (UTC). Converted from
             epoch milliseconds returned by CloudWatch API.
         message: The log message content.
-        event_id: Unique event identifier for deduplication.
         ingestion_time: When CloudWatch ingested the event. May be None if not
             provided in the API response.
     """
@@ -55,7 +54,6 @@ class LogEvent:
     log_stream: str
     timestamp: datetime
     message: str
-    event_id: str
     ingestion_time: datetime | None
 
 
@@ -197,6 +195,5 @@ async def fetch_log_events(
                 log_stream=event['logStreamName'],
                 timestamp=_epoch_ms_to_datetime(event['timestamp']),
                 message=event['message'],
-                event_id=event['eventId'],
                 ingestion_time=ingestion_time,
             )

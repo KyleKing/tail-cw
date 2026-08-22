@@ -23,7 +23,6 @@ Cache files created by the application are stored separately in the XDG cache di
 ## Configuration Sections
 
 - `[cache]` controls cache storage limits and eviction behaviour.
-- `[parquet]` tunes the Parquet writer used when materialising NDJSON logs.
 - `[presets]` names groups of log groups so `@name` stands in for the whole set.
 - `[preview]` bounds the log group previews shown in the browser.
 - `[tui]` exposes pagination and search limits for the Textual UI.
@@ -37,11 +36,6 @@ Cache files created by the application are stored separately in the XDG cache di
 size_limit_mb = 1024
 default_ttl_seconds = 3600                # 1 hour
 eviction_policy = "least-recently-stored"
-
-[parquet]
-row_group_size = 200000
-compression_level = 5
-infer_schema_length = 200
 
 [presets]
 api = ["/aws/lambda/api-a", "/ecs/api-b"]

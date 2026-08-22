@@ -180,7 +180,7 @@ async def test_demo_services_list_groups_resolves_the_demo_group():
 
 
 def test_demo_resolve_logs_writes_parquet_files():
-    paths = _demo_resolve_logs(['/aws/lambda/api'], NOW - timedelta(hours=1), NOW, None)
+    paths = _demo_resolve_logs(['/aws/lambda/api'], NOW - timedelta(hours=1), NOW)
 
     assert paths
     assert all(path.exists() for path in paths)
@@ -188,7 +188,7 @@ def test_demo_resolve_logs_writes_parquet_files():
 
 
 def test_demo_resolve_logs_defaults_to_the_demo_group():
-    paths = _demo_resolve_logs([], NOW - timedelta(hours=1), NOW, None)
+    paths = _demo_resolve_logs([], NOW - timedelta(hours=1), NOW)
 
     assert len(paths) == 1
 
@@ -234,7 +234,6 @@ async def test_live_services_count_events_caps_the_scan():
             log_stream='s',
             timestamp=NOW,
             message='m',
-            event_id=f'event-{index}',
             ingestion_time=None,
         )
         for index in range(3)
@@ -262,11 +261,10 @@ async def test_live_services_resolve_logs_builds_one_request_per_group(tmp_path)
 
     assert services.resolve_logs is not None
     with patch('tail_cw.__main__.resolve_parquet_paths', fake_resolve):
-        await services.resolve_logs(['/one', '/two'], session.start, session.end, 'ERROR')
+        await services.resolve_logs(['/one', '/two'], session.start, session.end)
 
     requests = recorded[0]
     assert [request.log_group for request in requests] == ['/one', '/two']
-    assert {request.filter_pattern for request in requests} == {'ERROR'}
     assert {request.profile for request in requests} == {'dev'}
 
 

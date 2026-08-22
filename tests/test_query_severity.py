@@ -17,7 +17,6 @@ def _event(message: str) -> LogEvent:
         log_stream='s',
         timestamp=NOW,
         message=message,
-        event_id='e',
         ingestion_time=None,
     )
 

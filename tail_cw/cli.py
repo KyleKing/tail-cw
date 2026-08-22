@@ -46,12 +46,14 @@ from tail_cw.aws.metrics import (
     build_metric_data_queries,
     fetch_metric_data,
 )
-from tail_cw.cache.storage import LogCache, generate_cache_key, read_parquet_to_log_events
+from tail_cw.cache.storage import LogCache, generate_cache_key
+from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import blocking_pool, closing_stream, consume_in_thread, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
 from tail_cw.demo import demo_dashboard
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.fuzzy import DEFAULT_SIMILARITY
+from tail_cw.query.parser import FilterNode, parse_filter_pattern
 from tail_cw.query.report import render_markdown, render_rows_markdown
 from tail_cw.query.rollup import DEFAULT_PATTERN_LIMIT, Granularity, RollupReport, roll_up
 from tail_cw.query.severity import Severity
@@ -93,15 +95,16 @@ class FetchRequest:
         log_group: CloudWatch log group name.
         start_time: Start of the time range (timezone-aware).
         end_time: End of the time range (timezone-aware).
-        filter_pattern: Optional CloudWatch filter pattern.
         profile: Optional AWS profile name.
         region: Optional AWS region name.
+
+    No filter belongs here: a historical fetch retrieves the whole window so one
+    cached copy serves every filter, which is then applied locally on read.
     """
 
     log_group: str
     start_time: datetime
     end_time: datetime
-    filter_pattern: str | None = None
     profile: str | None = None
     region: str | None = None
 
@@ -499,6 +502,11 @@ async def iter_tail_events(
         yield event
 
 
+def _local_filter(filter_pattern: str | None) -> FilterNode | None:
+    """Parse a ``--filter`` value for local evaluation against cached events."""
+    return parse_filter_pattern(filter_pattern) if filter_pattern else None
+
+
 def open_log_cache(config: TailCWConfig) -> LogCache:
     """Open the configured log cache. Close it, or use it as a context manager."""
     return LogCache(
@@ -506,9 +514,40 @@ def open_log_cache(config: TailCWConfig) -> LogCache:
         size_limit_mb=config.cache.size_limit_mb,
         default_ttl_seconds=config.cache.default_ttl_seconds,
         eviction_policy=config.cache.eviction_policy,
-        compression_level=config.parquet.compression_level,
-        row_group_size=config.parquet.row_group_size,
     )
+
+
+async def _resolve_segment(
+    client: Any,
+    request: FetchRequest,
+    segment: Segment,
+    cache: LogCache,
+    *,
+    use_cache: bool,
+    fetch_events: FetchEvents,
+    executor: ThreadPoolExecutor | None,
+) -> Path | None:
+    cache_key = generate_cache_key(
+        request.log_group,
+        segment.start,
+        segment.end,
+        region_name=request.region,
+        profile_name=request.profile,
+    )
+    # An unsettled segment is short of events CloudWatch had not ingested yet, so a
+    # hit on it is refetched rather than served.
+    if use_cache and segment.settled and (cached_path := cache.get_parquet_path(cache_key)) is not None:
+        return cached_path
+    events = fetch_events(client, request.log_group, segment.start, segment.end)
+    first_event = await anext(events, None)
+    if first_event is None:
+        return None
+
+    def write(remaining: Iterator[LogEvent]) -> Path | None:
+        cache.write(chain([first_event], remaining), cache_key, ttl_seconds=segment.ttl_seconds)
+        return cache.get_parquet_path(cache_key)
+
+    return await consume_in_thread(executor, events, write)
 
 
 async def _resolve_into_cache(
@@ -516,37 +555,28 @@ async def _resolve_into_cache(
     request: FetchRequest,
     cache: LogCache,
     *,
+    now: datetime,
     use_cache: bool,
     fetch_events: FetchEvents | None,
     executor: ThreadPoolExecutor | None,
-) -> Path | None:
+) -> list[Path]:
     effective_fetch = fetch_events if fetch_events is not None else fetch_log_events
-    cache_key = generate_cache_key(
-        request.log_group,
-        request.start_time,
-        request.end_time,
-        filter_pattern=request.filter_pattern,
-        region_name=request.region,
-        profile_name=request.profile,
-    )
-    if use_cache and (cached_path := cache.get_parquet_path(cache_key)) is not None:
-        return cached_path
-    events = effective_fetch(
-        client,
-        request.log_group,
-        request.start_time,
-        request.end_time,
-        filter_pattern=request.filter_pattern,
-    )
-    first_event = await anext(events, None)
-    if first_event is None:
-        return None
-
-    def write(remaining: Iterator[LogEvent]) -> Path | None:
-        cache.write(chain([first_event], remaining), cache_key)
-        return cache.get_parquet_path(cache_key)
-
-    return await consume_in_thread(executor, events, write)
+    paths = []
+    # Segments run one at a time. FilterLogEvents is quota-limited per account and
+    # the fan-out across log groups already saturates it.
+    for segment in plan_segments(request.start_time, request.end_time, now=now):
+        path = await _resolve_segment(
+            client,
+            request,
+            segment,
+            cache,
+            use_cache=use_cache,
+            fetch_events=effective_fetch,
+            executor=executor,
+        )
+        if path is not None and path not in paths:
+            paths.append(path)
+    return paths
 
 
 async def resolve_parquet_path(
@@ -554,19 +584,21 @@ async def resolve_parquet_path(
     request: FetchRequest,
     config: TailCWConfig,
     *,
+    now: datetime | None = None,
     use_cache: bool = True,
     fetch_events: FetchEvents | None = None,
     executor: ThreadPoolExecutor | None = None,
-) -> Path | None:
-    """Return the cached Parquet path for a request, fetching from AWS on miss.
+) -> list[Path]:
+    """Return the cached Parquet segments for one request, fetching on miss.
 
-    Returns None when the request matches no events.
+    Returns an empty list when the request matches no events.
     """
     with open_log_cache(config) as cache:
         return await _resolve_into_cache(
             client,
             request,
             cache,
+            now=now if now is not None else datetime.now(UTC),
             use_cache=use_cache,
             fetch_events=fetch_events,
             executor=executor,
@@ -578,15 +610,16 @@ async def resolve_parquet_paths(
     requests: Sequence[FetchRequest],
     config: TailCWConfig,
     *,
+    now: datetime | None = None,
     use_cache: bool = True,
     fetch_events: FetchEvents | None = None,
     executor: ThreadPoolExecutor | None = None,
 ) -> list[Path]:
     """Resolve several fetches concurrently, dropping the ones with no events.
 
-    One Parquet file per request keeps each log group independently cacheable;
-    the caller merges them at read time. Results keep the request order rather
-    than completion order so the caller's group list stays meaningful.
+    Each request becomes one file per aligned segment of its window, so the
+    interior of a relative window is reusable by the next command. The caller
+    merges the files at read time.
 
     Every request shares one ``LogCache``. Separate instances over the same
     directory delete each other's not-yet-referenced Parquet files during orphan
@@ -598,13 +631,15 @@ async def resolve_parquet_paths(
     """
     if not requests:
         return []
+    resolved_now = now if now is not None else datetime.now(UTC)
     with open_log_cache(config) as cache:
 
-        async def resolve(request: FetchRequest) -> Path | None:
+        async def resolve(request: FetchRequest) -> list[Path]:
             return await _resolve_into_cache(
                 client,
                 request,
                 cache,
+                now=resolved_now,
                 use_cache=use_cache,
                 fetch_events=fetch_events,
                 executor=executor,
@@ -612,7 +647,7 @@ async def resolve_parquet_paths(
 
         async with asyncio.TaskGroup() as group:
             tasks = [group.create_task(resolve(request)) for request in requests]
-    return [path for task in tasks if (path := task.result()) is not None]
+    return [path for task in tasks for path in task.result()]
 
 
 def request_cache_dir(config: TailCWConfig) -> Path:
@@ -626,7 +661,6 @@ def _event_to_record(event: LogEvent) -> dict[str, str]:
         'log_group': event.log_group,
         'log_stream': event.log_stream,
         'message': event.message,
-        'event_id': event.event_id,
     }
 
 
@@ -796,6 +830,7 @@ async def _export_logs(
 ) -> int:
     try:
         start_time, end_time = _window_from_args(args, now)
+        filter_node = _local_filter(args.filter_pattern)
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
@@ -806,22 +841,23 @@ async def _export_logs(
         log_group=args.log_group,
         start_time=start_time,
         end_time=end_time,
-        filter_pattern=args.filter_pattern,
         profile=args.profile,
         region=args.region,
     )
-    parquet_path = await resolve_parquet_path(
+    paths = await resolve_parquet_path(
         await pool.client('logs'),
         request,
         config,
+        now=now,
         use_cache=not args.no_cache,
         fetch_events=fetch_events,
         executor=executor,
     )
-    if parquet_path is None:
+    if not paths:
         sys.stderr.write('No events found for the requested range\n')
         return 0
-    await run_blocking(executor, lambda: write_ndjson(read_parquet_to_log_events(parquet_path), sys.stdout))
+    events = query_parquet_files_to_log_events(paths, filter_node)
+    await run_blocking(executor, lambda: write_ndjson(events, sys.stdout))
     return 0
 
 
@@ -935,6 +971,7 @@ async def _export_summary(
 ) -> int:
     try:
         start_time, end_time = _window_from_args(args, now)
+        filter_node = _local_filter(args.filter_pattern)
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
@@ -958,7 +995,6 @@ async def _export_summary(
             log_group=name,
             start_time=start_time,
             end_time=end_time,
-            filter_pattern=args.filter_pattern,
             profile=args.profile,
             region=args.region,
         )
@@ -968,6 +1004,7 @@ async def _export_summary(
         logs,
         requests,
         config,
+        now=now,
         use_cache=not args.no_cache,
         fetch_events=fetch_events,
         executor=executor,
@@ -979,7 +1016,7 @@ async def _export_summary(
     report = await run_blocking(
         executor,
         lambda: roll_up(
-            query_parquet_files_to_log_events(paths),
+            query_parquet_files_to_log_events(paths, filter_node),
             window=(start_time, end_time),
             granularity=Granularity(args.granularity),
             min_severity=Severity[args.level.upper()],

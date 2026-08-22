@@ -34,7 +34,6 @@ def _make_event(message: str, offset: timedelta) -> LogEvent:
         log_stream='2026/01/15/[$LATEST]abc',
         timestamp=NOW - offset,
         message=message,
-        event_id=f'event-{message}-{offset.total_seconds()}',
         ingestion_time=None,
     )
 

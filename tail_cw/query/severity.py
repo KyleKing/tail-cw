@@ -60,14 +60,10 @@ def load_json_dict(payload: str | None) -> dict[str, Any] | None:
 
 
 def iter_structured_event_data(event: LogEvent) -> Iterator[dict[str, Any]]:
-    """Yield structured representations of a log event."""
+    """Yield the event's structured payload when its message is a JSON object."""
     message_data = load_json_dict(event.message)
     if message_data:
         yield message_data
-
-    parsed_attr = getattr(event, 'parsed', None)
-    if isinstance(parsed_attr, dict):
-        yield parsed_attr
 
 
 def event_severity(event: LogEvent) -> Severity:

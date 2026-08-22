@@ -23,6 +23,7 @@ import duckdb
 import polars as pl
 
 from tail_cw.aws.client import LogEvent
+from tail_cw.cache.storage import readable_message
 from tail_cw.cpu_budget import duckdb_threads
 from tail_cw.query.parser import FilterNode, FilterNodeType
 
@@ -35,6 +36,39 @@ class QueryBackend(Enum):
     DUCKDB = 'duckdb'  # Use DuckDB for querying
     POLARS = 'polars'  # Use Polars for querying
     AUTO = 'auto'  # Automatically select based on query characteristics
+
+
+SEARCH_TEXT = '_text'
+"""Column holding the text a free-text filter matches against.
+
+Materialized per query rather than stored: a JSON event keeps only its ``parsed``
+struct, so the text a user searches for has to be re-encoded from it.
+"""
+
+_NULL_FIELD_PATTERN = '"[^"]*":null,?'
+"""Fields a record never carried.
+
+Polars widens the struct across every record in the file, so re-encoding one
+record emits every field any record had. Left in, a search for ``ERROR`` matches
+every event in a file where some other event carried ``error_type``. Stripping
+them leaves stray punctuation, which does not matter for a substring match.
+"""
+
+
+def _search_text_sql(*, has_parsed: bool) -> str:
+    if not has_parsed:
+        return 'message'
+    # to_json returns DuckDB's JSON type, and coalescing that with a plain string
+    # casts the string side to JSON and fails on the first non-JSON line.
+    encoded = f"regexp_replace(CAST(to_json(parsed) AS VARCHAR), '{_NULL_FIELD_PATTERN}', '', 'g')"
+    return f'coalesce(message, {encoded})'
+
+
+def _polars_search_text(*, has_parsed: bool) -> pl.Expr:
+    if not has_parsed:
+        return pl.col('message')
+    encoded = pl.col('parsed').struct.json_encode().str.replace_all(_NULL_FIELD_PATTERN, '')
+    return pl.coalesce(pl.col('message'), encoded)
 
 
 def query_parquet_file(
@@ -53,7 +87,7 @@ def query_parquet_file(
         limit: Maximum number of results to return (None = no limit)
 
     Yields:
-        Dict for each matching log event row
+        Dict for each matching log event row, with ``message`` always populated
 
     Raises:
         FileNotFoundError: If the Parquet file is missing
@@ -73,11 +107,15 @@ def query_parquet_file(
     if backend == QueryBackend.AUTO:
         selected_backend = _select_backend(filter_node)
 
-    # Execute query with selected backend
-    if selected_backend == QueryBackend.DUCKDB:
-        yield from _query_with_duckdb(parquet_path, filter_node, limit)
-    else:  # POLARS
-        yield from _query_with_polars(parquet_path, filter_node, limit)
+    rows = (
+        _query_with_duckdb(parquet_path, filter_node, limit)
+        if selected_backend == QueryBackend.DUCKDB
+        else _query_with_polars(parquet_path, filter_node, limit)
+    )
+    # A JSON event stores no raw line, so every consumer of a row gets the text
+    # rebuilt here rather than rediscovering that ``message`` can be null.
+    for row in rows:
+        yield {**row, 'message': readable_message(row)}
 
 
 def _select_backend(filter_node: FilterNode | None) -> QueryBackend:
@@ -181,18 +219,21 @@ def _query_with_duckdb(
             params: list[Any] = [str(parquet_path)]
 
             if filter_node is not None and filter_node.node_type != FilterNodeType.MATCH_ALL:
+                described = con.execute('DESCRIBE SELECT * FROM read_parquet(?)', [str(parquet_path)]).fetchall()
+                text_sql = _search_text_sql(has_parsed=any(row[0] == 'parsed' for row in described))
+                # Values reaching the clause are escaped by _escape_sql_string; the
+                # identifiers are module constants.
+                source = f'(SELECT *, {text_sql} AS {SEARCH_TEXT} FROM read_parquet(?))'  # noqa: S608
                 where_clause = _build_duckdb_where_clause(filter_node)
-                sql += f' WHERE {where_clause}'
+                sql = f'SELECT * EXCLUDE ({SEARCH_TEXT}) FROM {source} WHERE {where_clause}'  # noqa: S608
 
             if limit is not None:
                 sql += ' LIMIT ?'
                 params.append(limit)
 
-            cursor = con.execute(sql, params)
-            column_names = [description[0] for description in cursor.description or []]
-
-            for row in cursor.fetchall():
-                yield dict(zip(column_names, row, strict=False))
+            # Read through Polars rather than fetchall: DuckDB's own conversion of a
+            # timezone-aware timestamp to a Python datetime needs pytz installed.
+            yield from con.execute(sql, params).pl().iter_rows(named=True)
 
     except duckdb.Error as e:
         msg = f'DuckDB query failed: {e}'
@@ -219,17 +260,16 @@ def _build_duckdb_where_clause(node: FilterNode) -> str:
 
 def _duckdb_clause_text_search(node: FilterNode) -> str:
     value_escaped = _escape_sql_string(node.value or '')
-    return f"LOWER(message) LIKE LOWER('%{value_escaped}%')"
+    return f"LOWER({SEARCH_TEXT}) LIKE LOWER('%{value_escaped}%')"
 
 
 def _duckdb_clause_exact_phrase(node: FilterNode) -> str:
-    value_escaped = _escape_sql_string(node.value or '')
-    return f"LOWER(message) LIKE LOWER('%{value_escaped}%')"
+    return _duckdb_clause_text_search(node)
 
 
 def _duckdb_clause_regex(node: FilterNode) -> str:
     pattern_escaped = _escape_sql_string(node.value or '')
-    return f"regexp_matches(message, '{pattern_escaped}')"
+    return f"regexp_matches({SEARCH_TEXT}, '{pattern_escaped}')"
 
 
 def _duckdb_clause_json_equals(node: FilterNode) -> str:
@@ -381,13 +421,15 @@ def _query_with_polars(
         ValueError: If query fails
     """
     try:
-        # Create lazy scan
         lf = pl.scan_parquet(str(parquet_path))
 
-        # Apply filter if specified
         if filter_node is not None and filter_node.node_type != FilterNodeType.MATCH_ALL:
-            filter_expr = _build_polars_filter_expr(filter_node)
-            lf = lf.filter(filter_expr)
+            has_parsed = 'parsed' in lf.collect_schema()
+            lf = (
+                lf.with_columns(_polars_search_text(has_parsed=has_parsed).alias(SEARCH_TEXT))
+                .filter(_build_polars_filter_expr(filter_node))
+                .drop(SEARCH_TEXT)
+            )
 
         # Apply limit if specified
         if limit is not None:
@@ -429,16 +471,15 @@ def _build_polars_filter_expr(node: FilterNode) -> pl.Expr:
 
 def _polars_expr_text_search(node: FilterNode) -> pl.Expr:
     value = (node.value or '').lower()
-    return pl.col('message').str.to_lowercase().str.contains(value, literal=True)
+    return pl.col(SEARCH_TEXT).str.to_lowercase().str.contains(value, literal=True)
 
 
 def _polars_expr_exact_phrase(node: FilterNode) -> pl.Expr:
-    value = (node.value or '').lower()
-    return pl.col('message').str.to_lowercase().str.contains(value, literal=True)
+    return _polars_expr_text_search(node)
 
 
 def _polars_expr_regex(node: FilterNode) -> pl.Expr:
-    return pl.col('message').str.contains(node.value or '', literal=False)
+    return pl.col(SEARCH_TEXT).str.contains(node.value or '', literal=False)
 
 
 def _polars_expr_json_equals(node: FilterNode) -> pl.Expr:
@@ -605,8 +646,7 @@ def _dict_to_log_event(row: Mapping[str, Any]) -> LogEvent:
         log_group=str(row.get('log_group', '')),
         log_stream=str(row.get('log_stream', '')),
         timestamp=timestamp,
-        message=str(row.get('message', '')),
-        event_id=str(row.get('event_id', '')),
+        message=readable_message(row),
         ingestion_time=ingestion_time,
     )
 

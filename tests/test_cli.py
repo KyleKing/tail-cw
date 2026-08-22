@@ -47,7 +47,6 @@ def _make_events(count: int = 3, *, log_group: str = '/aws/test/group') -> list[
             log_stream='stream-1',
             timestamp=NOW - timedelta(minutes=count - index),
             message=f'{{"level":"INFO","index":{index}}}',
-            event_id=f'event-{index:04d}',
             ingestion_time=None,
         )
         for index in range(count)
@@ -158,15 +157,14 @@ def _make_config(tmp_path: Path) -> TailCWConfig:
 def _make_request(
     log_group: str = '/aws/test/group',
     *,
-    filter_pattern: str | None = None,
     profile: str | None = None,
     region: str | None = None,
 ) -> FetchRequest:
+    """A request over one aligned five-minute segment, well behind the ingestion window."""
     return FetchRequest(
         log_group=log_group,
         start_time=NOW - timedelta(hours=1),
-        end_time=NOW,
-        filter_pattern=filter_pattern,
+        end_time=NOW - timedelta(minutes=55),
         profile=profile,
         region=region,
     )
@@ -494,10 +492,9 @@ def test_session_from_args_rejects_start_at_or_after_end(start, end):
 async def test_resolve_parquet_path_fetches_on_miss(tmp_path):
     fetcher = _FakeFetcher(_make_events())
 
-    result = await resolve_parquet_path(_CLIENT, _make_request(), _make_config(tmp_path), fetch_events=fetcher)
+    paths = await resolve_parquet_path(_CLIENT, _make_request(), _make_config(tmp_path), fetch_events=fetcher)
 
-    assert result is not None
-    assert result.exists()
+    assert [path.exists() for path in paths] == [True]
     assert len(fetcher.calls) == 1
 
 
@@ -519,29 +516,29 @@ async def test_resolve_parquet_path_no_cache_refetches(tmp_path):
     await resolve_parquet_path(_CLIENT, request, config, fetch_events=_FakeFetcher(_make_events()))
 
     refetcher = _FakeFetcher(_make_events())
-    result = await resolve_parquet_path(_CLIENT, request, config, use_cache=False, fetch_events=refetcher)
+    paths = await resolve_parquet_path(_CLIENT, request, config, use_cache=False, fetch_events=refetcher)
 
-    assert result is not None
+    assert paths
     assert len(refetcher.calls) == 1
 
 
-async def test_resolve_parquet_path_empty_fetch_returns_none(tmp_path):
+async def test_resolve_parquet_path_empty_fetch_returns_nothing(tmp_path):
     fetcher = _FakeFetcher([])
 
-    result = await resolve_parquet_path(_CLIENT, _make_request(), _make_config(tmp_path), fetch_events=fetcher)
-
-    assert result is None
+    assert await resolve_parquet_path(_CLIENT, _make_request(), _make_config(tmp_path), fetch_events=fetcher) == []
 
 
 async def test_resolve_parquet_path_threads_fetch_parameters(tmp_path):
     fetcher = _FakeFetcher(_make_events())
-    request = _make_request(filter_pattern='ERROR', profile='dev', region='us-west-2')
+    request = _make_request(profile='dev', region='us-west-2')
 
     await resolve_parquet_path(_CLIENT, request, _make_config(tmp_path), fetch_events=fetcher)
 
     call = fetcher.calls[0]
     assert call['log_group'] == '/aws/test/group'
-    assert call['filter_pattern'] == 'ERROR'
+    assert (call['start_time'], call['end_time']) == (request.start_time, request.end_time)
+    # No server-side filter: the whole window is cached once and filtered on read.
+    assert 'filter_pattern' not in call
     # Profile and region reach the pool that built the client, and the cache key, not the fetch itself
     assert 'profile_name' not in call
 
@@ -566,8 +563,7 @@ async def test_resolve_parquet_paths_single_request(tmp_path):
 
     paths = await resolve_parquet_paths(_CLIENT, [_make_request()], _make_config(tmp_path), fetch_events=fetcher)
 
-    assert len(paths) == 1
-    assert paths[0].exists()
+    assert [path.exists() for path in paths] == [True]
     assert len(fetcher.calls) == 1
 
 
@@ -626,7 +622,6 @@ def test_write_ndjson():
     record = json.loads(lines[0])
     assert record['log_group'] == '/aws/test/group'
     assert record['log_stream'] == 'stream-1'
-    assert record['event_id'] == 'event-0000'
     assert record['message'] == '{"level":"INFO","index":0}'
     assert datetime.fromisoformat(record['timestamp']) == NOW - timedelta(minutes=2)
 
@@ -800,7 +795,7 @@ def test_run_cli_export_logs_writes_ndjson(tmp_path, capsys):
     config_path = _write_config_file(tmp_path)
 
     result = run_cli(
-        ['export', 'logs', '/aws/test/group', '--config', str(config_path)],
+        ['export', 'logs', '/aws/test/group', '--start', '2m', '--config', str(config_path)],
         _RecordingShell(),
         fetch_events=_FakeFetcher(_make_events(3)),
         is_tty=False,
@@ -809,12 +804,12 @@ def test_run_cli_export_logs_writes_ndjson(tmp_path, capsys):
     assert result == 0
     lines = capsys.readouterr().out.strip().splitlines()
     records = [json.loads(line) for line in lines]
-    assert {record['event_id'] for record in records} == {'event-0000', 'event-0001', 'event-0002'}
+    assert [record['message'] for record in records] == [f'{{"level":"INFO","index":{index}}}' for index in range(3)]
 
 
 def test_run_cli_export_logs_no_cache_refetches(tmp_path, capsys):
     config_path = _write_config_file(tmp_path)
-    argv = ['export', 'logs', '/aws/test/group', '--config', str(config_path)]
+    argv = ['export', 'logs', '/aws/test/group', '--start', '2m', '--config', str(config_path)]
     run_cli(argv, None, fetch_events=_FakeFetcher(_make_events(2)), is_tty=False)
     capsys.readouterr()
 
@@ -829,7 +824,7 @@ def test_run_cli_export_logs_no_events(tmp_path, capsys):
     config_path = _write_config_file(tmp_path)
 
     result = run_cli(
-        ['export', 'logs', '/aws/test/group', '--config', str(config_path)],
+        ['export', 'logs', '/aws/test/group', '--start', '2m', '--config', str(config_path)],
         None,
         fetch_events=_FakeFetcher([]),
         is_tty=False,
@@ -885,7 +880,6 @@ def test_run_cli_export_tail_backfill_before_live(tmp_path, capsys):
             log_stream='stream-live',
             timestamp=NOW,
             message='live',
-            event_id='live-0001',
             ingestion_time=None,
         ),
     ]
@@ -901,7 +895,11 @@ def test_run_cli_export_tail_backfill_before_live(tmp_path, capsys):
 
     assert result == 0
     records = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
-    assert [record['event_id'] for record in records] == ['event-0000', 'event-0001', 'live-0001']
+    assert [record['message'] for record in records] == [
+        '{"level":"INFO","index":0}',
+        '{"level":"INFO","index":1}',
+        'live',
+    ]
     fetch_call = fetcher.calls[0]
     start_time, end_time = fetch_call['start_time'], fetch_call['end_time']
     assert isinstance(start_time, datetime)
@@ -1148,13 +1146,23 @@ class _SeverityFetcher:
                 log_stream='stream-1',
                 timestamp=NOW - timedelta(minutes=index + 1),
                 message=message,
-                event_id=f'{log_group}-{index:04d}',
                 ingestion_time=None,
             )
 
 
 def _summary_argv(tmp_path: Path, *extra: str) -> list[str]:
-    return ['export', 'summary', '/aws/lambda/*', '--config', str(_write_config_file(tmp_path)), *extra]
+    # A window shorter than the smallest segment plans one fetch per group, so a
+    # fake fetcher that ignores the window cannot double-count its events.
+    return [
+        'export',
+        'summary',
+        '/aws/lambda/*',
+        '--start',
+        '2m',
+        '--config',
+        str(_write_config_file(tmp_path)),
+        *extra,
+    ]
 
 
 def _install_groups(monkeypatch, names: list[str]) -> None:

@@ -30,6 +30,7 @@ from tail_cw.aws.client import LogEvent
 from tail_cw.concurrency import closing_stream
 from tail_cw.config import TailCWConfig
 from tail_cw.query import parse_extended_filter, parse_filter_pattern, query_parquet_files_to_log_events
+from tail_cw.query.parser import FilterNode, combine_filters
 from tail_cw.query.trace import TraceGroup, extract_trace_id_from_event, query_traces_from_parquet_files
 from tail_cw.tui.log_viewer import batch_format_log_events, get_column_definitions
 from tail_cw.tui.navigation import NavTarget, ViewKind
@@ -245,7 +246,6 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             'log_group': 20,
             'log_stream': 16,
             'message': None,
-            'event_id': 12,
         }
         for key, label in get_column_definitions():
             self._table.add_column(label, key=key, width=column_widths.get(key))
@@ -258,21 +258,15 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._update_status('Loading events...')
         session = self.shell.session
         self.run_worker(
-            self._resolve_window(resolve, session.start, session.end, session.filter_pattern),
+            self._resolve_window(resolve, session.start, session.end),
             name='resolve_logs',
             group='resolve_logs',
             exclusive=True,
         )
 
-    async def _resolve_window(
-        self,
-        resolve: ResolveLogs,
-        start: datetime,
-        end: datetime,
-        filter_pattern: str | None,
-    ) -> None:
+    async def _resolve_window(self, resolve: ResolveLogs, start: datetime, end: datetime) -> None:
         try:
-            paths = await resolve(tuple(self._log_groups), start, end, filter_pattern)
+            paths = await resolve(tuple(self._log_groups), start, end)
         except Exception as err:
             self.notify(f'Failed to load logs: {err}', severity='error')
             self._update_status(f'Load error: {err}')
@@ -301,7 +295,9 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
 
         initial_limit = self._config.tui.initial_load_limit
         try:
-            events = list(query_parquet_files_to_log_events(self._parquet_paths, None, limit=initial_limit))
+            events = list(
+                query_parquet_files_to_log_events(self._parquet_paths, self._session_filter(), limit=initial_limit),
+            )
         except Exception as err:
             self.notify(f'Failed to load Parquet file: {err}', severity='error')
             self._update_status(f'Error loading Parquet: {err}')
@@ -668,7 +664,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
                 results = list(
                     query_parquet_files_to_log_events(
                         self._parquet_paths,
-                        filter_node,
+                        self._session_filter(filter_node),
                         limit=self._config.tui.search_limit,
                     ),
                 )
@@ -684,6 +680,19 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         except Exception as err:
             self._update_status(f'Search error: {err}')
             self.notify(f'Search failed: {err}', severity='error')
+
+    def _session_filter(self, extra: FilterNode | None = None) -> FilterNode | None:
+        """Combine the session-wide filter with a view-local one.
+
+        The cached window holds every event in the range, so the session filter is
+        applied on read rather than pushed to CloudWatch, and an in-view search
+        narrows within it instead of escaping it.
+        """
+        pattern = self.shell.session.filter_pattern
+        nodes = [node for node in (parse_filter_pattern(pattern) if pattern else None, extra) if node is not None]
+        if not nodes:
+            return None
+        return nodes[0] if len(nodes) == 1 else combine_filters(nodes)
 
     def _filter_events_in_memory(self, query: str) -> list[LogEvent]:
         query_lower = query.lower()

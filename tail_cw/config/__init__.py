@@ -8,7 +8,6 @@ details.
 
 from tail_cw.config.config import (
     CacheConfig,
-    ParquetConfig,
     PreviewConfig,
     TailCWConfig,
     TraceConfig,
@@ -21,7 +20,6 @@ from tail_cw.config.config import (
 
 __all__ = [
     'CacheConfig',
-    'ParquetConfig',
     'PreviewConfig',
     'TUIConfig',
     'TailCWConfig',

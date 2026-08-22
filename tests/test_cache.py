@@ -1,14 +1,13 @@
-"""Tests for cache storage module."""
+"""Tests for cache storage: key generation, the v2 Parquet schema, and eviction."""
 
+import hashlib
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import polars as pl
-import pyarrow.parquet as pq  # type: ignore[import-untyped]
 import pytest
 
-from tail_cw.aws.client import LogEvent
 from tail_cw.cache.storage import (
     METADATA_DIRNAME,
     LogCache,
@@ -17,6 +16,7 @@ from tail_cw.cache.storage import (
     read_parquet_to_log_events,
     write_log_events_to_parquet,
 )
+from tests.factories import BASE_TIME, make_event, make_events
 
 _SHORT_TTL = 0.05
 """Fractional TTL so expiry tests finish in milliseconds instead of seconds."""
@@ -24,260 +24,78 @@ _SHORT_TTL = 0.05
 _PAST_TTL = _SHORT_TTL * 3
 """Sleep long enough to clear _SHORT_TTL on a loaded CI machine."""
 
-
-def _make_log_event(
-    log_group: str = '/aws/lambda/test-function',
-    log_stream: str = '2025/01/01/stream-123',
-    timestamp: datetime | None = None,
-    message: str = 'Test log message',
-    event_id: str = 'event-123',
-    ingestion_time: datetime | None = None,
-) -> LogEvent:
-    """Create a test LogEvent instance.
-
-    Args:
-        log_group: CloudWatch log group name.
-        log_stream: CloudWatch log stream name.
-        timestamp: Event timestamp. Defaults to current UTC time.
-        message: Log message content.
-        event_id: Unique event identifier.
-        ingestion_time: Optional ingestion timestamp.
-
-    Returns:
-        LogEvent instance for testing.
-    """
-    if timestamp is None:
-        timestamp = datetime.now(tz=UTC)
-
-    return LogEvent(
-        log_group=log_group,
-        log_stream=log_stream,
-        timestamp=timestamp,
-        message=message,
-        event_id=event_id,
-        ingestion_time=ingestion_time,
-    )
+_START = datetime(2025, 1, 1, tzinfo=UTC)
+_END = datetime(2025, 1, 2, tzinfo=UTC)
 
 
-def test_generate_cache_key_deterministic():
-    """Test that cache key generation is deterministic."""
-    start = datetime(2025, 1, 1, tzinfo=UTC)
-    end = datetime(2025, 1, 2, tzinfo=UTC)
-
-    # Generate same key twice
-    key1 = generate_cache_key('/aws/lambda/fn', start, end)
-    key2 = generate_cache_key('/aws/lambda/fn', start, end)
-
-    assert key1 == key2
-    assert key1.startswith('cache:v1:')
-
-    # Test with all parameters
-    key3 = generate_cache_key(
-        '/aws/lambda/fn',
-        start,
-        end,
-        filter_pattern='[ERROR]',
-        log_stream_names=['stream-1', 'stream-2'],
-        region_name='us-west-2',
-    )
-    key4 = generate_cache_key(
-        '/aws/lambda/fn',
-        start,
-        end,
-        filter_pattern='[ERROR]',
-        log_stream_names=['stream-1', 'stream-2'],
-        region_name='us-west-2',
-    )
-
-    assert key3 == key4
-    assert key3.startswith('cache:v1:')
+def _key(log_group: str = '/aws/lambda/fn', **kwargs) -> str:
+    return generate_cache_key(log_group, _START, _END, **kwargs)
 
 
-def test_generate_cache_key_different_inputs():
-    """Test that different inputs produce different cache keys."""
-    start = datetime(2025, 1, 1, tzinfo=UTC)
-    end = datetime(2025, 1, 2, tzinfo=UTC)
+def test_generate_cache_key_is_deterministic_and_versioned():
+    key = _key(log_stream_names=['stream-2', 'stream-1'], region_name='us-west-2')
 
-    key_group1 = generate_cache_key('/aws/lambda/fn1', start, end)
-    key_group2 = generate_cache_key('/aws/lambda/fn2', start, end)
-
-    key_time1 = generate_cache_key(
-        '/aws/lambda/fn',
-        start,
-        datetime(2025, 1, 3, tzinfo=UTC),
-    )
-    key_time2 = generate_cache_key('/aws/lambda/fn', start, end)
-
-    key_filter1 = generate_cache_key(
-        '/aws/lambda/fn',
-        start,
-        end,
-        filter_pattern='[ERROR]',
-    )
-    key_filter2 = generate_cache_key(
-        '/aws/lambda/fn',
-        start,
-        end,
-        filter_pattern='[WARN]',
-    )
-
-    # All keys should be unique
-    keys = {key_group1, key_group2, key_time1, key_time2, key_filter1, key_filter2}
-    assert len(keys) == 6
+    assert key == _key(log_stream_names=['stream-1', 'stream-2'], region_name='us-west-2')
+    assert key.startswith('cache:v2:')
 
 
-def test_generate_cache_key_order_independence():
-    """Test that log_stream_names order doesn't affect cache key."""
-    start = datetime(2025, 1, 1, tzinfo=UTC)
-    end = datetime(2025, 1, 2, tzinfo=UTC)
-
-    key1 = generate_cache_key(
-        '/aws/lambda/fn',
-        start,
-        end,
-        log_stream_names=['stream-1', 'stream-2', 'stream-3'],
-    )
-
-    key2 = generate_cache_key(
-        '/aws/lambda/fn',
-        start,
-        end,
-        log_stream_names=['stream-3', 'stream-1', 'stream-2'],
-    )
-
-    assert key1 == key2
+@pytest.mark.parametrize(
+    'other',
+    [
+        {'log_group': '/aws/lambda/other'},
+        {'region_name': 'us-west-2'},
+        {'profile_name': 'read-prod'},
+        {'log_stream_names': ['stream-1']},
+    ],
+)
+def test_every_keyed_parameter_changes_the_key(other):
+    assert _key(**other) != _key()
 
 
-def test_is_jsonl_message():
-    """Test JSONL message detection."""
-    # Valid JSON
-    assert is_jsonl_message('{"level":"INFO","msg":"test"}') is True
-
-    # JSON with leading whitespace
-    assert is_jsonl_message('  {"key":"value"}') is True
-    assert is_jsonl_message('\t{"key":"value"}') is True
-
-    # JSON with leading timestamp (ISO8601/RFC3339)
-    assert is_jsonl_message('2025-01-01T12:00:00Z {"k":1}') is True
-    assert is_jsonl_message('2025-01-01T12:00:00.123456Z {"k":1}') is True
-    assert is_jsonl_message('2025-01-01T12:00:00+00:00 {"k":1}') is True
-    assert is_jsonl_message('  2025-01-01T12:00:00Z   {"k":1}') is True
-
-    # Plain text
-    assert is_jsonl_message('Plain log message') is False
-
-    # Text starting with bracket (not JSON)
-    assert is_jsonl_message('[ERROR] message') is False
-
-    # Timestamp without JSON
-    assert is_jsonl_message('2025-01-01T12:00:00Z Plain text') is False
-
-    # Empty string
-    assert is_jsonl_message('') is False
-
-    # Only whitespace
-    assert is_jsonl_message('   ') is False
+def test_the_window_changes_the_key():
+    assert generate_cache_key('/aws/lambda/fn', _START, _END + timedelta(hours=1)) != _key()
 
 
-def test_write_log_events_to_parquet_plain_text(fix_test_cache: Path):
-    """Test Parquet writing with plain text log messages."""
-    events = [
-        _make_log_event(
-            event_id='event-1',
-            message='First plain text message',
-        ),
-        _make_log_event(
-            event_id='event-2',
-            message='Second plain text message',
-        ),
-        _make_log_event(
-            event_id='event-3',
-            message='Third plain text message',
-        ),
-    ]
-
-    output_path = fix_test_cache / 'plain_text.parquet'
-    stats = write_log_events_to_parquet(events, output_path)
-
-    assert stats['total_events'] == 3
-    assert stats['jsonl_events'] == 0
-    assert stats['file_size_bytes'] > 0
-    assert output_path.exists()
-
-    # Verify with Polars
-    df = pl.scan_parquet(str(output_path)).collect()
-    assert len(df) == 3
+@pytest.mark.parametrize(
+    ('message', 'expected'),
+    [
+        ('{"level":"INFO","msg":"test"}', True),
+        ('  {"key":"value"}', True),
+        ('\t{"key":"value"}', True),
+        ('2025-01-01T12:00:00Z {"k":1}', True),
+        ('2025-01-01T12:00:00.123456Z {"k":1}', True),
+        ('2025-01-01T12:00:00+00:00 {"k":1}', True),
+        ('  2025-01-01T12:00:00Z   {"k":1}', True),
+        ('Plain log message', False),
+        ('[ERROR] message', False),
+        ('2025-01-01T12:00:00Z Plain text', False),
+        ('', False),
+        ('   ', False),
+    ],
+)
+def test_is_jsonl_message(message, expected):
+    assert is_jsonl_message(message) is expected
 
 
-def test_write_log_events_to_parquet_jsonl(fix_test_cache: Path):
-    """Test Parquet writing with JSONL messages."""
-    events = [
-        _make_log_event(
-            event_id='event-1',
-            message='{"level":"INFO","msg":"First message","count":1}',
-        ),
-        _make_log_event(
-            event_id='event-2',
-            message='{"level":"ERROR","msg":"Second message","count":2}',
-        ),
-        _make_log_event(
-            event_id='event-3',
-            message='{"level":"WARN","msg":"Third message","count":3}',
-        ),
-    ]
+@pytest.mark.parametrize(
+    ('messages', 'expected_jsonl'),
+    [
+        (['plain one', 'plain two'], 0),
+        (['{"level":"INFO"}', '{"level":"ERROR"}'], 2),
+        (['plain', '{"level":"INFO"}', '{invalid json', '{"level":"ERROR"}'], 2),
+    ],
+)
+def test_write_counts_the_events_it_parsed(fix_test_cache: Path, messages, expected_jsonl):
+    output_path = fix_test_cache / 'counts.parquet'
 
-    output_path = fix_test_cache / 'jsonl.parquet'
-    stats = write_log_events_to_parquet(events, output_path)
+    stats = write_log_events_to_parquet(make_events(messages), output_path)
 
-    assert stats['total_events'] == 3
-    assert stats['jsonl_events'] == 3
+    assert stats['total_events'] == len(messages)
+    assert stats['jsonl_events'] == expected_jsonl
     assert stats['file_size_bytes'] > 0
 
-    # Verify parsed fields are present
-    df = pl.scan_parquet(str(output_path)).collect()
-    assert len(df) == 3
-    assert 'parsed' in df.columns
-    assert 'log_group' in df.columns
-    assert 'log_stream' in df.columns
-    assert 'timestamp' in df.columns
-    assert 'event_id' in df.columns
 
-
-def test_write_log_events_to_parquet_mixed(fix_test_cache: Path):
-    """Test Parquet writing with mixed plain text and JSONL messages."""
-    events = [
-        _make_log_event(
-            event_id='event-1',
-            message='Plain text message',
-        ),
-        _make_log_event(
-            event_id='event-2',
-            message='{"level":"INFO","msg":"JSON message"}',
-        ),
-        _make_log_event(
-            event_id='event-3',
-            message='Another plain text message',
-        ),
-        _make_log_event(
-            event_id='event-4',
-            message='{"level":"ERROR","msg":"Another JSON message"}',
-        ),
-    ]
-
-    output_path = fix_test_cache / 'mixed.parquet'
-    stats = write_log_events_to_parquet(events, output_path)
-
-    assert stats['total_events'] == 4
-    assert stats['jsonl_events'] == 2
-    assert stats['file_size_bytes'] > 0
-
-    # Verify all events are present
-    df = pl.scan_parquet(str(output_path)).collect()
-    assert len(df) == 4
-
-
-def test_write_log_events_to_parquet_empty(fix_test_cache: Path):
-    """Test Parquet writing with empty input."""
+def test_write_rejects_an_empty_batch(fix_test_cache: Path):
     output_path = fix_test_cache / 'empty.parquet'
 
     with pytest.raises(ValueError, match='empty log events'):
@@ -286,706 +104,249 @@ def test_write_log_events_to_parquet_empty(fix_test_cache: Path):
     assert not output_path.exists()
 
 
-def test_write_log_events_to_parquet_compression_levels(fix_test_cache: Path):
-    """Test different compression levels."""
-    # Create a reasonably large dataset to see compression differences
+def test_the_schema_stores_a_json_line_once(fix_test_cache: Path):
+    """A JSON event keeps only ``parsed``; the raw line would be the same bytes twice."""
+    output_path = fix_test_cache / 'schema.parquet'
+
+    write_log_events_to_parquet(make_events(['plain text', '{"level":"INFO","n":1}']), output_path)
+
+    frame = pl.read_parquet(output_path)
+    assert set(frame.columns) == {'log_group', 'log_stream', 'timestamp', 'ingestion_time', 'message', 'parsed'}
+    assert frame['message'].to_list() == ['plain text', None]
+    assert frame['timestamp'].dtype == pl.Datetime('us', 'UTC')
+    assert frame['ingestion_time'].dtype == pl.Datetime('us', 'UTC')
+
+
+def test_a_json_event_reads_back_as_compact_json(fix_test_cache: Path):
+    """The text is rebuilt from ``parsed``, dropping keys the line never carried."""
+    output_path = fix_test_cache / 'rebuilt.parquet'
+    messages = ['{"level":"INFO","msg":"one"}', '{"level":"ERROR","msg":"two","extra":5}']
+
+    write_log_events_to_parquet(make_events(messages), output_path)
+
+    assert [event.message for event in read_parquet_to_log_events(output_path)] == messages
+
+
+def test_events_are_stored_in_timestamp_order(fix_test_cache: Path):
+    output_path = fix_test_cache / 'sorted.parquet'
     events = [
-        _make_log_event(
-            event_id=f'event-{i}',
-            message=f'Log message number {i} with some repeated text content',
-        )
-        for i in range(1000)
+        make_event('third', timestamp=BASE_TIME + timedelta(seconds=2)),
+        make_event('first', timestamp=BASE_TIME),
+        make_event('second', timestamp=BASE_TIME + timedelta(seconds=1)),
     ]
 
-    path_low = fix_test_cache / 'compression_low.parquet'
-    path_high = fix_test_cache / 'compression_high.parquet'
+    write_log_events_to_parquet(events, output_path)
 
-    stats_low = write_log_events_to_parquet(events, path_low, compression_level=1)
-    stats_high = write_log_events_to_parquet(events, path_high, compression_level=22)
-
-    # Higher compression should generally reduce size, but allow small variance
-    allowed_variance = int(stats_low['file_size_bytes'] * 0.05) + 1
-    assert stats_high['file_size_bytes'] <= stats_low['file_size_bytes'] + allowed_variance
-
-    # Both should have same event counts
-    assert stats_low['total_events'] == 1000
-    assert stats_high['total_events'] == 1000
-
-    # Both should be readable
-    df_low = pl.scan_parquet(str(path_low)).collect()
-    df_high = pl.scan_parquet(str(path_high)).collect()
-    assert len(df_low) == 1000
-    assert len(df_high) == 1000
+    assert [event.message for event in read_parquet_to_log_events(output_path)] == ['first', 'second', 'third']
 
 
-def test_write_log_events_to_parquet_custom_row_group_size(fix_test_cache: Path):
-    """Ensure custom row group size is honored."""
-    events = [
-        _make_log_event(
-            event_id=f'event-{i}',
-            message=f'Row group test {i}',
-        )
-        for i in range(1500)
-    ]
-    output_path = fix_test_cache / 'custom_row_group.parquet'
-
-    stats = write_log_events_to_parquet(
-        events,
-        output_path,
-        row_group_size=500,
-    )
-
-    assert stats['total_events'] == 1500
-
-    parquet_file = pq.ParquetFile(output_path)
-    assert parquet_file.metadata is not None
-    assert parquet_file.metadata.num_row_groups == 3
-    for index in range(parquet_file.metadata.num_row_groups):
-        assert parquet_file.metadata.row_group(index).num_rows <= 500
-
-
-def test_write_log_events_to_parquet_keeps_fields_that_only_appear_late(fix_test_cache: Path):
+def test_write_keeps_fields_that_only_appear_late(fix_test_cache: Path):
     """A field absent, null, or differently typed early must not break or vanish.
 
     Sampling the first N rows to infer the schema panics the Parquet writer on a
     null-then-string key, fails to parse an int-then-string key, and silently drops a key
     that first appears past the sample, so the whole file is scanned instead.
     """
-    early = [
-        _make_log_event(event_id=f'early-{index}', message='{"kept": null, "widened": 1}') for index in range(1200)
-    ]
-    late = [
-        _make_log_event(event_id='late-null', message='{"kept": "text", "widened": 2}'),
-        _make_log_event(event_id='late-widened', message='{"kept": "text", "widened": "text"}'),
-        _make_log_event(event_id='late-new', message='{"kept": "text", "widened": 3, "appeared": "text"}'),
+    messages = ['{"kept": null, "widened": 1}'] * 1200 + [
+        '{"kept": "text", "widened": 2}',
+        '{"kept": "text", "widened": "text"}',
+        '{"kept": "text", "widened": 3, "appeared": "text"}',
     ]
     output_path = fix_test_cache / 'late_fields.parquet'
 
-    stats = write_log_events_to_parquet([*early, *late], output_path)
+    stats = write_log_events_to_parquet(make_events(messages), output_path)
 
-    assert stats['total_events'] == len(early) + len(late)
+    assert stats['total_events'] == len(messages)
     parsed = pl.read_parquet(output_path)['parsed']
     assert set(parsed.struct.fields) == {'kept', 'widened', 'appeared'}
     assert parsed.struct.field('kept').drop_nulls().to_list() == ['text', 'text', 'text']
     assert parsed.struct.field('appeared').drop_nulls().to_list() == ['text']
 
 
-def test_write_log_events_to_parquet_with_progress_callback(fix_test_cache: Path):
-    """Ensure progress callbacks are invoked during conversion."""
-    events = [
-        _make_log_event(
-            event_id=f'event-{i}',
-            message=f'{{"idx": {i}}}',
-        )
-        for i in range(2100)
-    ]
-    output_path = fix_test_cache / 'progress.parquet'
-    calls = []
-
-    def progress(current: int, total: int, status: str) -> None:
-        calls.append((current, total, status))
+def test_write_reports_progress(fix_test_cache: Path):
+    calls: list[tuple[int, int, str]] = []
+    events = make_events(f'{{"idx": {index}}}' for index in range(2100))
 
     stats = write_log_events_to_parquet(
         events,
-        output_path,
-        progress_callback=progress,
+        fix_test_cache / 'progress.parquet',
+        progress_callback=lambda *update: calls.append(update),
     )
 
     assert stats['total_events'] == 2100
-    statuses = {status for _, _, status in calls}
-    assert 'Parsing JSONL...' in statuses
-    assert 'Converting to Parquet...' in statuses
+    assert {status for _, _, status in calls} == {'Parsing JSONL...', 'Converting to Parquet...'}
     assert any(total == -1 for _, total, _ in calls)
     assert any(total == 2100 for _, total, _ in calls)
 
 
-def test_read_parquet_to_log_events_round_trip(fix_test_cache: Path):
-    """Test round-trip conversion: LogEvent -> Parquet -> LogEvent."""
-    # Create events with various field combinations
-    timestamp1 = datetime(2025, 1, 1, 12, 0, 0, 123456, tzinfo=UTC)
-    timestamp2 = datetime(2025, 1, 2, 13, 30, 45, 654321, tzinfo=UTC)
-    ingestion1 = datetime(2025, 1, 1, 12, 0, 1, tzinfo=UTC)
-
-    original_events = [
-        _make_log_event(
+def test_read_round_trips_every_field(fix_test_cache: Path):
+    originals = [
+        make_event(
+            'with ingestion time',
             log_group='/aws/lambda/fn1',
             log_stream='stream-1',
-            timestamp=timestamp1,
-            message='Message with ingestion time',
-            event_id='event-1',
-            ingestion_time=ingestion1,
+            timestamp=datetime(2025, 1, 1, 12, 0, 0, 123456, tzinfo=UTC),
         ),
-        _make_log_event(
+        make_event(
+            'without ingestion time',
             log_group='/aws/lambda/fn2',
             log_stream='stream-2',
-            timestamp=timestamp2,
-            message='Message without ingestion time',
-            event_id='event-2',
-            ingestion_time=None,
+            timestamp=datetime(2025, 1, 2, 13, 30, 45, 654321, tzinfo=UTC),
+            ingestion_offset=None,
         ),
     ]
-
-    # Write to Parquet
     output_path = fix_test_cache / 'round_trip.parquet'
-    write_log_events_to_parquet(original_events, output_path)
+    write_log_events_to_parquet(originals, output_path)
 
-    # Read back
-    read_events = list(read_parquet_to_log_events(output_path))
-
-    assert len(read_events) == 2
-
-    # Compare first event
-    assert read_events[0].log_group == original_events[0].log_group
-    assert read_events[0].log_stream == original_events[0].log_stream
-    assert read_events[0].timestamp == original_events[0].timestamp
-    assert read_events[0].message == original_events[0].message
-    assert read_events[0].event_id == original_events[0].event_id
-    assert read_events[0].ingestion_time == original_events[0].ingestion_time
-
-    # Compare second event
-    assert read_events[1].log_group == original_events[1].log_group
-    assert read_events[1].log_stream == original_events[1].log_stream
-    assert read_events[1].timestamp == original_events[1].timestamp
-    assert read_events[1].message == original_events[1].message
-    assert read_events[1].event_id == original_events[1].event_id
-    assert read_events[1].ingestion_time is None
+    assert list(read_parquet_to_log_events(output_path)) == originals
 
 
-def test_read_parquet_to_log_events_nonexistent_file(fix_test_cache: Path):
-    """Test reading from nonexistent Parquet file."""
-    nonexistent_path = fix_test_cache / 'nonexistent.parquet'
-
+def test_read_rejects_a_missing_file(fix_test_cache: Path):
     with pytest.raises(FileNotFoundError, match='Parquet file not found'):
-        list(read_parquet_to_log_events(nonexistent_path))
+        list(read_parquet_to_log_events(fix_test_cache / 'nonexistent.parquet'))
 
 
-def test_log_cache_init(fix_test_cache: Path):
-    """Test LogCache initialization."""
+def test_log_cache_creates_its_directories(fix_test_cache: Path):
     cache_dir = fix_test_cache / 'cache_init'
 
     with LogCache(cache_dir) as cache:
-        assert cache._cache_dir == cache_dir
         assert cache._parquet_dir == cache_dir / 'parquet'
-        assert cache._cache_dir.exists()
         assert cache._parquet_dir.exists()
 
 
-def test_log_cache_write_and_read(fix_test_cache: Path):
-    """Test basic cache write and read operations."""
-    cache_dir = fix_test_cache / 'cache_basic'
+def test_log_cache_write_read_and_exists(fix_test_cache: Path):
+    with LogCache(fix_test_cache / 'basic') as cache:
+        key = _key()
+        assert cache.exists(key) is False
 
-    with LogCache(cache_dir) as cache:
-        # Generate cache key
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/fn', start, end)
-
-        # Create test events
-        original_events = [
-            _make_log_event(event_id='event-1', message='First message'),
-            _make_log_event(event_id='event-2', message='Second message'),
-            _make_log_event(event_id='event-3', message='Third message'),
-        ]
-
-        # Write to cache
-        stats = cache.write(original_events, cache_key)
+        stats = cache.write(make_events(['first', 'second', 'third']), key)
 
         assert stats['total_events'] == 3
-        assert stats['jsonl_events'] == 0
-        assert stats['file_size_bytes'] > 0
-
-        # Read back
-        cached_events = list(cache.read(cache_key))
-
-        assert len(cached_events) == 3
-        assert cached_events[0].event_id == 'event-1'
-        assert cached_events[1].event_id == 'event-2'
-        assert cached_events[2].event_id == 'event-3'
-
-
-def test_log_cache_with_custom_config(fix_test_cache: Path):
-    """Ensure custom row group and schema settings are applied."""
-    cache_dir = fix_test_cache / 'cache_custom_config'
-    events = [_make_log_event(event_id=f'event-{i}', message=f'{{"value": {i}}}') for i in range(150)]
-
-    with LogCache(
-        cache_dir,
-        row_group_size=50,
-        compression_level=5,
-    ) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/custom', start, end)
-
-        stats = cache.write(events, cache_key)
-
-        assert stats['total_events'] == 150
-        assert cache._row_group_size == 50
-
-        parquet_files = list(cache._parquet_dir.glob('*.parquet'))
-        assert len(parquet_files) == 1
-
-        parquet_file = pq.ParquetFile(parquet_files[0])
-        assert parquet_file.metadata is not None
-        assert parquet_file.metadata.num_row_groups == 3
-
-
-def test_log_cache_write_with_progress(fix_test_cache: Path):
-    """Verify progress callback integration."""
-    cache_dir = fix_test_cache / 'cache_progress'
-    events = [_make_log_event(event_id=f'event-{i}', message=f'{{"value": {i}}}') for i in range(1100)]
-    calls = []
-
-    def progress(current: int, total: int, status: str) -> None:
-        calls.append((current, total, status))
-
-    with LogCache(cache_dir) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/progress', start, end)
-
-        stats = cache.write(events, cache_key, progress_callback=progress)
-
-    assert stats['total_events'] == 1100
-    assert calls, 'Expected progress callback to be invoked'
-    statuses = {status for _, _, status in calls}
-    assert 'Parsing JSONL...' in statuses
-    assert 'Converting to Parquet...' in statuses
-    assert any(total == -1 for _, total, _ in calls)
-    assert any(total == 1100 for _, total, _ in calls)
-
-
-def test_log_cache_exists(fix_test_cache: Path):
-    """Test cache key existence check."""
-    cache_dir = fix_test_cache / 'cache_exists'
-
-    with LogCache(cache_dir) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/fn', start, end)
-
-        # Key doesn't exist initially
-        assert cache.exists(cache_key) is False
-
-        # Write events
-        events = [_make_log_event(event_id='event-1')]
-        cache.write(events, cache_key)
-
-        # Key exists now
-        assert cache.exists(cache_key) is True
-
-        # Nonexistent key
+        assert cache.exists(key) is True
+        assert [event.message for event in cache.read(key)] == ['first', 'second', 'third']
+        assert list(cache.read('nonexistent-key')) == []
         assert cache.exists('nonexistent-key') is False
 
 
-def test_log_cache_ttl_expiration(fix_test_cache: Path):
-    """Test TTL expiration of cache entries."""
-    cache_dir = fix_test_cache / 'cache_ttl'
+def test_log_cache_reports_progress(fix_test_cache: Path):
+    calls: list[tuple[int, int, str]] = []
+    events = make_events(f'{{"value": {index}}}' for index in range(1100))
 
-    with LogCache(cache_dir) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/fn', start, end)
+    with LogCache(fix_test_cache / 'progress') as cache:
+        stats = cache.write(events, _key(), progress_callback=lambda *update: calls.append(update))
 
-        # Fractional TTL so the test outlasts it without a long sleep
-        events = [_make_log_event(event_id='event-1')]
-        cache.write(events, cache_key, ttl_seconds=_SHORT_TTL)
+    assert stats['total_events'] == 1100
+    assert {status for _, _, status in calls} == {'Parsing JSONL...', 'Converting to Parquet...'}
 
-        # Exists immediately
-        assert cache.exists(cache_key) is True
 
-        # Wait for expiration
+@pytest.mark.parametrize(
+    ('cache_kwargs', 'write_kwargs', 'expected'),
+    [
+        ({}, {'ttl_seconds': _SHORT_TTL}, False),
+        ({'default_ttl_seconds': _SHORT_TTL}, {}, False),
+        ({'default_ttl_seconds': _SHORT_TTL}, {'ttl_seconds': 10}, True),
+    ],
+    ids=['explicit-ttl-expires', 'default-ttl-expires', 'explicit-ttl-overrides-default'],
+)
+def test_ttl_decides_what_survives(fix_test_cache: Path, cache_kwargs, write_kwargs, expected):
+    with LogCache(fix_test_cache / 'ttl', **cache_kwargs) as cache:
+        key = _key()
+        cache.write([make_event()], key, **write_kwargs)
+        assert cache.exists(key) is True
+
         time.sleep(_PAST_TTL)
+        cache.evict_expired()
 
-        # Trigger expiration
-        cleaned = cache.evict_expired()
-
-        # Key no longer exists
-        assert cache.exists(cache_key) is False
-        assert cleaned >= 1  # At least one Parquet file cleaned up
+        assert cache.exists(key) is expected
 
 
-def test_log_cache_fifo_eviction(fix_test_cache: Path):
-    """Test FIFO eviction when size limit is exceeded."""
-    cache_dir = fix_test_cache / 'cache_fifo'
+def _incompressible(index: int) -> str:
+    """Hex digests, so ZSTD cannot shrink the batch below the eviction threshold."""
+    return hashlib.blake2b(str(index).encode(), digest_size=64).hexdigest()
 
-    # Create cache with very small size limit to force eviction
-    # Use 1 MB but write much more data to ensure eviction
-    with LogCache(cache_dir, size_limit_mb=1) as cache:
-        cache_keys = []
 
-        # Write multiple batches to exceed size limit
-        # Write 10 batches of large data to ensure we exceed 1MB
-        for i in range(10):
-            start = datetime(2025, 1, i + 1, tzinfo=UTC)
-            end = datetime(2025, 1, i + 2, tzinfo=UTC)
-            cache_key = generate_cache_key(f'/aws/lambda/fn{i}', start, end)
-            cache_keys.append(cache_key)
-
-            # Create enough events to use significant space
-            # Each message is ~100 bytes, 2000 events = ~200KB per file
-            # 10 files * 200KB = 2MB total, exceeding 1MB limit
-            long_message = (
-                'Message {j} with content to fill space for testing '
-                'eviction behavior with longer text to increase file size'
-            )
-            events = [
-                _make_log_event(
-                    event_id=f'event-{j}',
-                    message=long_message.format(j=j),
-                )
-                for j in range(2000)
-            ]
-
-            cache.write(events, cache_key)
-
-            # Add small delay to ensure different creation times
+def test_fifo_eviction_drops_the_oldest_entries(fix_test_cache: Path):
+    with LogCache(fix_test_cache / 'fifo', size_limit_mb=1) as cache:
+        keys = []
+        for index in range(10):
+            key = _key(f'/aws/lambda/fn{index}')
+            keys.append(key)
+            cache.write(make_events(_incompressible(index * 3000 + row) for row in range(3000)), key)
+            # Distinct creation times, which is what the FIFO order reads.
             time.sleep(0.01)
 
-        # Count total Parquet file size to verify we wrote enough data
-        parquet_files = list(cache._parquet_dir.glob('*.parquet'))
-        total_size = sum(f.stat().st_size for f in parquet_files)
-
-        # Verify we actually wrote enough data to trigger eviction
-        # With compression, files might be smaller than expected
-        # If total size is under limit, we need to verify cache is functional
-        size_limit_bytes = 1 * 1024 * 1024
-
-        if total_size > size_limit_bytes:
-            # Size limit enforcement happened
-            # Verify that at least some files were evicted (not all keys exist)
-            existing_keys = sum(1 for key in cache_keys if cache.exists(key))
-            assert existing_keys < len(cache_keys), 'Some keys should have been evicted'
-
-            # Verify oldest keys were evicted (FIFO)
-            # At least one of the first few keys should be gone
-            first_half_exists = [cache.exists(key) for key in cache_keys[:5]]
-            assert not all(first_half_exists), 'At least one old key should be evicted (FIFO)'
-
-            # Most recent keys should still exist
-            last_few_exists = [cache.exists(key) for key in cache_keys[-2:]]
-            assert any(last_few_exists), 'Recent keys should still exist'
-        else:
-            # Compression was very effective, verify cache is still functional
-            # All keys should still exist
-            for key in cache_keys:
-                assert cache.exists(key), 'All keys should exist if under size limit'
-
-        # Verify that evict_expired also works correctly
-        cache.evict_expired()
-
-        # Cache should still be functional
-        assert cache._metadata is not None
+        assert sum(path.stat().st_size for path in cache._parquet_dir.glob('*.parquet')) <= 1024 * 1024
+        assert not all(cache.exists(key) for key in keys[:5]), 'the oldest entries should be evicted first'
+        assert cache.exists(keys[-1]), 'the newest entry should survive'
 
 
-def test_log_cache_clear(fix_test_cache: Path):
-    """Test clearing all cache entries."""
-    cache_dir = fix_test_cache / 'cache_clear'
+def test_clear_removes_metadata_and_files(fix_test_cache: Path):
+    with LogCache(fix_test_cache / 'clear') as cache:
+        keys = [_key(f'/aws/lambda/fn{index}') for index in range(3)]
+        for key in keys:
+            cache.write([make_event()], key)
 
-    with LogCache(cache_dir) as cache:
-        # Write multiple cache entries
-        for i in range(3):
-            start = datetime(2025, 1, i + 1, tzinfo=UTC)
-            end = datetime(2025, 1, i + 2, tzinfo=UTC)
-            cache_key = generate_cache_key(f'/aws/lambda/fn{i}', start, end)
-
-            events = [_make_log_event(event_id=f'event-{i}')]
-            cache.write(events, cache_key)
-
-        # Verify entries exist
-        key0 = generate_cache_key(
-            '/aws/lambda/fn0',
-            datetime(2025, 1, 1, tzinfo=UTC),
-            datetime(2025, 1, 2, tzinfo=UTC),
-        )
-        assert cache.exists(key0) is True
-
-        # Clear cache
         cache.clear()
 
-        # All entries should be gone
-        assert cache.exists(key0) is False
-
-        # Parquet directory should be empty
-        parquet_files = list(cache._parquet_dir.glob('*.parquet'))
-        assert len(parquet_files) == 0
+        assert not any(cache.exists(key) for key in keys)
+        assert list(cache._parquet_dir.glob('*.parquet')) == []
 
 
-def test_log_cache_orphaned_file_cleanup(fix_test_cache: Path):
-    """Test cleanup of orphaned Parquet files."""
-    cache_dir = fix_test_cache / 'cache_orphan'
+def test_a_file_with_no_metadata_entry_is_reclaimed(fix_test_cache: Path):
+    with LogCache(fix_test_cache / 'orphan') as cache:
+        key = _key()
+        cache.write([make_event()], key)
+        cache._metadata.delete(key)
 
-    with LogCache(cache_dir) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/fn', start, end)
-
-        # Write events
-        events = [_make_log_event(event_id='event-1')]
-        cache.write(events, cache_key)
-
-        # Manually delete metadata entry (simulate corruption)
-        cache._metadata.delete(cache_key)
-
-        # Parquet file should still exist
-        parquet_files = list(cache._parquet_dir.glob('*.parquet'))
-        assert len(parquet_files) == 1
-
-        # Call evict_expired to clean up orphans
-        cleaned = cache.evict_expired()
-
-        # Orphaned file should be cleaned up
-        assert cleaned == 1
-        parquet_files_after = list(cache._parquet_dir.glob('*.parquet'))
-        assert len(parquet_files_after) == 0
+        assert cache.evict_expired() == 1
+        assert list(cache._parquet_dir.glob('*.parquet')) == []
 
 
-def test_log_cache_concurrent_writes(fix_test_cache: Path):
-    """Test writing different cache keys to same LogCache."""
-    cache_dir = fix_test_cache / 'cache_concurrent'
+def test_separate_keys_stay_independent(fix_test_cache: Path):
+    with LogCache(fix_test_cache / 'independent') as cache:
+        for index in range(5):
+            cache.write([make_event(f'Message {index}')], _key(f'/aws/lambda/fn{index}'))
 
-    with LogCache(cache_dir) as cache:
-        # Write multiple different cache keys
-        keys = []
-        for i in range(5):
-            start = datetime(2025, 1, i + 1, tzinfo=UTC)
-            end = datetime(2025, 1, i + 2, tzinfo=UTC)
-            cache_key = generate_cache_key(f'/aws/lambda/fn{i}', start, end)
-            keys.append(cache_key)
-
-            events = [_make_log_event(event_id=f'event-{i}', message=f'Message {i}')]
-            cache.write(events, cache_key)
-
-        # All keys should be readable independently
-        for i, cache_key in enumerate(keys):
-            cached_events = list(cache.read(cache_key))
-            assert len(cached_events) == 1
-            assert cached_events[0].event_id == f'event-{i}'
-            assert cached_events[0].message == f'Message {i}'
-
-        # Verify unique Parquet files
-        parquet_files = list(cache._parquet_dir.glob('*.parquet'))
-        assert len(parquet_files) == 5
+        for index in range(5):
+            assert [event.message for event in cache.read(_key(f'/aws/lambda/fn{index}'))] == [f'Message {index}']
+        assert len(list(cache._parquet_dir.glob('*.parquet'))) == 5
 
 
-def test_log_cache_invalid_cache_key(fix_test_cache: Path):
-    """Test reading with invalid/nonexistent cache key."""
-    cache_dir = fix_test_cache / 'cache_invalid'
+@pytest.mark.parametrize(
+    'message',
+    [
+        '{invalid json structure',
+        'Message with unicode: 你好世界',
+        'Message with newlines:\nLine 1\nLine 2',
+        'Message with quotes: "test" and \'test\'',
+    ],
+)
+def test_text_that_is_not_json_survives_the_round_trip(fix_test_cache: Path, message):
+    with LogCache(fix_test_cache / 'text') as cache:
+        key = _key('/aws/lambda/my-function_v2-test')
+        cache.write([make_event(message)], key)
 
-    with LogCache(cache_dir) as cache:
-        # Try to read nonexistent key - should return empty iterator
-        result = list(cache.read('nonexistent-key'))
-
-        assert result == []
-
-
-def test_log_cache_malformed_jsonl(fix_test_cache: Path):
-    """Test handling of malformed JSON in messages."""
-    cache_dir = fix_test_cache / 'cache_malformed'
-
-    with LogCache(cache_dir) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/fn', start, end)
-
-        # Create events with malformed JSON
-        events = [
-            _make_log_event(
-                event_id='event-1',
-                message='{invalid json structure',
-            ),
-            _make_log_event(
-                event_id='event-2',
-                message='{"level":"INFO","msg":"valid"}',
-            ),
-        ]
-
-        # Should not crash
-        stats = cache.write(events, cache_key)
-
-        assert stats['total_events'] == 2
-        # Only one valid JSON
-        assert stats['jsonl_events'] == 1
-
-        # Read back and verify message is preserved
-        cached_events = list(cache.read(cache_key))
-        assert len(cached_events) == 2
-        assert cached_events[0].message == '{invalid json structure'
+        assert [event.message for event in cache.read(key)] == [message]
 
 
-def test_log_cache_special_characters(fix_test_cache: Path):
-    """Test log groups and messages with special characters."""
-    cache_dir = fix_test_cache / 'cache_special'
+def test_microsecond_precision_survives_the_round_trip(fix_test_cache: Path):
+    timestamp = datetime(2025, 1, 1, 12, 30, 45, 123456, tzinfo=UTC)
+    with LogCache(fix_test_cache / 'precision') as cache:
+        key = _key()
+        cache.write([make_event(timestamp=timestamp, ingestion_offset=timedelta(microseconds=654321))], key)
 
-    with LogCache(cache_dir) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-
-        # Log group with special characters
-        log_group = '/aws/lambda/my-function_v2-test'
-        cache_key = generate_cache_key(log_group, start, end)
-
-        # Messages with special characters
-        events = [
-            _make_log_event(
-                log_group=log_group,
-                event_id='event-1',
-                message='Message with unicode: 你好世界',
-            ),
-            _make_log_event(
-                log_group=log_group,
-                event_id='event-2',
-                message='Message with newlines:\nLine 1\nLine 2',
-            ),
-            _make_log_event(
-                log_group=log_group,
-                event_id='event-3',
-                message='Message with quotes: "test" and \'test\'',
-            ),
-        ]
-
-        cache.write(events, cache_key)
-
-        # Read back and verify preservation
-        cached_events = list(cache.read(cache_key))
-        assert len(cached_events) == 3
-        assert cached_events[0].message == 'Message with unicode: 你好世界'
-        assert cached_events[1].message == 'Message with newlines:\nLine 1\nLine 2'
-        assert cached_events[2].message == 'Message with quotes: "test" and \'test\''
+        cached = next(iter(cache.read(key)))
+        assert cached.timestamp == timestamp
+        assert cached.ingestion_time == timestamp + timedelta(microseconds=654321)
 
 
-def test_log_cache_large_batch(fix_test_cache: Path):
-    """Test with a large number of events."""
-    cache_dir = fix_test_cache / 'cache_large'
-
-    with LogCache(cache_dir) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/fn', start, end)
-
-        # Create 10,000 events
-        events = [
-            _make_log_event(
-                event_id=f'event-{i}',
-                message=f'Log message number {i}',
-            )
-            for i in range(10000)
-        ]
-
-        # Write to cache
-        stats = cache.write(events, cache_key)
+def test_a_large_batch_reads_back_completely(fix_test_cache: Path):
+    with LogCache(fix_test_cache / 'large') as cache:
+        key = _key()
+        stats = cache.write(make_events(f'Log message number {index}' for index in range(10000)), key)
 
         assert stats['total_events'] == 10000
-        assert stats['file_size_bytes'] > 0
-
-        # Read back and verify count
-        # Use iterator to avoid loading all into memory
-        count = sum(1 for _ in cache.read(cache_key))
-
-        assert count == 10000
-
-
-def test_log_cache_datetime_precision(fix_test_cache: Path):
-    """Test datetime precision preservation."""
-    cache_dir = fix_test_cache / 'cache_precision'
-
-    with LogCache(cache_dir) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/fn', start, end)
-
-        # Create events with microsecond precision
-        timestamp_with_micros = datetime(
-            2025,
-            1,
-            1,
-            12,
-            30,
-            45,
-            123456,
-            tzinfo=UTC,
-        )
-        ingestion_with_micros = datetime(
-            2025,
-            1,
-            1,
-            12,
-            30,
-            46,
-            654321,
-            tzinfo=UTC,
-        )
-
-        events = [
-            _make_log_event(
-                event_id='event-1',
-                timestamp=timestamp_with_micros,
-                ingestion_time=ingestion_with_micros,
-            ),
-        ]
-
-        cache.write(events, cache_key)
-
-        # Read back and verify precision
-        cached_events = list(cache.read(cache_key))
-        assert len(cached_events) == 1
-
-        assert cached_events[0].timestamp == timestamp_with_micros
-        assert cached_events[0].timestamp.microsecond == 123456
-        assert cached_events[0].ingestion_time == ingestion_with_micros
-        assert cached_events[0].ingestion_time is not None
-        assert cached_events[0].ingestion_time.microsecond == 654321
-
-
-def test_log_cache_default_ttl(fix_test_cache: Path):
-    """Test LogCache with default TTL."""
-    cache_dir = fix_test_cache / 'cache_default_ttl'
-
-    # Create cache with a fractional default TTL
-    with LogCache(cache_dir, default_ttl_seconds=_SHORT_TTL) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/fn', start, end)
-
-        # Write without specifying TTL (should use default)
-        events = [_make_log_event(event_id='event-1')]
-        cache.write(events, cache_key)
-
-        # Exists immediately
-        assert cache.exists(cache_key) is True
-
-        # Wait for expiration
-        time.sleep(_PAST_TTL)
-
-        # Trigger expiration
-        cache.evict_expired()
-
-        # Should be expired
-        assert cache.exists(cache_key) is False
-
-
-def test_log_cache_override_default_ttl(fix_test_cache: Path):
-    """Test overriding default TTL with explicit value."""
-    cache_dir = fix_test_cache / 'cache_override_ttl'
-
-    # Create cache with a fractional default TTL
-    with LogCache(cache_dir, default_ttl_seconds=_SHORT_TTL) as cache:
-        start = datetime(2025, 1, 1, tzinfo=UTC)
-        end = datetime(2025, 1, 2, tzinfo=UTC)
-        cache_key = generate_cache_key('/aws/lambda/fn', start, end)
-
-        # Write with longer TTL (override default)
-        events = [_make_log_event(event_id='event-1')]
-        cache.write(events, cache_key, ttl_seconds=10)
-
-        # Wait past default TTL
-        time.sleep(_PAST_TTL)
-
-        # Trigger expiration
-        cache.evict_expired()
-
-        # Should still exist (longer TTL)
-        assert cache.exists(cache_key) is True
+        assert sum(1 for _ in cache.read(key)) == 10000
 
 
 def test_metadata_store_does_not_use_pickle(fix_test_cache: Path):
@@ -1019,3 +380,16 @@ def test_metadata_directory_is_versioned_away_from_the_pickle_store(fix_test_cac
 
     assert (cache_dir / METADATA_DIRNAME).is_dir()
     assert not (cache_dir / 'metadata').exists()
+
+
+def test_entries_from_an_older_schema_are_reclaimed(fix_test_cache: Path):
+    """A v1 file can never be read again, so it must not wait for FIFO eviction."""
+    cache_dir = fix_test_cache / 'superseded'
+    with LogCache(cache_dir) as cache:
+        cache.write([make_event()], _key())
+        superseded = next(iter(cache._parquet_dir.glob('*.parquet')))
+        cache._metadata.set('cache:v1:legacy', (str(superseded), superseded.stat().st_size))
+
+    with LogCache(cache_dir) as cache:
+        assert cache._metadata.get('cache:v1:legacy') is None
+        assert not superseded.exists()

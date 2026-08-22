@@ -24,44 +24,7 @@ from tail_cw.query.parser import (
     parse_extended_filter,
     parse_filter_pattern,
 )
-
-
-def _make_log_event(
-    *,
-    log_group: str = '/aws/lambda/test',
-    log_stream: str = '2025/01/01/stream',
-    timestamp: datetime | None = None,
-    message: str = 'Test message',
-    event_id: str | None = None,
-    ingestion_time: datetime | None = None,
-) -> LogEvent:
-    """Create a test LogEvent instance.
-
-    Args:
-        log_group: Log group name
-        log_stream: Log stream name
-        timestamp: Event timestamp (defaults to current UTC time)
-        message: Log message
-        event_id: Event ID (auto-generated if None)
-        ingestion_time: Optional ingestion time
-
-    Returns:
-        LogEvent instance for testing
-    """
-    if timestamp is None:
-        timestamp = datetime.now(tz=UTC)
-
-    if event_id is None:
-        event_id = f'event-{hash(message) % 100000}'
-
-    return LogEvent(
-        log_group=log_group,
-        log_stream=log_stream,
-        timestamp=timestamp,
-        message=message,
-        event_id=event_id,
-        ingestion_time=ingestion_time,
-    )
+from tests.factories import make_event
 
 
 def _make_test_parquet_file(
@@ -95,10 +58,11 @@ def _make_test_parquet_file(
             # Plain text message
             message = f'Plain log message {i} with ERROR' if i % 3 == 0 else f'Plain log message {i}'
 
-        event = _make_log_event(
-            message=message,
+        event = make_event(
+            message,
+            log_group='/aws/lambda/test',
+            log_stream='2025/01/01/stream',
             timestamp=base_time + timedelta(seconds=i),
-            event_id=f'event-{i}',
         )
         events.append(event)
 
@@ -522,11 +486,10 @@ def test_query_parquet_file_to_log_events(fix_test_cache):
 def _write_group_parquet(output_path: Path, log_group: str, minutes: list[int]) -> list[LogEvent]:
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
     events = [
-        _make_log_event(
+        make_event(
+            f'{log_group} at {minute}',
             log_group=log_group,
             timestamp=base_time + timedelta(minutes=minute),
-            message=f'{log_group} at {minute}',
-            event_id=f'{log_group}-{minute}',
         )
         for minute in minutes
     ]
@@ -648,9 +611,9 @@ def test_query_parquet_file_special_characters(fix_test_cache):
 
     # Create events with special characters
     events = [
-        _make_log_event(message='Log with "quotes" and \\backslash'),
-        _make_log_event(message="Log with 'single quotes' and newline\n"),
-        _make_log_event(message='Log with unicode: café ☕'),
+        make_event('Log with "quotes" and \\backslash'),
+        make_event("Log with 'single quotes' and newline\n"),
+        make_event('Log with unicode: café ☕'),
     ]
     write_log_events_to_parquet(events, parquet_path)
 
@@ -672,10 +635,10 @@ def test_query_parquet_file_duckdb_regex_execution(fix_test_cache):
 
     # Create events with mixed case error messages
     events = [
-        _make_log_event(message='Error occurred in system'),
-        _make_log_event(message='WARNING: Connection failed'),
-        _make_log_event(message='Info: everything is fine'),
-        _make_log_event(message='error: something went wrong'),
+        make_event('Error occurred in system'),
+        make_event('WARNING: Connection failed'),
+        make_event('Info: everything is fine'),
+        make_event('error: something went wrong'),
     ]
     write_log_events_to_parquet(events, parquet_path)
 
@@ -702,10 +665,10 @@ def test_query_parquet_file_polars_regex_execution(fix_test_cache):
 
     # Create events with mixed case error messages
     events = [
-        _make_log_event(message='Error occurred in system'),
-        _make_log_event(message='WARNING: Connection failed'),
-        _make_log_event(message='Info: everything is fine'),
-        _make_log_event(message='error: something went wrong'),
+        make_event('Error occurred in system'),
+        make_event('WARNING: Connection failed'),
+        make_event('Info: everything is fine'),
+        make_event('error: something went wrong'),
     ]
     write_log_events_to_parquet(events, parquet_path)
 
@@ -776,10 +739,11 @@ def _make_test_parquet_file_with_nested_json(
             }
 
         message = json.dumps(nested_data)
-        event = _make_log_event(
-            message=message,
+        event = make_event(
+            message,
+            log_group='/aws/lambda/test',
+            log_stream='2025/01/01/stream',
             timestamp=base_time + timedelta(seconds=i),
-            event_id=f'event-{i}',
         )
         events.append(event)
 
@@ -846,3 +810,19 @@ def test_query_parquet_file_nested_json_multiple_levels(fix_test_cache):
     # Should find events with "User 6"
     assert len(results) == 1
     assert 'User 6' in results[0]['message']
+
+
+@pytest.mark.parametrize('backend', [QueryBackend.DUCKDB, QueryBackend.POLARS])
+def test_text_search_ignores_fields_the_event_never_carried(fix_test_cache, backend):
+    """Polars widens the struct across the file, so absent fields read back as nulls."""
+    parquet_path = fix_test_cache / 'widened.parquet'
+    events = [
+        make_event('{"level":"info","event":"fine"}'),
+        make_event('{"level":"info","event":"fine","error_type":"Boom"}'),
+    ]
+    write_log_events_to_parquet(events, parquet_path)
+
+    matched = list(query_parquet_file(parquet_path, parse_filter_pattern('error_type'), backend=backend))
+
+    assert len(matched) == 1
+    assert 'Boom' in matched[0]['message']

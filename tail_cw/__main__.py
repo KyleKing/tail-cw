@@ -75,12 +75,7 @@ async def _ready(value: T) -> T:  # ruff: ignore[unused-async]
     return value
 
 
-def _demo_resolve_logs(
-    groups: Sequence[str],
-    start: datetime,
-    end: datetime,
-    _filter_pattern: str | None,
-) -> list[Path]:
+def _demo_resolve_logs(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
     paths = (demo_resolve_logs(group, start, end) for group in groups or ('demo',))
     return [path for path in paths if path is not None]
 
@@ -91,7 +86,7 @@ def _demo_services() -> ShellServices:
         list_dashboards=lambda: _ready([DashboardSummary(name='demo', arn='arn:demo', size=0)]),
         fetch_metrics=lambda queries, start, end: _ready(demo_fetch_metrics(queries, start, end)),
         log_volume=lambda group, start, end: _ready(demo_log_volume(group, start, end)),
-        resolve_logs=lambda groups, start, end, pattern: _ready(_demo_resolve_logs(groups, start, end, pattern)),
+        resolve_logs=lambda groups, start, end: _ready(_demo_resolve_logs(groups, start, end)),
         count_events=lambda group, start, end: _ready(demo_count_events(group, start, end)),
         list_groups=lambda: _ready(
             [
@@ -115,18 +110,12 @@ def _cache_services(
 ) -> tuple[ResolveLogs, LogVolume, CountEvents, LoadTraces]:
     """Build the services that end in blocking Parquet work on ``executor``."""
 
-    async def resolve_logs(
-        groups: Sequence[str],
-        start: datetime,
-        end: datetime,
-        filter_pattern: str | None,
-    ) -> list[Path]:
+    async def resolve_logs(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
         requests = [
             FetchRequest(
                 log_group=group,
                 start_time=start,
                 end_time=end,
-                filter_pattern=filter_pattern,
                 profile=session.profile,
                 region=session.region,
             )
@@ -140,12 +129,12 @@ def _cache_services(
         )
 
     async def log_volume(log_group: str, start: datetime, end: datetime) -> list[float]:
-        paths = await resolve_logs([log_group], start, end, None)
+        paths = await resolve_logs([log_group], start, end)
         if not paths:
             return []
 
         def bucket() -> list[float]:
-            timestamps = (event.timestamp for event in read_parquet_to_log_events(paths[0]))
+            timestamps = (event.timestamp for path in paths for event in read_parquet_to_log_events(path))
             return bucket_event_counts(timestamps, start=start, end=end)
 
         return await run_blocking(executor, bucket)

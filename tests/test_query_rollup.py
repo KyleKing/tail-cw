@@ -24,7 +24,6 @@ def _event(payload: dict[str, object] | str, *, offset: timedelta, log_group: st
         log_stream='s',
         timestamp=START + offset,
         message=message,
-        event_id=f'e{offset}',
         ingestion_time=None,
     )
 

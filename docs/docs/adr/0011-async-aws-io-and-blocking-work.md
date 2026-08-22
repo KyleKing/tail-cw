@@ -45,6 +45,8 @@ Cancelling an async task does not interrupt a thread that task started. A worker
 
 Raising matters more than it looks. `LogCache.write` sets cache metadata only after the Parquet write returns, so an exception from the iterator aborts cleanly and leaves an orphan file the next write sweeps. A bridge that merely *ended* its iterator early would let `write` finish normally and register a truncated Parquet file as a complete cache entry, which is indistinguishable from a complete one on the next read.
 
+Segmented cache windows ([ADR 0003](0003-parquet-cache-and-local-query-engine.md)) inherit that contract per segment rather than per request: a cancelled fetch orphans the segment it was writing, and the segments already written stay valid because each one is keyed to its own bounds. A cancelled multi-segment request therefore leaves the cache correct but partially populated, which the next run completes.
+
 `BridgeCancelledError` is a distinct type because `concurrent.futures.CancelledError` derives from `Exception` rather than `BaseException`, so any `except Exception` between the bridge and the caller would quietly absorb a cancellation.
 
 Concurrent work uses `asyncio.TaskGroup`, not `asyncio.gather`, because `gather` leaves siblings running when one fails.

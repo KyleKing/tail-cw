@@ -68,7 +68,6 @@ def _make_test_event_with_trace(
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='/aws/lambda/test-function',
-        event_id='test-event-id',
     )
 
 
@@ -85,7 +84,6 @@ def test_extract_trace_id_from_event_not_found():
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='test-group',
-        event_id='test-event-id',
     )
     trace_id = extract_trace_id_from_event(event)
     assert trace_id is None
@@ -101,7 +99,6 @@ def test_extract_trace_id_from_event_multiple_fields():
             ingestion_time=datetime.now(UTC),
             log_stream='test-stream',
             log_group='test-group',
-            event_id='test-event-id',
         )
         trace_id = extract_trace_id_from_event(event)
         assert trace_id == 'test-trace'
@@ -115,7 +112,6 @@ def test_extract_trace_id_from_event_nested():
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='test-group',
-        event_id='test-event-id',
     )
     # Add nested field to search list
     trace_id = extract_trace_id_from_event(
@@ -138,7 +134,6 @@ def test_extract_service_name_from_log_group():
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='/aws/lambda/my-function',
-        event_id='test-event-id',
     )
     service_name = extract_service_name(event)
     assert service_name == 'my-function'
@@ -156,7 +151,6 @@ def test_is_error_event_true():
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='test-group',
-        event_id='test-event-id',
     )
     assert is_error_event(event) is True
 
@@ -168,7 +162,6 @@ def test_is_error_event_true():
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='test-group',
-        event_id='test-event-id',
     )
     assert is_error_event(event) is True
 
@@ -184,7 +177,6 @@ def test_is_error_event_false():
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='test-group',
-        event_id='test-event-id',
     )
     assert is_error_event(event) is False
 
@@ -203,7 +195,6 @@ def test_extract_span_metadata():
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='test-group',
-        event_id='test-event-id',
     )
     metadata = extract_span_metadata(event)
     assert metadata['span_id'] == 'span-123'
@@ -252,7 +243,6 @@ def test_group_events_by_trace_no_trace_ids():
             ingestion_time=datetime.now(UTC),
             log_stream='test-stream',
             log_group='test-group',
-            event_id='test-event-id',
         )
         for _ in range(3)
     ]
@@ -320,7 +310,6 @@ def test_query_traces_from_parquet_empty(tmp_path: Path):
             ingestion_time=datetime.now(UTC),
             log_stream='test-stream',
             log_group='test-group',
-            event_id='test-event-id',
         )
         for _ in range(3)
     ]
@@ -422,7 +411,6 @@ def test_a_bare_id_field_is_not_read_as_a_span_id():
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='test-group',
-        event_id='test-event-id',
     )
 
     spans = group_events_by_trace([event])['trace-1']
@@ -516,7 +504,6 @@ def test_extract_trace_id_malformed_json():
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='test-group',
-        event_id='test-event-id',
     )
     trace_id = extract_trace_id_from_event(event)
     assert trace_id is None
@@ -530,7 +517,6 @@ def test_extract_service_name_unicode():
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='test-group',
-        event_id='test-event-id',
     )
     service_name = extract_service_name(event)
     assert service_name == 'my-service-🚀'

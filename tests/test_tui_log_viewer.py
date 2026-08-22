@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 
 from rich.text import Text
 
-from tail_cw.aws.client import LogEvent
 from tail_cw.tui.log_viewer import (
     batch_format_log_events,
     format_log_event_detail,
@@ -14,48 +13,7 @@ from tail_cw.tui.log_viewer import (
     get_column_definitions,
     parse_jsonl_message,
 )
-
-_SENTINEL = object()
-
-
-def _make_test_event(
-    timestamp: datetime | None = None,
-    message: str = 'Test message',
-    log_group: str = '/aws/test/group',
-    log_stream: str = 'stream-0',
-    event_id: str = 'event-0001',
-    *,
-    ingestion_time: datetime | object | None = _SENTINEL,
-) -> LogEvent:
-    """Create a test LogEvent with default or custom values.
-
-    Args:
-        timestamp: Event timestamp (default: 2025-01-15 10:00:00 UTC)
-        message: Log message (default: "Test message")
-        log_group: Log group name
-        log_stream: Log stream name
-        event_id: Event ID
-        ingestion_time: Ingestion timestamp (default: 1 second after event timestamp,
-            pass None explicitly to set to None)
-
-    Returns:
-        LogEvent instance
-    """
-    if timestamp is None:
-        timestamp = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
-    if ingestion_time is _SENTINEL:
-        ingestion_time_value: datetime | None = datetime(2025, 1, 15, 10, 0, 1, tzinfo=UTC)
-    else:
-        ingestion_time_value = ingestion_time  # type: ignore[assignment]
-
-    return LogEvent(
-        timestamp=timestamp,
-        message=message,
-        log_group=log_group,
-        log_stream=log_stream,
-        event_id=event_id,
-        ingestion_time=ingestion_time_value,
-    )
+from tests.factories import make_event
 
 
 def test_format_timestamp():
@@ -84,19 +42,18 @@ def test_format_timestamp_custom_style():
 
 def test_format_log_event_for_table():
     """Test single event formatting for table."""
-    event = _make_test_event(
+    event = make_event(
         timestamp=datetime(2025, 1, 15, 10, 30, 0, tzinfo=UTC),
         message='Short message',
         log_group='/aws/lambda/my-function',
         log_stream='2025/01/15/[$LATEST]abc',
-        event_id='event-12345',
     )
 
     result = format_log_event_for_table(event)
 
     # Should be a tuple with 5 elements
     assert isinstance(result, tuple)
-    assert len(result) == 5
+    assert len(result) == 4
 
     # First element should be Rich Text (timestamp)
     assert isinstance(result[0], Text)
@@ -105,13 +62,12 @@ def test_format_log_event_for_table():
     assert result[1] == '/aws/lambda/my-function'
     assert result[2] == '2025/01/15/[$LATEST]abc'
     assert result[3] == 'Short message'  # Not truncated
-    assert result[4] == 'event-12345'
 
 
 def test_format_log_event_for_table_truncation():
     """Test message truncation."""
     long_message = 'A' * 150
-    event = _make_test_event(message=long_message)
+    event = make_event(message=long_message)
 
     result = format_log_event_for_table(event, truncate_message=50)
 
@@ -124,7 +80,7 @@ def test_format_log_event_for_table_truncation():
 
 def test_format_log_event_for_table_no_truncation_needed():
     """Test short messages are not truncated."""
-    event = _make_test_event(message='Short')
+    event = make_event(message='Short')
 
     result = format_log_event_for_table(event, truncate_message=100)
 
@@ -135,22 +91,12 @@ def test_format_log_event_for_table_no_truncation_needed():
 
 def test_batch_format_log_events():
     """Test batch formatting."""
-    events = [_make_test_event(event_id=f'event-{i:04d}', message=f'Message {i}') for i in range(5)]
+    events = [make_event(f'Message {index}') for index in range(5)]
 
     result = batch_format_log_events(events)
 
-    # Should be a list of 5 tuples
-    assert isinstance(result, list)
-    assert len(result) == 5
-
-    # Each should be a tuple with 5 elements
-    for row in result:
-        assert isinstance(row, tuple)
-        assert len(row) == 5
-
-    # Verify first and last
-    assert result[0][4] == 'event-0000'
-    assert result[4][4] == 'event-0004'
+    assert [row[3] for row in result] == [f'Message {index}' for index in range(5)]
+    assert all(len(row) == 4 for row in result)
 
 
 def test_batch_format_log_events_empty():
@@ -162,13 +108,11 @@ def test_batch_format_log_events_empty():
 
 def test_format_log_event_detail():
     """Test detail formatting."""
-    event = _make_test_event(
+    event = make_event(
         timestamp=datetime(2025, 1, 15, 10, 30, 45, 123000, tzinfo=UTC),
         message='Test log message',
         log_group='/aws/test/group',
         log_stream='stream-0',
-        event_id='event-12345',
-        ingestion_time=datetime(2025, 1, 15, 10, 30, 46, tzinfo=UTC),
     )
 
     result = format_log_event_detail(event)
@@ -177,7 +121,6 @@ def test_format_log_event_detail():
     assert isinstance(result, str)
 
     # Should contain all field labels
-    assert 'Event ID:' in result
     assert 'Timestamp:' in result
     assert 'Log Group:' in result
     assert 'Log Stream:' in result
@@ -185,7 +128,6 @@ def test_format_log_event_detail():
     assert 'Message:' in result
 
     # Should contain actual values
-    assert 'event-12345' in result
     assert '2025-01-15' in result
     assert '/aws/test/group' in result
     assert 'stream-0' in result
@@ -194,7 +136,7 @@ def test_format_log_event_detail():
 
 def test_format_log_event_detail_no_ingestion_time():
     """Test with None ingestion_time."""
-    event = _make_test_event(ingestion_time=None)
+    event = make_event(ingestion_offset=None)
 
     result = format_log_event_detail(event)
 
@@ -243,7 +185,7 @@ def test_parse_jsonl_message_plain_text():
 def test_format_log_event_detail_with_json():
     """Test enhanced detail with JSON message."""
     json_message = '{"level":"INFO","message":"test event","timestamp":"2025-01-15T10:00:00Z"}'
-    event = _make_test_event(message=json_message)
+    event = make_event(message=json_message)
 
     result = format_log_event_detail_with_json(event)
 
@@ -259,7 +201,7 @@ def test_format_log_event_detail_with_json():
 
 def test_format_log_event_detail_with_json_plain_text():
     """Test with plain text message."""
-    event = _make_test_event(message='Plain text log message')
+    event = make_event(message='Plain text log message')
 
     result = format_log_event_detail_with_json(event)
 
@@ -277,7 +219,7 @@ def test_get_column_definitions():
 
     # Should be a list of tuples
     assert isinstance(result, list)
-    assert len(result) == 5
+    assert len(result) == 4
 
     # Check structure
     for key, label in result:
@@ -289,13 +231,12 @@ def test_get_column_definitions():
     assert ('log_group', 'Log Group') in result
     assert ('log_stream', 'Log Stream') in result
     assert ('message', 'Message') in result
-    assert ('event_id', 'Event ID') in result
 
 
 def test_special_characters_in_message():
     """Test messages with special characters."""
     special_message = 'Special: <>&"\\n\\t\u2603'
-    event = _make_test_event(message=special_message)
+    event = make_event(message=special_message)
 
     # Test table formatting
     table_row = format_log_event_for_table(event)
@@ -311,7 +252,7 @@ def test_special_characters_in_message():
 
 def test_empty_message():
     """Test empty message field."""
-    event = _make_test_event(message='')
+    event = make_event(message='')
 
     # Test table formatting
     table_row = format_log_event_for_table(event)
@@ -331,7 +272,7 @@ def test_very_long_field_values():
     long_stream = 'B' * 500
     long_message = 'C' * 1000
 
-    event = _make_test_event(
+    event = make_event(
         log_group=long_group,
         log_stream=long_stream,
         message=long_message,
@@ -382,8 +323,8 @@ def test_format_timestamp_with_microseconds():
 def test_batch_format_with_different_truncate_lengths():
     """Test batch formatting with custom truncate length."""
     events = [
-        _make_test_event(message='A' * 200),
-        _make_test_event(message='B' * 200),
+        make_event(message='A' * 200),
+        make_event(message='B' * 200),
     ]
 
     # Test with different truncation lengths
@@ -404,7 +345,7 @@ def test_format_detail_with_multiline_message():
     multiline_message = """Line 1
 Line 2
 Line 3"""
-    event = _make_test_event(message=multiline_message)
+    event = make_event(message=multiline_message)
 
     result = format_log_event_detail(event)
 

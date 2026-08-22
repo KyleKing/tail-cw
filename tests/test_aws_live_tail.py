@@ -140,7 +140,6 @@ def test_live_event_conversion_resolves_group_name_from_arn():
     assert event.timestamp.tzinfo == UTC
     assert int(event.timestamp.timestamp() * 1000) == 1700000000000
     assert event.ingestion_time is not None
-    assert event.event_id.startswith('live-1700000000000-')
 
 
 def test_live_event_conversion_without_ingestion_time():
@@ -149,15 +148,6 @@ def test_live_event_conversion_without_ingestion_time():
     event = _live_event_to_log_event(raw)
 
     assert event.ingestion_time is None
-
-
-def test_live_event_conversion_is_deterministic():
-    first = _live_event_to_log_event(_make_live_event())
-    second = _live_event_to_log_event(_make_live_event())
-    other = _live_event_to_log_event(_make_live_event(message='different'))
-
-    assert first.event_id == second.event_id
-    assert first.event_id != other.event_id
 
 
 async def test_stream_live_tail_yields_events_and_passes_filter():

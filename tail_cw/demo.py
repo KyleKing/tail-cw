@@ -211,7 +211,6 @@ def _demo_log_events(start: datetime, end: datetime) -> list[LogEvent]:
                 log_stream='demo-stream',
                 timestamp=moment,
                 message=message,
-                event_id=f'demo-{index}',
                 ingestion_time=moment,
             ),
         )

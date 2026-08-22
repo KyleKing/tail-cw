@@ -11,7 +11,7 @@ import hashlib
 import json
 import re
 import tempfile
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from datetime import datetime
 from operator import itemgetter
 from pathlib import Path
@@ -28,6 +28,14 @@ TtlSeconds = int | float
 """Cache TTL in seconds. Explicit union because beartype does not widen int to float."""
 
 ProgressCallback = Callable[[int, int, str], None]
+
+CACHE_KEY_PREFIX = 'cache:v2'
+"""Prefix of every log-event cache key.
+
+Bumped when the stored Parquet schema changes, so an older file is never read
+back under the current schema. :meth:`LogCache._prune_superseded_entries`
+reclaims the files the previous version left behind.
+"""
 
 METADATA_DIRNAME = 'metadata-v2'
 """Metadata store directory.
@@ -50,25 +58,25 @@ def generate_cache_key(
     log_group: str,
     start_time: datetime,
     end_time: datetime,
-    filter_pattern: str | None = None,
     log_stream_names: list[str] | None = None,
     region_name: str | None = None,
     profile_name: str | None = None,
 ) -> str:
     """Generate a deterministic cache key from CloudWatch query parameters.
 
-    Creates a compact, deterministic cache key by hashing the canonical JSON
-    representation of query parameters. Uses BLAKE2b for fast, secure hashing
-    with a personalization parameter for domain separation.
+    Hashes the canonical JSON of the query parameters with BLAKE2b, personalized
+    for domain separation. The ``cache:v2`` prefix keeps v1 files (which carried
+    ``event_id`` and a raw duplicate of every JSON message) from being read back
+    under the current schema.
 
-    The cache key format is versioned (v1) to allow future schema migrations
-    without collision with old cache entries.
+    No filter is part of the key. Historical fetches always retrieve the whole
+    window and filter locally, so one cached window serves every filter asked of
+    it.
 
     Args:
         log_group: CloudWatch log group name.
-        start_time: Start of time range (inclusive).
-        end_time: End of time range (inclusive).
-        filter_pattern: Optional CloudWatch filter pattern for server-side filtering.
+        start_time: Start of the time range (inclusive).
+        end_time: End of the time range (exclusive).
         log_stream_names: Optional list of log stream names. Order is normalized
             for determinism.
         region_name: Optional AWS region name.
@@ -77,31 +85,25 @@ def generate_cache_key(
             collide in the cache.
 
     Returns:
-        Cache key in format: cache:v1:{base64url_digest}
-        Example: cache:v1:yH8aKp3mR5nQ7xW2vL9kJg
+        Cache key in format: cache:v2:{base64url_digest}
 
     Example:
         >>> from datetime import datetime, timezone
         >>> start = datetime(2025, 1, 1, tzinfo=timezone.utc)
         >>> end = datetime(2025, 1, 2, tzinfo=timezone.utc)
-        >>> key1 = generate_cache_key('/aws/lambda/fn', start, end)
-        >>> key2 = generate_cache_key('/aws/lambda/fn', start, end)
-        >>> key1 == key2  # Deterministic
+        >>> generate_cache_key('/aws/lambda/fn', start, end) == generate_cache_key(
+        ...     '/aws/lambda/fn', start, end
+        ... )
         True
     """
-    # Create canonical representation
-    canonical = {
+    canonical: dict[str, Any] = {
         'log_group': log_group,
         'start_time': start_time.isoformat(),
         'end_time': end_time.isoformat(),
     }
 
-    if filter_pattern is not None:
-        canonical['filter_pattern'] = filter_pattern
-
     if log_stream_names is not None:
-        # Sort for determinism regardless of input order
-        canonical['log_stream_names'] = sorted(log_stream_names)  # type: ignore[assignment]
+        canonical['log_stream_names'] = sorted(log_stream_names)
 
     if region_name is not None:
         canonical['region_name'] = region_name
@@ -109,7 +111,7 @@ def generate_cache_key(
     if profile_name is not None:
         canonical['profile_name'] = profile_name
 
-    return _hash_canonical(canonical, prefix='cache:v1')
+    return _hash_canonical(canonical, prefix=CACHE_KEY_PREFIX)
 
 
 def generate_preview_cache_key(
@@ -213,6 +215,17 @@ def is_jsonl_message(message: str) -> bool:
     return without_timestamp.lstrip().startswith('{')
 
 
+def _parse_jsonl_message(message: str) -> dict[str, Any] | None:
+    """Return the message decoded as a JSON object, or None when it is not one."""
+    if not is_jsonl_message(message):
+        return None
+    try:
+        parsed = json.loads(message)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _log_events_to_ndjson_file(
     log_events: Iterable[LogEvent],
     output_path: Path,
@@ -247,27 +260,22 @@ def _log_events_to_ndjson_file(
             if progress_callback and total_events % 1000 == 0:
                 progress_callback(total_events, -1, 'Parsing JSONL...')
 
-            # Create base record with all LogEvent fields
-            record = {
+            record: dict[str, Any] = {
                 'log_group': event.log_group,
                 'log_stream': event.log_stream,
                 'timestamp': event.timestamp.isoformat(),
-                'message': event.message,
-                'event_id': event.event_id,
                 'ingestion_time': (event.ingestion_time.isoformat() if event.ingestion_time is not None else None),
             }
 
-            # Try to parse message as JSON if it looks like JSON
-            if is_jsonl_message(event.message):
-                try:
-                    parsed = json.loads(event.message)
-                    record['parsed'] = parsed
-                    jsonl_events += 1
-                except json.JSONDecodeError:
-                    # Malformed JSON - keep raw message
-                    pass
+            parsed = _parse_jsonl_message(event.message)
+            if parsed is None:
+                # The raw line is only stored when nothing else can reproduce it. For a
+                # JSON line it duplicates ``parsed`` and costs 41% of the file.
+                record['message'] = event.message
+            else:
+                record['parsed'] = parsed
+                jsonl_events += 1
 
-            # Write as compact JSON line
             f.write(json.dumps(record, separators=(',', ':')) + '\n')
 
     return total_events, jsonl_events
@@ -276,69 +284,36 @@ def _log_events_to_ndjson_file(
 def write_log_events_to_parquet(
     log_events: Iterable[LogEvent],
     output_path: Path,
-    compression_level: int = 3,
-    row_group_size: int = 100_000,
     progress_callback: ProgressCallback | None = None,
 ) -> dict[str, int]:
     """Convert LogEvent instances to a compressed Parquet file.
 
-    Writes log events to a Parquet file with ZSTD compression for efficient
-    storage and fast querying. Uses streaming processing via temporary NDJSON
-    file to avoid loading all events into memory.
-
-    The Parquet schema is inferred from the NDJSON data and includes:
-    - Base columns: log_group, log_stream, timestamp, message, event_id, ingestion_time
-    - Optional 'parsed' struct column when JSONL messages are detected
+    Streams through a temporary NDJSON file so no more than one event is held in
+    Python at a time. The written schema is ``log_group``, ``log_stream``,
+    ``timestamp`` and ``ingestion_time`` as UTC datetimes, ``message``, and a
+    ``parsed`` struct, sorted by timestamp. ``message`` is populated only for
+    lines that are not JSON objects; for the rest ``parsed`` is the record and
+    :func:`read_parquet_to_log_events` rebuilds the text from it.
 
     Args:
         log_events: Iterator of log events to store.
-        output_path: Path where Parquet file will be written.
-        compression_level: ZSTD compression level (1-22). Higher = better
-            compression but slower. Default 3 is a good balance.
-        row_group_size: Number of rows per Parquet row group. Larger values
-            improve scan performance at the cost of memory usage.
+        output_path: Path where the Parquet file will be written.
         progress_callback: Optional callable invoked during conversion with
             ``(current, total, status_message)``.
 
     Returns:
-        Statistics dict with keys:
-            - total_events: Total number of events written
-            - jsonl_events: Number of events with successfully parsed JSON messages
-            - file_size_bytes: Size of the Parquet file in bytes
+        Statistics dict with keys ``total_events``, ``jsonl_events``, and
+        ``file_size_bytes``.
 
     Raises:
-        ValueError: If input is invalid or Parquet conversion fails.
-        OSError: If output file cannot be written.
-
-    Example:
-        >>> from tail_cw.aws.client import LogEvent
-        >>> from datetime import datetime, timezone
-        >>> from pathlib import Path
-        >>> events = [
-        ...     LogEvent(
-        ...         log_group='/aws/lambda/fn',
-        ...         log_stream='2025/01/01/stream',
-        ...         timestamp=datetime.now(tz=timezone.utc),
-        ...         message='Test message',
-        ...         event_id='event-1',
-        ...         ingestion_time=None,
-        ...     )
-        ... ]
-        >>> stats = write_log_events_to_parquet(events, Path('output.parquet'))
-        >>> stats['total_events']
-        1
+        ValueError: If there are no events to write.
+        OSError: If the output file cannot be written.
     """
-    # Create temporary NDJSON file
     temp_file = None
     try:
-        with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.jsonl',
-            delete=False,
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
             temp_file = Path(f.name)
 
-        # Write events to NDJSON
         total_events, jsonl_events = _log_events_to_ndjson_file(
             log_events,
             temp_file,
@@ -346,7 +321,6 @@ def write_log_events_to_parquet(
         )
 
         if total_events == 0:
-            # Clean up and raise error for empty input
             temp_file.unlink()
             msg = 'Cannot create Parquet file from empty log events'
             raise ValueError(msg)
@@ -358,85 +332,97 @@ def write_log_events_to_parquet(
         # unsound over arbitrary log payloads: a key that is null in the sample and a string
         # later panics the Parquet writer, an int-then-string key fails to parse, and a key
         # first appearing after the sample is silently dropped and becomes unqueryable.
-        (
-            pl.scan_ndjson(str(temp_file), infer_schema_length=None).sink_parquet(
-                str(output_path),
-                compression='zstd',
-                compression_level=compression_level,
-                row_group_size=row_group_size,
-            )
+        lazy = pl.scan_ndjson(str(temp_file), infer_schema_length=None)
+        # maintain_order keeps events that share a millisecond in the order CloudWatch
+        # returned them, which is the only ordering information they carry.
+        _normalized_columns(lazy).sort('timestamp', maintain_order=True).sink_parquet(
+            str(output_path),
+            compression='zstd',
         )
-
-        # Get file size
-        file_size_bytes = output_path.stat().st_size
 
         return {
             'total_events': total_events,
             'jsonl_events': jsonl_events,
-            'file_size_bytes': file_size_bytes,
+            'file_size_bytes': output_path.stat().st_size,
         }
 
     finally:
-        # Clean up temporary file
         if temp_file is not None and temp_file.exists():
             temp_file.unlink()
 
 
-def read_parquet_to_log_events(parquet_path: Path) -> Iterator[LogEvent]:
-    """Read a Parquet file back to LogEvent instances.
+def _normalized_columns(lazy: pl.LazyFrame) -> pl.LazyFrame:
+    """Give the frame the full v2 schema with real datetime columns.
 
-    Performs the inverse operation of write_log_events_to_parquet,
-    reconstructing LogEvent objects from the Parquet schema. Uses
-    streaming to avoid loading the entire file into memory.
+    Timestamps arrive as ISO strings, and ``message`` or ``parsed`` are absent
+    entirely when every line in the batch went the other way, so both are
+    materialized as typed nulls to keep one schema across every cached file.
+    """
+    schema = lazy.collect_schema()
+    casts = [
+        pl.col(name).str.to_datetime(time_zone='UTC', strict=False)
+        for name in ('timestamp', 'ingestion_time')
+        if schema.get(name) == pl.String
+    ]
+    fills = [
+        pl.lit(None, dtype=pl.String).alias(name)
+        for name in ('message', 'ingestion_time')
+        if name not in schema or schema[name] == pl.Null
+    ]
+    return lazy.with_columns(*casts, *fills)
+
+
+def readable_message(row: Mapping[str, Any]) -> str:
+    """Return an event's text, rebuilt from ``parsed`` when the raw line was not stored.
 
     Args:
-        parquet_path: Path to Parquet file created by write_log_events_to_parquet.
+        row: One row of a cached Parquet file, keyed by column name.
+    """
+    message = row.get('message')
+    if message is not None:
+        return str(message)
+    parsed = row.get('parsed')
+    return json.dumps(_without_nulls(parsed), separators=(',', ':')) if parsed is not None else ''
+
+
+def _without_nulls(value: Any) -> Any:
+    """Drop the null fields Polars adds when widening a struct across records."""
+    if isinstance(value, dict):
+        return {key: _without_nulls(item) for key, item in value.items() if item is not None}
+    if isinstance(value, list):
+        return [_without_nulls(item) for item in value]
+    return value
+
+
+def read_parquet_to_log_events(parquet_path: Path) -> Iterator[LogEvent]:
+    """Read a Parquet file written by :func:`write_log_events_to_parquet`.
+
+    A JSON event's text is re-serialized from ``parsed`` rather than stored, so
+    the message reads back as compact JSON with any key it never carried
+    dropped. Byte-for-byte whitespace and key order from the original line are
+    not preserved.
+
+    Args:
+        parquet_path: Path to a cached Parquet file.
 
     Yields:
-        LogEvent instances for each row in the Parquet file.
+        LogEvent instances in file order.
 
     Raises:
-        FileNotFoundError: If Parquet file doesn't exist.
-        ValueError: If Parquet file has invalid schema or data.
-
-    Example:
-        >>> events = list(read_parquet_to_log_events(Path('output.parquet')))
-        >>> events[0].log_group
-        '/aws/lambda/fn'
+        FileNotFoundError: If the Parquet file does not exist.
     """
     if not parquet_path.exists():
         msg = f'Parquet file not found: {parquet_path}'
         raise FileNotFoundError(msg)
 
-    # Use scan_parquet with streaming engine to avoid loading entire file
-    # Process in batches to balance memory usage and iteration overhead
-    lazy_df = pl.scan_parquet(str(parquet_path))
-
-    # Collect with streaming engine for memory-efficient processing
-    try:
-        # Try new engine parameter (Polars >= 1.25.0)
-        df_iter = lazy_df.collect(engine='streaming')
-    except TypeError:
-        # Fall back to deprecated streaming parameter for older Polars versions
-        df_iter = lazy_df.collect(streaming=True)  # type: ignore[call-arg, call-overload]
-
-    # Iterate through rows and reconstruct LogEvent instances
-    for row in df_iter.iter_rows(named=True):
-        # Parse ISO timestamp strings back to datetime objects
-        timestamp = datetime.fromisoformat(row['timestamp'])
-
-        # Handle optional ingestion_time
-        ingestion_time = None
-        if row.get('ingestion_time') is not None:
-            ingestion_time = datetime.fromisoformat(row['ingestion_time'])
-
+    frame = pl.scan_parquet(str(parquet_path)).collect(engine='streaming')
+    for row in frame.iter_rows(named=True):
         yield LogEvent(
             log_group=row['log_group'],
             log_stream=row['log_stream'],
-            timestamp=timestamp,
-            message=row['message'],
-            event_id=row['event_id'],
-            ingestion_time=ingestion_time,
+            timestamp=row['timestamp'],
+            message=readable_message(row),
+            ingestion_time=row.get('ingestion_time'),
         )
 
 
@@ -487,8 +473,6 @@ class LogCache:
         size_limit_mb: int = 1000,
         default_ttl_seconds: TtlSeconds | None = None,
         eviction_policy: str = 'least-recently-stored',
-        compression_level: int = 3,
-        row_group_size: int = 100_000,
     ) -> None:
         """Initialize LogCache with specified configuration.
 
@@ -499,9 +483,6 @@ class LogCache:
                 None means no expiration. Default None.
             eviction_policy: DiskCache eviction policy. Default 'least-recently-stored'
                 for FIFO behavior. See DiskCache docs for other options.
-            compression_level: Default ZSTD compression level applied when
-                writing Parquet files.
-            row_group_size: Default Parquet row group size used during writes.
 
         Raises:
             OSError: If cache directory cannot be created.
@@ -510,8 +491,6 @@ class LogCache:
         self._parquet_dir = cache_dir / 'parquet'
         self._default_ttl = default_ttl_seconds
         self._size_limit_bytes = size_limit_mb * 1024 * 1024
-        self._compression_level = compression_level
-        self._row_group_size = row_group_size
         self._inflight: set[Path] = set()
         self._inflight_lock = Lock()
 
@@ -532,6 +511,28 @@ class LogCache:
             disk=JSONDisk,
             disk_compress_level=1,
         )
+        self._prune_superseded_entries()
+
+    def _prune_superseded_entries(self) -> int:
+        """Delete entries written under an older cache schema, files included.
+
+        They can never be read again, because the key prefix moved with the
+        schema, so they would sit as dead weight until FIFO eviction reached them.
+
+        Returns:
+            Number of entries removed.
+        """
+        stale = [
+            key
+            for key in self._metadata.iterkeys()  # type: ignore[attr-defined]
+            if isinstance(key, str) and key.startswith('cache:') and not key.startswith(f'{CACHE_KEY_PREFIX}:')
+        ]
+        for key in stale:
+            metadata_value = self._metadata.get(key)
+            if metadata_value is not None:
+                Path(_metadata_path(metadata_value)).unlink(missing_ok=True)
+            self._metadata.delete(key)
+        return len(stale)
 
     def _cleanup_orphaned_files(self) -> int:
         """Clean up Parquet files not referenced by any metadata entry.
@@ -617,8 +618,6 @@ class LogCache:
         log_events: Iterable[LogEvent],
         cache_key: str,
         ttl_seconds: TtlSeconds | None = None,
-        compression_level: int | None = None,
-        row_group_size: int | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> dict[str, int]:
         """Write log events to cache.
@@ -629,9 +628,6 @@ class LogCache:
             ttl_seconds: TTL for this entry in seconds; fractions are allowed. If None,
                 uses default_ttl_seconds.
                 Pass None explicitly to override default and use no expiration.
-            compression_level: Optional override for compression level used during
-                this write.
-            row_group_size: Optional override for Parquet row group size.
             progress_callback: Optional callable notified of progress updates.
 
         Returns:
@@ -646,9 +642,6 @@ class LogCache:
         parquet_filename = cache_key.replace(':', '_').replace('/', '_') + '.parquet'
         parquet_path = self._parquet_dir / parquet_filename
 
-        effective_compression = compression_level if compression_level is not None else self._compression_level
-        effective_row_group_size = row_group_size if row_group_size is not None else self._row_group_size
-
         with self._inflight_lock:
             self._inflight.add(parquet_path)
         try:
@@ -656,8 +649,6 @@ class LogCache:
             stats = write_log_events_to_parquet(
                 log_events,
                 parquet_path,
-                compression_level=effective_compression,
-                row_group_size=effective_row_group_size,
                 progress_callback=progress_callback,
             )
 
@@ -698,7 +689,7 @@ class LogCache:
             doesn't exist or file is missing.
 
         Example:
-            >>> events = list(cache.read('cache:v1:abc123'))
+            >>> events = list(cache.read('cache:v2:abc123'))
             >>> for event in events:
             ...     print(event.message)
         """

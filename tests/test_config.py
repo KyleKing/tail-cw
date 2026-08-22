@@ -10,7 +10,6 @@ import pytest
 
 from tail_cw.config import (
     CacheConfig,
-    ParquetConfig,
     PreviewConfig,
     TailCWConfig,
     TraceConfig,
@@ -44,9 +43,6 @@ def test_default_config_values():
     assert config.cache.size_limit_mb == 1000
     assert config.cache.default_ttl_seconds is None
     assert config.cache.eviction_policy == 'least-recently-stored'
-
-    assert config.parquet.row_group_size == 100_000
-    assert config.parquet.compression_level == 3
 
     assert config.preview.sample_limit == 500
     assert config.preview.window_seconds == 900
@@ -83,7 +79,6 @@ def test_load_config_nonexistent_file(xdg_paths: tuple[Path, Path], tmp_path: Pa
     config = load_config(missing_path)
 
     assert isinstance(config, TailCWConfig)
-    assert config.parquet.row_group_size == 100_000
     assert config.cache.cache_dir == get_default_cache_dir()
 
 
@@ -98,10 +93,6 @@ def test_load_config_valid_toml(xdg_paths: tuple[Path, Path], tmp_path: Path):
                 'size_limit_mb = 512',
                 'default_ttl_seconds = 600',
                 'eviction_policy = "least-frequently-stored"',
-                '',
-                '[parquet]',
-                'row_group_size = 200000',
-                'compression_level = 5',
                 '',
                 '[preview]',
                 'sample_limit = 120',
@@ -129,9 +120,6 @@ def test_load_config_valid_toml(xdg_paths: tuple[Path, Path], tmp_path: Path):
     assert config.cache.default_ttl_seconds == 600
     assert config.cache.eviction_policy == 'least-frequently-stored'
 
-    assert config.parquet.row_group_size == 200_000
-    assert config.parquet.compression_level == 5
-
     assert config.preview.sample_limit == 120
     assert config.preview.window_seconds == 600
     assert config.preview.ttl_seconds == 60
@@ -155,7 +143,6 @@ def test_load_config_partial_toml(tmp_path: Path):
     config = load_config(config_path)
 
     assert config.cache.size_limit_mb == 256
-    assert config.parquet.row_group_size == 100_000
     assert config.tui.chunk_size == 1000
 
 
@@ -219,7 +206,6 @@ def test_create_default_config_file(tmp_path: Path):
 
     data = tomllib.loads(config_path.read_text(encoding='utf-8'))
     assert 'cache' in data
-    assert 'parquet' in data
     assert 'preview' in data
     assert 'tui' in data
     assert 'trace' in data
@@ -241,13 +227,6 @@ def test_cache_config_dataclass(tmp_path: Path):
     assert config.size_limit_mb == 256
     assert config.default_ttl_seconds == 120
     assert config.eviction_policy == 'lru'
-
-
-def test_parquet_config_dataclass():
-    config = ParquetConfig(row_group_size=64_000, compression_level=7)
-
-    assert config.row_group_size == 64_000
-    assert config.compression_level == 7
 
 
 def test_preview_config_dataclass():
@@ -287,9 +266,6 @@ def test_config_integration(tmp_path: Path):
                 f'cache_dir = "{cache_path.as_posix()}"',
                 'size_limit_mb = 256',
                 '',
-                '[parquet]',
-                'row_group_size = 120000',
-                '',
                 '[tui]',
                 'chunk_threshold = 1500',
                 '',
@@ -302,18 +278,16 @@ def test_config_integration(tmp_path: Path):
 
     config = load_config(config_path)
     assert config.cache.size_limit_mb == 256
-    assert config.parquet.row_group_size == 120_000
     assert config.tui.chunk_threshold == 1500
     assert config.trace.trace_id_fields == ['traceId']
 
     config_path.write_text(
-        '[cache]\nsize_limit_mb = 512\n\n[parquet]\nrow_group_size = 220000\n\n[tui]\nchunk_threshold = 2500',
+        '[cache]\nsize_limit_mb = 512\n\n[tui]\nchunk_threshold = 2500',
         encoding='utf-8',
     )
 
     updated = load_config(config_path)
     assert updated.cache.size_limit_mb == 512
-    assert updated.parquet.row_group_size == 220_000
     assert updated.tui.chunk_threshold == 2500
     assert updated.trace.trace_id_fields == list(DEFAULT_TRACE_ID_FIELDS)
 

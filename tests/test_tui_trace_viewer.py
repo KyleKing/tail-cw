@@ -42,7 +42,6 @@ def _make_test_event(
         ingestion_time=datetime.now(UTC),
         log_stream='test-stream',
         log_group='/aws/lambda/test-function',
-        event_id='test-event-id',
     )
 
 
