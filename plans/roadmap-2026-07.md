@@ -34,6 +34,36 @@ gives you.
 
 Nothing is scheduled. Ordered by value against effort.
 
+**Payload dtypes Parquet cannot store abort the whole fetch.** `scan_ndjson` infers a
+schema over arbitrary structlog payloads, and two shapes IRM logs in production make the
+write fail outright rather than degrading.
+An empty JSON object (`{"meta": {}}`) infers a
+zero-field struct Parquet cannot represent, and one key logged as two scalar types
+(`"n": 1` then `"n": true`) fails to parse into the inferred type.
+Both reproduce from a
+single line through `write_log_events_to_parquet`, and both killed
+`export logs irm-prod-ecs-hatchet-workers --start 12h --filter '"lacks searchable text"'`
+against `read-prod` while the same command at `--start 1h` succeeded, so it presents as
+an intermittent window-size bug.
+The failure now names the offending key
+(`Empty JSON object at parsed.a.b`) instead of only the dtype, which is diagnosis, not a
+fix.
+Fetching the same window with `aws logs filter-log-events --filter-pattern` worked
+and returned 57 matching events over 72h.
+
+The fix is a real choice and wants deciding before coding.
+Sanitizing at the NDJSON
+writer is the natural place because the data is still Python there, but the payload text
+is spliced in verbatim on purpose (0.39s to 0.22s over 72,767 events) and re-encoding
+every record gives that back.
+Repairing the inferred schema before `sink_parquet` keeps
+the hot path, and stringifying a nested payload key breaks the struct-field references
+`query/engine.py` builds from `collect_schema()`.
+Dropping an empty object loses nothing;
+reconciling a conflicting key means picking a winning type or widening it to text, and
+the tool's stated position is that silently dropping a payload key is worse than
+failing.
+
 **Per-width binding priority in the footer.** The mid-word garble is gone (the four
 vim-conventional motions moved behind `?`, and the footer sheds its padding and the
 palette hint below 100 columns), but a 60-column log view still truncates after

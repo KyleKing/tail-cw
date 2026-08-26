@@ -320,10 +320,11 @@ def write_log_events_to_parquet(
         lazy = pl.scan_ndjson(str(temp_file), infer_schema_length=None)
         # maintain_order keeps events that share a millisecond in the order CloudWatch
         # returned them, which is the only ordering information they carry.
-        _normalized_columns(lazy).sort('timestamp', maintain_order=True).sink_parquet(
-            str(output_path),
-            compression='zstd',
-        )
+        frame = _normalized_columns(lazy).sort('timestamp', maintain_order=True)
+        try:
+            frame.sink_parquet(str(output_path), compression='zstd')
+        except (pl.exceptions.ComputeError, pl.exceptions.InvalidOperationError) as err:
+            raise _unwritable_payload_error(frame, err) from err
 
         return {
             'total_events': total_events,
@@ -355,6 +356,34 @@ def _normalized_columns(lazy: pl.LazyFrame) -> pl.LazyFrame:
         if name not in schema or schema[name] == pl.Null
     ]
     return lazy.with_columns(*casts, *fills)
+
+
+def _empty_struct_paths(dtype: Any, path: str) -> list[str]:
+    if isinstance(dtype, pl.Struct):
+        if not dtype.fields:
+            return [path]
+        return [found for field in dtype.fields for found in _empty_struct_paths(field.dtype, f'{path}.{field.name}')]
+    if isinstance(dtype, pl.List):
+        return _empty_struct_paths(dtype.inner, f'{path}[]')
+    return []
+
+
+def _unwritable_payload_error(frame: pl.LazyFrame, err: Exception) -> ValueError:
+    """Name the payload key behind a Polars dtype failure.
+
+    Polars reports the dtype it could not handle and never the key that produced
+    it, so the bare message cannot be acted on. An empty JSON object infers a
+    zero-field struct Parquet cannot represent; one key logged as two scalar
+    types fails to parse into the type inference picked.
+    """
+    try:
+        schema = frame.collect_schema()
+    except Exception:
+        return ValueError(str(err))
+    empties = [found for name, dtype in schema.items() for found in _empty_struct_paths(dtype, name)]
+    if empties:
+        return ValueError(f'{err}. Empty JSON object at {", ".join(sorted(empties))}, which carries no value to store')
+    return ValueError(f'{err}. One payload key is logged as more than one scalar type')
 
 
 def read_parquet_to_log_events(parquet_path: Path) -> Iterator[LogEvent]:

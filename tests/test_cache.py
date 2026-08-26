@@ -2,6 +2,7 @@
 
 import hashlib
 import locale
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -107,6 +108,28 @@ def test_a_pretty_printed_payload_does_not_break_the_file(fix_test_cache: Path):
     assert [event.message for event in read_parquet_to_log_events(output_path)] == [
         '{"level":"info","event":"multi line"}',
     ]
+
+
+@pytest.mark.parametrize(
+    ('message', 'expected_path'),
+    [
+        ('{"level":"INFO","meta":{}}', 'parsed.meta'),
+        ('{"level":"INFO","a":{"b":{}}}', 'parsed.a.b'),
+    ],
+)
+def test_an_empty_payload_object_names_the_key_it_came_from(fix_test_cache: Path, message, expected_path):
+    """Polars reports only the dtype, so the bare message cannot be acted on."""
+    output_path = fix_test_cache / 'empty_struct.parquet'
+
+    with pytest.raises(ValueError, match=f'Empty JSON object at {re.escape(expected_path)}'):
+        write_log_events_to_parquet(make_events([message]), output_path)
+
+
+def test_one_key_logged_as_two_scalar_types_says_so(fix_test_cache: Path):
+    output_path = fix_test_cache / 'conflict.parquet'
+
+    with pytest.raises(ValueError, match='more than one scalar type'):
+        write_log_events_to_parquet(make_events(['{"level":"INFO","n":1}', '{"level":"INFO","n":true}']), output_path)
 
 
 def test_write_rejects_an_empty_batch(fix_test_cache: Path):
