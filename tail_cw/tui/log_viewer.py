@@ -3,8 +3,8 @@
 Two decisions live here. The column budget is spent by priority rather than on
 fixed widths, because at 80 columns four fixed columns left Message twelve
 characters wide. And a JSON record is read the way a person reads it: the phrase
-it carries first, then its remaining fields as dim ``key=value`` pairs, rather
-than as a wall of braces that clips before the interesting part.
+it carries first, then its remaining fields as ``key=value`` pairs, rather than
+as a wall of braces that clips before the interesting part.
 
 Severity is shown twice over, as a glyph and as colour, so it survives
 ``NO_COLOR``. A record that declares its own level is coloured strongly; one
@@ -27,6 +27,7 @@ from tail_cw.aws.events import LogEvent
 from tail_cw.cache.records import is_jsonl_message, strip_timestamp_prefix
 from tail_cw.config import MessageConfig
 from tail_cw.query.severity import Classification, Severity, classify_event, load_json_dict
+from tail_cw.text import shorten
 
 FULL_TIME_WIDTH = 23
 COMPACT_TIME_WIDTH = 12
@@ -36,11 +37,12 @@ GROUP_WIDTH = 20
 STREAM_WIDTH = 16
 MIN_MESSAGE_WIDTH = 24
 
-COMPACT_TIME_BELOW = 100
-"""Terminal width under which the date is dropped, leaving the time of day.
+DATE_ONLY_ABOVE = 100
+"""Terminal width at which a window spanning more than one day may show the date.
 
-Every row in a view shares the window the breadcrumb already states, so the date
-repeats a thousand times to no purpose.
+A single-day window never shows it at any width: every row shares the window the
+breadcrumb already states, so the date repeats a thousand times to no purpose and
+takes eleven columns from Message to do it.
 """
 
 DROP_STREAM_BELOW = 120
@@ -57,7 +59,12 @@ SEVERITY_GLYPHS = {Severity.ERROR: '✖', Severity.WARNING: '⚠', Severity.INFO
 _EXPLICIT_STYLES = {Severity.ERROR: 'bold red', Severity.WARNING: 'bold yellow', Severity.INFO: ''}
 _INFERRED_STYLES = {Severity.ERROR: 'dim red', Severity.WARNING: 'dim yellow', Severity.INFO: ''}
 _PAIR_STYLE = 'dim'
-_ELLIPSIS = '…'
+_PAIR_STYLES = {Severity.ERROR: 'red', Severity.WARNING: 'yellow', Severity.INFO: _PAIR_STYLE}
+"""Style for the ``key=value`` remainder, which is where a status code and a latency live.
+
+Dimming it on an error row made the one row worth reading the least legible thing on
+screen, at 1.9:1 against 4.6:1 for an ordinary row.
+"""
 
 
 @dataclass(frozen=True)
@@ -75,22 +82,26 @@ class Column:
     width: int
 
 
-def plan_columns(width: int, *, single_group: bool) -> tuple[Column, ...]:
+def plan_columns(width: int, *, single_group: bool, multi_day: bool = False) -> tuple[Column, ...]:
     """Choose the columns a table of this width can afford.
 
     Args:
         width: Cells available to the table.
         single_group: True when every row shares one log group, which makes the
             group column a constant repeated on every row.
+        multi_day: True when the window spans more than one calendar day, which
+            is the only case where the date tells a reader something the
+            breadcrumb does not.
     """
-    if width >= COMPACT_TIME_BELOW:
+    if multi_day and width >= DATE_ONLY_ABOVE:
         time_width = FULL_TIME_WIDTH
     elif width >= DROP_MILLIS_BELOW:
         time_width = COMPACT_TIME_WIDTH
     else:
         time_width = SECONDS_TIME_WIDTH
     columns = [
-        Column('timestamp', 'Timestamp', time_width),
+        # A header wider than its column renders clipped, which reads as a rendering bug.
+        Column('timestamp', 'Timestamp' if time_width >= len('Timestamp') else 'Time', time_width),
         Column('severity', '!', SEVERITY_WIDTH),
     ]
     if not single_group:
@@ -147,8 +158,8 @@ def message_text(
 
     A record's own phrase (``event``, ``message``, ``msg`` by default) reads as a
     sentence, so it leads and carries the severity colour. Everything else
-    follows as dim ``key=value``, which keeps the fields available without
-    letting braces and quotes eat the column.
+    follows as ``key=value``, which keeps the fields available without letting
+    braces and quotes eat the column.
     """
     hint = classification if classification is not None else classify_event(event)
     style = _style_for(hint)
@@ -156,18 +167,13 @@ def message_text(
     if data is None:
         text = Text(strip_timestamp_prefix(event.message), style=style)
     else:
-        text = _structured_text(data, config, style=style)
+        text = _structured_text(data, config, style=style, pair_style=_PAIR_STYLES[hint.severity])
     if width:
         text.truncate(width, overflow='ellipsis')
     return text
 
 
-def shorten(text: str, limit: int) -> str:
-    """Cut text to ``limit`` cells, marking the cut so a clipped name cannot read as whole."""
-    return text if len(text) <= limit else text[: limit - 1] + _ELLIPSIS
-
-
-def _structured_text(data: Mapping[str, Any], config: MessageConfig, *, style: str) -> Text:
+def _structured_text(data: Mapping[str, Any], config: MessageConfig, *, style: str, pair_style: str) -> Text:
     remainder = {key: value for key, value in data.items() if key not in config.hidden_fields}
     phrase = ''
     for candidate in config.phrase_fields:
@@ -180,7 +186,7 @@ def _structured_text(data: Mapping[str, Any], config: MessageConfig, *, style: s
     for key, value in remainder.items():
         if value is None:
             continue
-        text.append(f'{" " if text.plain else ""}{key}={_render_value(value)}', style=_PAIR_STYLE)
+        text.append(f'{" " if text.plain else ""}{key}={_render_value(value)}', style=pair_style)
     return text
 
 

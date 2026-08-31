@@ -9,7 +9,7 @@ from textual.app import App, ComposeResult
 
 from tail_cw.aws.metrics import MetricSeries
 from tail_cw.charts import ChartKind
-from tail_cw.tui.plot_widget import PlotChart, _rgb, _time_ticks
+from tail_cw.tui.plot_widget import PlotChart, _rgb, _time_ticks, fitted_ylim
 
 
 def test_rgb_parses_hex() -> None:
@@ -63,3 +63,28 @@ async def test_plot_message_when_no_data() -> None:
         await pilot.pause()
         svg = app.export_screenshot()
         assert 'window' in svg
+
+
+@pytest.mark.parametrize(
+    ('values', 'expected_fitted'),
+    [
+        # RequestCount between 950 and 1350: eighteen of twenty-one rows were solid block.
+        ([950.0, 1350.0, 1100.0], True),
+        # A count that reaches near zero shows its magnitude for free from a zero baseline.
+        ([0.0, 1350.0], False),
+        ([10.0, 1350.0], False),
+        ([], False),
+        ([-5.0, 1000.0], False),
+    ],
+)
+def test_the_axis_is_fitted_only_when_a_zero_baseline_would_be_all_ink(values, expected_fitted):
+    assert (fitted_ylim(values) is not None) is expected_fitted
+
+
+def test_a_fitted_axis_contains_the_data_with_room_to_spare():
+    bounds = fitted_ylim([950.0, 1350.0])
+
+    assert bounds is not None
+    low, high = bounds
+    assert low < 950.0
+    assert high > 1350.0

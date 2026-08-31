@@ -25,7 +25,12 @@ from tail_cw.aws.metrics import MetricSeries
 from tail_cw.cli import Session
 from tail_cw.config import load_config
 from tail_cw.tui.command_bar import CommandLine
-from tail_cw.tui.dashboard_screen import DashboardScreen, _grid_dimensions
+from tail_cw.tui.dashboard_screen import (
+    STAGE_MIN_HEIGHT,
+    DashboardScreen,
+    _grid_dimensions,
+    grid_rows_that_fit,
+)
 from tail_cw.tui.dive_screen import DiveConfirmScreen
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.plot_widget import PlotChart
@@ -426,7 +431,7 @@ async def test_which_key_lists_the_dashboard_bindings() -> None:
         await _settle(app, pilot)
         await pilot.press('question_mark')
         await _wait_until(pilot, lambda: isinstance(app.screen, WhichKeyScreen))
-        body = str(app.screen.query_one(Static).render())
+        body = '\n'.join(str(static.render()) for static in app.screen.query(Static))
         assert 'Dive' in body
         assert ':panels' in body
 
@@ -487,3 +492,34 @@ async def test_metric_math_widget_captions_without_a_metric_stat() -> None:
         await _settle(app, pilot)
         screen = _screen(app)
         assert 'metric math' in screen._metric_caption(screen._panels[0])
+
+
+@pytest.mark.parametrize(
+    ('rows', 'available', 'staged', 'expected'),
+    [
+        # Nothing focused: the grid is the view, so it keeps every row.
+        (3, 22, False, 3),
+        (3, 40, True, 3),
+        # 3 rows want 17 and the chart needs 12, so the grid drops to one row.
+        (3, 22, True, 1),
+        # Not even one row fits beside a readable chart.
+        (3, 15, True, 0),
+        # Before the first layout there is nothing to divide.
+        (3, 0, True, 3),
+    ],
+)
+def test_the_grid_gives_up_rows_so_a_focused_chart_stays_readable(rows, available, staged, expected) -> None:
+    """A chart drawn into four rows came back as an empty box with an inverted axis."""
+    assert grid_rows_that_fit(rows, available, staged=staged) == expected
+
+
+@pytest.mark.asyncio
+async def test_a_short_terminal_still_draws_a_whole_chart() -> None:
+    app = _build_app(Dashboard(name='demo', widgets=[_metric(str(index)) for index in range(9)]))
+    async with app.run_test(size=(80, 24)) as pilot:
+        await _settle(app, pilot)
+        screen = _screen(app)
+
+        assert screen._staged, 'a metric is focused by default'
+        assert screen.query_one('#stage').size.height >= STAGE_MIN_HEIGHT
+        assert screen._hidden_by_height() > 0, 'and the status line says how many panels that cost'

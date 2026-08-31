@@ -54,6 +54,41 @@ _STAT_CYCLE = ('Average', 'Sum', 'Minimum', 'Maximum', 'p95')
 _PERIOD_CYCLE = (60, 300, 900, 3600, 21600)
 
 
+STAGE_MIN_HEIGHT = 12
+"""Rows a plotext chart needs before its axis furniture crowds out the data.
+
+At four rows the plot area came back empty with the y axis inverted, on the app's
+headline feature at the most common terminal size.
+"""
+
+
+def grid_rows_that_fit(rows: int, available: int, *, staged: bool) -> int:
+    """Grid rows to show, so a staged chart keeps its floor.
+
+    Whole rows only. Giving the grid a height that does not divide into cells
+    squeezes every row instead of dropping the last one, which renders as a
+    column of clipped borders.
+
+    Args:
+        rows: Grid rows the panels want.
+        available: Content rows the grid and the stage share.
+        staged: Whether a panel is focused, which is what needs the floor.
+
+    Returns:
+        Rows to show. Zero hides the grid, which is the answer when one row and a
+        readable chart cannot both fit.
+    """
+    if available <= 0 or not staged:
+        return rows
+    return next(
+        (candidate for candidate in range(rows, 0, -1) if available - _grid_height(candidate) >= STAGE_MIN_HEIGHT), 0
+    )
+
+
+def _grid_height(rows: int) -> int:
+    return rows * _CELL_HEIGHT + (rows - 1) if rows else 0
+
+
 def _grid_dimensions(count: int) -> tuple[int, int]:
     if count <= 1:
         return 1, 1
@@ -196,7 +231,9 @@ class DashboardScreen(ShellScreen):
         color: $text-muted;
     }
     #dash_status {
-        dock: bottom;
+        /* Not docked. The Footer docks to the same edge and painted over this line,
+           so it sits in the flow under the stage, which takes what is left. */
+        width: 100%;
         height: 1;
         background: $panel;
         color: $text;
@@ -225,6 +262,7 @@ class DashboardScreen(ShellScreen):
         self._staged: list[int] = []
         self._hidden: set[int] = set()
         self._columns = 1
+        self._grid_rows = 1
 
     def compose_content(self) -> ComposeResult:
         """Build the compact grid, the focus stage, and the status line.
@@ -285,9 +323,25 @@ class DashboardScreen(ShellScreen):
         columns, rows = _grid_dimensions(visible)
         self._columns = columns
         grid = self.query_one('#grid')
+        self._grid_rows = grid_rows_that_fit(rows, self._content_height(), staged=bool(self._staged))
         grid.styles.grid_size_columns = columns
-        grid.styles.grid_size_rows = rows
-        grid.styles.height = rows * _CELL_HEIGHT + (rows - 1)
+        grid.styles.grid_size_rows = max(1, self._grid_rows)
+        grid.styles.height = _grid_height(self._grid_rows)
+        grid.display = self._grid_rows > 0
+
+    def _content_height(self) -> int:
+        """Rows the grid and the stage share.
+
+        Measured rather than derived: the stage takes ``1fr`` of whatever the grid
+        leaves, so their two heights always sum to the content area. Reads 0 before
+        the first layout, and a resize follows.
+        """
+        return self.query_one('#grid').size.height + self.query_one('#stage').size.height
+
+    def _hidden_by_height(self) -> int:
+        """Panels the grid has no row for, once the stage takes its floor."""
+        visible = max(1, len(self._panels) - len(self._hidden))
+        return max(0, visible - self._grid_rows * self._columns)
 
     def on_resize(self, _event: events.Resize) -> None:
         """Keep the grid sized to the terminal and re-render compact cells."""
@@ -295,6 +349,7 @@ class DashboardScreen(ShellScreen):
         if not self._panels:
             return
         self._resize_grid()
+        self._rebuild_stage()
         for panel in self._panels:
             if isinstance(panel.widget, MetricWidget) and panel.series:
                 panel.cell.set_series(panel.series)
@@ -674,7 +729,9 @@ class DashboardScreen(ShellScreen):
         session = self.shell.session
         window = _window_label(session.start, session.end)
         focus = f' · {len(self._staged)} focused' if self._staged else ''
-        base = f'{len(self._panels)} panels · window {window}{focus}'
+        # A grid the stage pushed off screen has to say so, or the panels look lost.
+        clipped = f' · {hidden} hidden (esc)' if (hidden := self._hidden_by_height()) else ''
+        base = f'{len(self._panels)} panels · window {window}{focus}{clipped}'
         self.query_one('#dash_status', Label).update(f'{base} · {message}' if message else base)
 
 

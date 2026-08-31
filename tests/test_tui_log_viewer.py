@@ -10,6 +10,7 @@ from rich.text import Text
 
 from tail_cw.config import MessageConfig
 from tail_cw.query.severity import Severity
+from tail_cw.text import shorten
 from tail_cw.tui.log_viewer import (
     COMPACT_TIME_WIDTH,
     FULL_TIME_WIDTH,
@@ -24,7 +25,6 @@ from tail_cw.tui.log_viewer import (
     message_text,
     parse_jsonl_message,
     plan_columns,
-    shorten,
 )
 from tests.factories import make_event
 
@@ -36,8 +36,9 @@ def _keys(width: int, *, single_group: bool = True) -> list[str]:
     return [column.key for column in plan_columns(width, single_group=single_group)]
 
 
-def _width(width: int, key: str, *, single_group: bool = True) -> int:
-    return next(column.width for column in plan_columns(width, single_group=single_group) if column.key == key)
+def _width(width: int, key: str, *, single_group: bool = True, multi_day: bool = False) -> int:
+    columns = plan_columns(width, single_group=single_group, multi_day=multi_day)
+    return next(column.width for column in columns if column.key == key)
 
 
 @pytest.mark.parametrize(
@@ -55,9 +56,10 @@ def test_columns_collapse_by_priority(width, single_group, expected):
     assert _keys(width, single_group=single_group) == expected
 
 
-@pytest.mark.parametrize(('width', 'expected'), [(200, FULL_TIME_WIDTH), (80, COMPACT_TIME_WIDTH)])
-def test_the_date_goes_before_the_message_does(width, expected):
-    assert _width(width, 'timestamp') == expected
+def test_a_one_day_window_never_spends_width_on_the_date():
+    """The breadcrumb states the window, so the date repeats a thousand times to no purpose."""
+    assert _width(200, 'timestamp') == COMPACT_TIME_WIDTH
+    assert _width(200, 'timestamp', multi_day=True) == FULL_TIME_WIDTH
 
 
 def test_the_message_column_gets_what_is_left_rather_than_twelve_characters():
@@ -150,6 +152,19 @@ def test_severity_shows_as_a_glyph_and_dims_when_it_was_inferred(message, severi
         assert ('dim' in str(glyph.style)) is not explicit
 
 
+def _pair_styles(message: str) -> set[str]:
+    """Styles the ``key=value`` remainder was rendered with."""
+    text = message_text(make_event(message), CONFIG)
+    phrase_end = len(text.plain.split(' status')[0])
+    return {str(span.style) for span in text.spans if span.start >= phrase_end}
+
+
+def test_an_error_rows_detail_is_not_the_dimmest_text_on_screen():
+    """The status code and the latency live there, and dim put them at 1.9:1."""
+    assert 'dim' not in ' '.join(_pair_styles('{"level":"error","event":"boom","status":500}'))
+    assert 'dim' in ' '.join(_pair_styles('{"level":"info","event":"fine","status":200}'))
+
+
 def test_a_row_has_one_cell_per_planned_column():
     columns = plan_columns(80, single_group=True)
 
@@ -181,21 +196,29 @@ def test_the_detail_pane_leaves_a_plain_line_alone():
 
 
 @pytest.mark.parametrize(
-    ('width', 'expected'),
+    ('width', 'multi_day', 'expected'),
     [
-        (160, FULL_TIME_WIDTH),
-        (100, FULL_TIME_WIDTH),
-        (99, COMPACT_TIME_WIDTH),
-        (80, COMPACT_TIME_WIDTH),
-        (79, SECONDS_TIME_WIDTH),
-        (57, SECONDS_TIME_WIDTH),
+        (160, True, FULL_TIME_WIDTH),
+        (100, True, FULL_TIME_WIDTH),
+        (99, True, COMPACT_TIME_WIDTH),
+        (160, False, COMPACT_TIME_WIDTH),
+        (80, False, COMPACT_TIME_WIDTH),
+        (79, False, SECONDS_TIME_WIDTH),
+        (57, True, SECONDS_TIME_WIDTH),
     ],
 )
-def test_the_clock_sheds_the_date_then_the_milliseconds(width, expected):
+def test_the_clock_sheds_the_date_then_the_milliseconds(width, multi_day, expected):
     """Milliseconds cost four characters of message, which matters more on a narrow terminal."""
-    columns = plan_columns(width, single_group=True)
+    assert _width(width, 'timestamp', multi_day=multi_day) == expected
 
-    assert next(column.width for column in columns if column.key == 'timestamp') == expected
+
+@pytest.mark.parametrize('width', [200, 100, 80, 79, 40])
+def test_the_time_header_never_renders_clipped(width):
+    """`Timestam` in the table's own header reads as a rendering bug."""
+    columns = plan_columns(width, single_group=True)
+    timestamp = next(column for column in columns if column.key == 'timestamp')
+
+    assert len(timestamp.label) <= timestamp.width
 
 
 def test_the_rendered_time_matches_the_width_it_was_given():

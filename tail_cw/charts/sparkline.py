@@ -18,6 +18,7 @@ from rich.text import Text
 
 from tail_cw.aws.metrics import MetricSeries
 from tail_cw.charts.palette import role_color, series_color
+from tail_cw.text import shorten
 
 _BLOCKS = '▁▂▃▄▅▆▇█'
 _BAR_BLOCKS = '▁▂▃▄▅▆▇█'
@@ -30,6 +31,14 @@ class ReduceMode(StrEnum):
     PERCENTILES = 'percentiles'
     SINGLE = 'single'
     EACH = 'each'
+
+
+_LABEL_WIDTH = 5
+"""Cells for a row label in a compact cell, the rest going to the sparkline.
+
+`median` clipped to `media` reads as a different word rather than a shortened one,
+so anything longer is cut with an ellipsis and our own labels are chosen to fit.
+"""
 
 
 @dataclass(frozen=True)
@@ -125,8 +134,8 @@ def reduce_rows(
             SparkRow('p99', _percentile_series(series, 99.0), accent),
         ]
     return [
-        SparkRow('median', _percentile_series(series, 50.0), accent),
-        SparkRow(f'spread ({len(series)})', _percentile_series(series, 100.0), f'{accent} dim'),
+        SparkRow('p50', _percentile_series(series, 50.0), accent),
+        SparkRow('peak', _percentile_series(series, 100.0), f'{accent} dim'),
     ]
 
 
@@ -162,6 +171,6 @@ def build_compact(
     for row in rows:
         spark_width = max(1, width - 6) if show_labels else max(1, width)
         spark = sparkline_text(row.values, color=row.color, width=spark_width, bars=bars)
-        prefix = Text(f'{row.label[:5]:>5} ', style='dim') if show_labels else Text('')
+        prefix = Text(f'{shorten(row.label, _LABEL_WIDTH):>{_LABEL_WIDTH}} ', style='dim') if show_labels else Text('')
         lines.append(Text.assemble(prefix, spark))
     return Group(*lines)

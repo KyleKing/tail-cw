@@ -8,6 +8,7 @@ and no illegible downsampled text, and it resizes cleanly.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from textual_plotext import PlotextPlot
@@ -17,6 +18,28 @@ from tail_cw.charts import ChartKind
 from tail_cw.charts.palette import series_color
 
 _TICKS = 5
+
+ZERO_BASELINE_FRACTION = 0.35
+"""Variation as a fraction of the peak, below which a chart drawn from zero is all ink.
+
+A RequestCount between 680 and 1350 filled eighteen of twenty-one plot rows with
+solid block, leaving the shape in the top three.
+"""
+
+
+def fitted_ylim(values: Sequence[float]) -> tuple[float, float] | None:
+    """Axis bounds for a series whose variation sits far above zero.
+
+    Returns None when the series reaches near zero anyway, where a zero baseline
+    is the honest one and shows the magnitude for free.
+    """
+    if not values:
+        return None
+    low, high = min(values), max(values)
+    if low <= 0 or high - low >= high * ZERO_BASELINE_FRACTION:
+        return None
+    pad = max((high - low) * 0.1, high * 0.01)
+    return low - pad, high + pad
 
 
 def _rgb(hex_color: str) -> tuple[int, int, int]:
@@ -75,13 +98,22 @@ class PlotChart(PlotextPlot):
             plt.title(f'{self._title} — {self._message or "no data"}')
             self.refresh()
             return
+        # A bar fills from the axis floor, so raising the floor would misstate every
+        # magnitude. A series whose variation sits far above zero is drawn as a line
+        # instead, which is what makes the fitted axis readable.
+        bounds = fitted_ylim([value for item in self._series for value in item.values])
         for index, item in enumerate(self._series):
             color = _rgb(self._colors[index]) if self._colors else _rgb(series_color(index))
             xs = list(range(len(item.values)))
-            if self._kind == ChartKind.BAR:
-                plt.bar(xs, item.values, label=item.label, color=color)
+            # One series is already named by the panel title, and plotext draws the
+            # legend inside the plot, over the data.
+            label = item.label if len(self._series) > 1 else None
+            if self._kind == ChartKind.BAR and bounds is None:
+                plt.bar(xs, item.values, label=label, color=color)
             else:
-                plt.plot(xs, item.values, label=item.label, color=color)
+                plt.plot(xs, item.values, label=label, color=color)
+        if bounds is not None:
+            plt.ylim(*bounds)
         positions, labels = _time_ticks(self._series[0].timestamps)
         if positions:
             plt.xticks(positions, labels)

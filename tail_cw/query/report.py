@@ -11,6 +11,7 @@ from tail_cw.aws.alarms import AlarmSummary
 from tail_cw.charts.sparkline import sparkline_blocks
 from tail_cw.query.facets import FieldFacet
 from tail_cw.query.rollup import Granularity, PatternRollup, RollupReport
+from tail_cw.text import shorten
 
 _SPARK_WIDTH = 24
 _SUMMARY_EXAMPLE_CHARS = 110
@@ -41,11 +42,11 @@ def render_alarm_markdown(alarms: Sequence[AlarmSummary], transitions: Mapping[s
     columns = ('alarm', 'state', 'transitions', 'metric', 'reason')
     rows = [
         {
-            'alarm': _shorten(alarm.name, 44),
+            'alarm': shorten(alarm.name, 44),
             'state': alarm.state,
             'transitions': str(transitions.get(alarm.name, '-')),
-            'metric': _shorten(f'{alarm.namespace or "-"}/{alarm.metric_name or "math"}', 36),
-            'reason': _shorten(alarm.state_reason, 60),
+            'metric': shorten(f'{alarm.namespace or "-"}/{alarm.metric_name or "math"}', 36),
+            'reason': shorten(alarm.state_reason, 60),
         }
         for alarm in ranked
     ]
@@ -76,7 +77,7 @@ def render_facets_markdown(facets: Sequence[FieldFacet], *, window_label: str) -
                     ('value', 'count', 'share'),
                     [
                         {
-                            'value': _inline_code(_shorten(value.value, _FACET_VALUE_CHARS)),
+                            'value': _inline_code(shorten(value.value, _FACET_VALUE_CHARS)),
                             'count': f'{value.count:,}',
                             'share': f'{value.count / facet.present:.1%}' if facet.present else '-',
                         }
@@ -111,7 +112,7 @@ def _summary_table(report: RollupReport) -> list[str]:
     ]
     for index, pattern in enumerate(report.patterns, start=1):
         groups = ', '.join(f'{name} ({count})' for name, count in pattern.log_groups)
-        shape = _inline_code(_shorten(pattern.key, _SUMMARY_EXAMPLE_CHARS))
+        shape = _inline_code(shorten(pattern.key, _SUMMARY_EXAMPLE_CHARS))
         count = f'{pattern.count:,}' + (f' ({pattern.merged_shapes} shapes)' if pattern.merged_shapes > 1 else '')
         rows.append(
             f'| {index} | {pattern.severity.name.lower()} | {count} '
@@ -153,10 +154,6 @@ def _bucket_series(pattern: PatternRollup, report: RollupReport) -> list[tuple[s
 def _trend(pattern: PatternRollup, report: RollupReport) -> str:
     values = [float(count) for _, count in _bucket_series(pattern, report)]
     return sparkline_blocks(values, width=_SPARK_WIDTH, bars=True, lo=0.0) or '-'
-
-
-def _shorten(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[: limit - 1] + '…'
 
 
 def _inline_code(text: str) -> str:

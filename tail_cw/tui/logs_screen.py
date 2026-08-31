@@ -164,11 +164,11 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         Binding('r', 'refresh', 'Refresh', show=True),
         Binding('L', 'toggle_live', 'Live', show=True),
         Binding('space', 'toggle_live_pause', 'Pause/Resume', show=False),
-        Binding('t', 'toggle_trace_view', 'Trace View', show=True),
-        Binding('shift+t', 'show_trace_for_selected', 'Show Trace', show=True),
+        Binding('t', 'toggle_trace_view', 'All traces', show=True),
+        Binding('shift+t', 'show_trace_for_selected', "This row's trace", show=True),
         Binding('x', 'pivot_xray', 'X-Ray', show=True),
         Binding('p', 'pivot', 'Pivot', show=True),
-        Binding('h', 'toggle_histogram', 'When', show=True),
+        Binding('h', 'toggle_histogram', 'Histogram', show=True),
         # DataTable answers to the arrow keys; these are the vim motions over the
         # same cursor, so hjkl-hands never reach for the arrows.
         Binding('j', 'move(1)', 'Down', show=False),
@@ -328,7 +328,12 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             self._table.add_column(column.label, key=column.key, width=column.width)
 
     def _plan(self) -> tuple[Column, ...]:
-        return plan_columns(self._table_width() - _ROW_RESERVE, single_group=len(self._log_groups) <= 1)
+        session = self.shell.session
+        return plan_columns(
+            self._table_width() - _ROW_RESERVE,
+            single_group=len(self._log_groups) <= 1,
+            multi_day=session.start.date() != session.end.date(),
+        )
 
     def _table_width(self) -> int:
         """Width the column budget is planned against.

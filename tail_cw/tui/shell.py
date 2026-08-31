@@ -646,12 +646,16 @@ class TailCWApp(App[None]):
 
     def show_which_key(self, screen: ShellScreen) -> None:
         """Push the reference of every binding and command available here."""
-        keys = [
-            (binding.key_display or binding.key, binding.description)
-            for source in (screen, ShellScreen)
-            for binding in getattr(source, 'BINDINGS', [])
-            if isinstance(binding, Binding) and binding.description
-        ]
+        # Aliases share one row: `?` and `,` both open this panel, and listing them
+        # twice under one label reads as two different bindings.
+        aliases: dict[tuple[str, str], list[str]] = {}
+        for source in (screen, ShellScreen):
+            for binding in getattr(source, 'BINDINGS', []):
+                if isinstance(binding, Binding) and binding.description:
+                    aliases.setdefault((binding.action, binding.description), []).append(
+                        binding.key_display or binding.key,
+                    )
+        keys = [(' '.join(displays), description) for (_action, description), displays in aliases.items()]
         commands = [(name, command.summary) for name, command in sorted(self.command_registry(screen).items())]
         self.push_screen(WhichKeyScreen(keys, commands))
 

@@ -34,10 +34,11 @@ def test_reduce_each_when_two_or_fewer_series() -> None:
     assert len(rows) == 2
 
 
-def test_reduce_band_gives_median_and_spread() -> None:
+def test_reduce_band_gives_a_median_and_a_peak() -> None:
     series = [_series(6, base) for base in (0, 10, 20, 30)]
     rows = reduce_rows(series, accent='#fff', mode=ReduceMode.BAND, percentile=50.0)
-    assert [row.label for row in rows] == ['median', 'spread (4)']
+    # Labels are cut to five cells, and `median` clipped to `media` reads as another word.
+    assert [row.label for row in rows] == ['p50', 'peak']
 
 
 def test_reduce_percentiles_gives_p50_and_p99() -> None:
@@ -66,3 +67,14 @@ def test_build_compact_no_data_message() -> None:
     with console.capture() as capture:
         console.print(build_compact('CPU', 'timeSeries', [], width=20))
     assert 'no data' in capture.get()
+
+
+def test_a_row_label_too_long_for_its_column_is_marked_as_cut():
+    """`memory` clipped to `memor` reads as a different word rather than a shortened one."""
+    series = [_series(4, label='memory-utilization'), _series(4, label='cpu')]
+
+    console = Console(width=50)
+    with console.capture() as capture:
+        console.print(build_compact('Saturation', 'timeSeries', series, width=40))
+
+    assert 'memo…' in capture.get()
