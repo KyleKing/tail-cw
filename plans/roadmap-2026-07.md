@@ -67,6 +67,52 @@ reconciling a conflicting key means picking a winning type or widening it to tex
 the tool's stated position is that silently dropping a payload key is worse than
 failing.
 
+**A truncated NDJSON stream is indistinguishable from a complete one.** On 2026-08-31
+`export alarms --profile read-prod` wrote 124 records over 105,342 bytes, and an agent
+harness consuming it persisted 50 records over 42,486 bytes, cut on a line boundary, and
+labelled the file "Full output saved to".
+Nothing in the stream contradicted that label: every line parsed, the last line was
+whole, and no record carries a total, so the loss read as tail-cw capping at 50 and the
+session spent a turn proposing a pagination key the tool does not need.
+`describe_alarms` (`tail_cw/aws/alarms.py:116`) already walks every page, so what failed
+is detectability, not resumability.
+
+The cheapest repair is a record count on stderr at the end of every export, which leaves
+the NDJSON contract of ADR 0002 and 0008 untouched and runs to about one line per
+command.
+`_export_alarms` already writes to stderr when nothing matches (`cli.py:1287`), so this
+is the same courtesy for the case that succeeds.
+It is the least effort of anything on this list and could reasonably be promoted above
+the Parquet item.
+
+Open: whether it covers `export metrics`, which emits one self-describing object per
+series and gains little from a count; what `export tail` reports, given it never
+completes and would have to count on interrupt; and whether the line stays human prose,
+which it should, because stdout is the machine surface.
+
+**A trailer record would survive `2>/dev/null`, at the cost of a documented contract.**
+The stderr count above dies to any redirect, and the 2026-08-31 session suppressed
+stderr
+on most of its own calls, which makes the signal that matters least likely to arrive.
+A final `{"record":"summary","count":124}` travels with the data instead, and turns
+completeness into one `jq -e`.
+
+The cost is that every export today yields one homogeneous record type and consumers
+filter on domain fields, so `jq -r '.name'` over an alarms export would start printing
+`null` for the trailer.
+That breaks the NDJSON surface ADR 0002 and 0008 specify, and
+[ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md) calls that
+surface
+"nice-to-have rather than load-bearing", which is a live argument for declining this
+outright rather than building it.
+
+Open: whether it ships behind a flag, on by default, or not at all; what discriminator
+field existing consumers could be expected to filter on, when none of them filters on
+one
+today; and whether `export tail` gets a trailer at all.
+Settle the contract question before writing code, because the flag version and the
+default version are different products.
+
 **Per-width binding priority in the footer.** The mid-word garble is gone (the four
 vim-conventional motions moved behind `?`, and the footer sheds its padding and the
 palette hint below 100 columns), but a 60-column log view still truncates after
@@ -83,6 +129,22 @@ writing one.
 Asserting the backend *choice* plus a generous ceiling is the shape most likely to catch
 a
 real regression without flaking.
+
+**`--output PATH` to keep a large export out of the consumer's pipe.** The third answer
+to
+the truncation above: write the NDJSON to a file and print only a summary, so nothing
+downstream can drop the tail without saying so.
+
+The premise is weak and worth testing before building anything.
+`tail-cw export alarms > alarms.ndjson` already does this with no new surface, and it is
+what the 2026-08-31 session should have run.
+A flag earns its keep only if it reports the path and the count in a way a shell
+redirect
+cannot, which is a thin margin against a new argument on every export command.
+
+Open: whether it applies uniformly or only to the exports that can grow large; whether
+stdout then carries the summary or nothing at all; and whether an existing file is
+overwritten, appended to, or refused.
 
 **Matcher hooks to auto-link an event to its Sentry or PostHog issue.** Carried since
 2026-07-05 and still unscheduled.
