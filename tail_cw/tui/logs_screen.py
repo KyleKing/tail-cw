@@ -26,7 +26,7 @@ from textual.containers import Container, Horizontal
 from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import DataTable, Input, Label
-from textual.worker import get_current_worker
+from textual.worker import WorkType, get_current_worker
 
 from tail_cw.aws.events import LogEvent
 from tail_cw.aws.xray import as_xray_trace_id
@@ -841,7 +841,10 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             panel.set_message('live stream: no counts')
             return
         panel.set_message('counting…')
-        self.run_worker(self._load_facets(), name='facets', group='facets', exclusive=True)
+        # The callable, not the coroutine: a worker cancelled before it starts leaves a
+        # coroutine object nobody awaited.
+        work: WorkType[None] = self._load_facets
+        self.run_worker(work, name='facets', group='facets', exclusive=True)
 
     async def _load_facets(self) -> None:
         """Count the payload fields off the message loop, then render them."""
