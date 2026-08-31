@@ -89,6 +89,13 @@ pythonVersion = "3.13"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+filterwarnings = [
+  "error::RuntimeWarning",
+  "error::pytest.PytestUnraisableExceptionWarning",
+  # Textual's ComposeResult and WorkType are typing aliases, so beartype emits one of these
+  # per widget: 186 of them hid a real "never awaited" RuntimeWarning until it was read by hand.
+  "ignore::beartype.roar.BeartypeDecorHintPep585DeprecationWarning",
+]
 
 [tool.ruff]
 # Docs: https://github.com/charliermarsh/ruff
