@@ -29,6 +29,11 @@ Use the direct commands listed below instead
     Textual Pilot tests are the bulk).
     Drop `-n auto` when debugging one test or using `--pdb`, which xdist cannot support
 - Pre-Commit: `prek run --all-files`
+- Docs: `uv run python docs/gen_ref_nav.py && uv run mkdocs build --strict`.
+    The generator must run first, because mkdocs collects files before any plugin does and a
+    stub written during a build is a build late.
+    `--strict` catches a relative markdown link in a docstring, which resolves from the
+    source tree and not from the generated reference page
 
 `-n auto` is not in `addopts` on purpose, so the default invocation stays debuggable.
 Every fixture is per-test (`tmp_path`), so parallel runs are safe; do not introduce a

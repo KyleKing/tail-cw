@@ -34,5 +34,9 @@ jobs:
         run: |-
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
+      - name: Generate the API reference
+        # mkdocs collects files before any plugin runs, so stubs written during a build
+        # are one build late and a fresh checkout would deploy no reference at all.
+        run: uv run python docs/gen_ref_nav.py
       - name: Build and deploy documentation
         run: uv run calcipy-docs cl.write doc.build doc.deploy

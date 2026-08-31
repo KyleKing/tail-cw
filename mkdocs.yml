@@ -23,9 +23,6 @@ watch:
   - tail_cw
 
 plugins:
-  - gen-files:
-      scripts:
-        - docs/gen_ref_nav.py
   - mkdocstrings:
       handlers:
         python:

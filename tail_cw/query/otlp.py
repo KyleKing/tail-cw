@@ -5,7 +5,7 @@ constrained case documented below. X-Ray segment documents carry real start and 
 times and a real ``parent_id``, so :func:`xray_traces_to_otlp` needs none of the
 heuristics the log path does.
 
-Per [ADR 0012](../../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)
+Per [ADR 0012](https://tail-cw.kyleking.me/docs/adr/0012-export-traces-instead-of-drawing-them/)
 tail-cw emits a standard document rather than drawing a waterfall. The honest
 mapping from a log line to a span is the constraint here: a line carries one
 timestamp, and services log when work finishes, so a span covers

@@ -321,7 +321,7 @@ class QueryLanguage(StrEnum):
     query keeps meaning what it meant. ``SQL`` and ``PPL`` are the OpenSearch languages
     CloudWatch made generally available, and they bring JOIN and sub-queries that the
     local engine deliberately does not implement
-    ([ADR 0010](../../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md)).
+    ([ADR 0010](https://tail-cw.kyleking.me/docs/adr/0010-keep-tail-cw-with-a-narrower-scope/)).
     """
 
     CWLI = 'CWLI'

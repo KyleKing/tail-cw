@@ -1,8 +1,8 @@
 """Lay an X-Ray trace out as a waterfall, as pure geometry over the spans.
 
-[ADR 0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md) rejects a
-waterfall drawn from log timestamps, because a log line carries one timestamp and no
-parent. X-Ray segment documents carry both, so the picture below is the service's own
+[ADR 0012](https://tail-cw.kyleking.me/docs/adr/0012-export-traces-instead-of-drawing-them/)
+rejects a waterfall drawn from log timestamps, because a log line carries one timestamp
+and no parent. X-Ray segment documents carry both, so the picture below is the service's own
 account of what waited on what rather than an inference from when lines were written.
 
 Nothing here imports Textual. The layout is a list of rows with fractional offsets, so

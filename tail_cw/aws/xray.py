@@ -2,9 +2,9 @@
 
 Our services log ``trace_id`` and ``span_id`` and no ``parent_span_id`` anywhere, so a
 hierarchy cannot be recovered from log lines
-([ADR 0012](../../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)). X-Ray
-segment documents carry ``parent_id`` and nest their children under ``subsegments``, so
-they answer the question log lines cannot.
+([ADR 0012](https://tail-cw.kyleking.me/docs/adr/0012-export-traces-instead-of-drawing-them/)).
+X-Ray segment documents carry ``parent_id`` and nest their children under
+``subsegments``, so they answer the question log lines cannot.
 
 ``GetTraceSummaries`` is the discovery call and returns no timing detail per span;
 ``BatchGetTraces`` returns the documents and takes five trace ids per request.
