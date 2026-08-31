@@ -50,6 +50,9 @@ The failure now names the offending key
 fix.
 Fetching the same window with `aws logs filter-log-events --filter-pattern` worked
 and returned 57 matching events over 72h.
+Seen again on 2026-08-31, same log group, key `parsed.outcomes`, on both
+`export summary` and `export logs --filter` over a 12h window, so it blocks every read
+path into that group rather than one command.
 
 The fix is a real choice and wants deciding before coding.
 Sanitizing at the NDJSON
