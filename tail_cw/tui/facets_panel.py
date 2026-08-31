@@ -23,11 +23,12 @@ from tail_cw.text import shorten
 PANEL_WIDTH = 30
 """Cells the panel takes from the table. Wide enough for a value and its count."""
 
-MIN_TERMINAL_WIDTH = 100
+MIN_TERMINAL_WIDTH = 120
 """Terminal width under which the panel stays closed.
 
-Below it the message column is the thing that needs the cells, which is the
-finding the column budget already exists to honour.
+Matches the width at which the column budget already drops the stream column: a
+terminal short enough to shed a column has nothing to spare for a panel, and the
+message column is what needs those cells.
 """
 
 _COUNT_WIDTH = 7

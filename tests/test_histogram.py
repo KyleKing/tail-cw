@@ -60,7 +60,7 @@ def test_the_headline_names_the_spike_rather_than_the_total() -> None:
     spike = bucket_events([_event(offset) for offset in range(60)], start=START, end=END, columns=10)
     even = bucket_events([_event(offset * 10) for offset in range(60)], start=START, end=END, columns=10)
 
-    assert histogram_headline(spike) == 'peak 60 at 12:00:00, 10x average, 9/10 quiet'
-    assert histogram_headline(even) == 'peak 6 at 12:00:00, 1x average, 0/10 quiet'
+    assert histogram_headline(spike) == 'peak 60 from 12:00:00, 10x average, 9/10 quiet'
+    assert histogram_headline(even) == 'peak 6 from 12:00:00, 1x average, 0/10 quiet'
     assert histogram_headline(bucket_events([], start=START, end=END, columns=10)) == 'no events in the window'
     assert histogram_headline([]) == 'no events in the window'

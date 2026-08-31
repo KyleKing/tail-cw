@@ -708,7 +708,7 @@ async def test_a_narrower_terminal_re_budgets_the_columns():
 
 @pytest.mark.asyncio
 async def test_the_status_line_says_when_the_view_is_capped(tmp_path: Path):
-    """`Loaded 1000 events` hid whether that was everything."""
+    """`Loaded 1000 events` hid whether that was everything, and of how many."""
     config = TailCWConfig()
     config.tui.initial_load_limit = 3
     path = _write_parquet(_make_test_log_events(5), tmp_path / 'events.parquet')
@@ -718,7 +718,9 @@ async def test_the_status_line_says_when_the_view_is_capped(tmp_path: Path):
         await app.workers.wait_for_complete()
         await pilot.pause()
 
-        assert 'capped' in str(app.screen.query_one('#status', Label).render())
+        status = str(app.screen.query_one('#status', Label).render())
+        assert 'Loaded 3 of 5 cached events' in status
+        assert 'narrow the window' in status
 
 
 @pytest.mark.asyncio
@@ -1462,7 +1464,7 @@ async def test_h_shows_when_the_events_happened_and_marks_a_capped_load(tmp_path
         await pilot.pause()
 
         assert row.has_class('shown')
-        assert 'peak 4 at 10:00:00' in str(row.render())
+        assert 'peak 4 from 10:00:00' in str(row.render())
         assert 'capped' not in str(row.render())
 
         screen._load_capped = True
@@ -1517,7 +1519,7 @@ async def test_the_field_panel_counts_what_the_window_holds(tmp_path: Path):
     """Half the log view was empty, and knowing the payload schema was a prerequisite."""
     app = _facet_app(tmp_path, ['{"level":"info"}'] * 3 + ['{"level":"error"}'])
 
-    async with app.run_test(size=(120, 30)) as pilot:
+    async with app.run_test(size=(140, 30)) as pilot:
         await _settle(app, pilot)
         panel = app.screen.query_one('#facets', FacetsPanel)
 
@@ -1532,7 +1534,7 @@ async def test_a_narrow_terminal_gives_the_panels_cells_to_the_message(tmp_path:
     """Below the threshold the message column is the thing that needs them."""
     app = _facet_app(tmp_path, ['{"level":"info"}'])
 
-    async with app.run_test(size=(80, 24)) as pilot:
+    async with app.run_test(size=(110, 24)) as pilot:
         await _settle(app, pilot)
 
         assert not app.screen.query_one('#facets', FacetsPanel).has_class('shown')
@@ -1543,7 +1545,7 @@ async def test_pressing_f_moves_between_the_table_and_the_field_panel(tmp_path: 
     """A binding is not covered until a test presses the key."""
     app = _facet_app(tmp_path, ['{"level":"info"}'])
 
-    async with app.run_test(size=(120, 30)) as pilot:
+    async with app.run_test(size=(140, 30)) as pilot:
         await _settle(app, pilot)
         panel = app.screen.query_one('#facets', FacetsPanel)
 
@@ -1560,7 +1562,7 @@ async def test_pressing_f_moves_between_the_table_and_the_field_panel(tmp_path: 
 async def test_choosing_a_field_value_filters_the_table(tmp_path: Path):
     app = _facet_app(tmp_path, ['{"level":"info"}'] * 3 + ['{"level":"error"}'])
 
-    async with app.run_test(size=(120, 30)) as pilot:
+    async with app.run_test(size=(140, 30)) as pilot:
         await _settle(app, pilot)
         screen = _logs_screen(app)
         assert screen.query_one('#log_table', DataTable).row_count == 4
@@ -1578,7 +1580,7 @@ async def test_choosing_a_field_value_filters_the_table(tmp_path: Path):
 async def test_hiding_the_panel_gives_its_width_back_to_the_message(tmp_path: Path):
     app = _facet_app(tmp_path, ['{"level":"info"}'])
 
-    async with app.run_test(size=(120, 30)) as pilot:
+    async with app.run_test(size=(140, 30)) as pilot:
         await _settle(app, pilot)
         screen = _logs_screen(app)
         narrow = next(column.width for column in screen._columns if column.key == 'message')

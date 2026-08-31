@@ -74,10 +74,11 @@ def peak_bucket(buckets: Sequence[HistogramBucket]) -> HistogramBucket | None:
 
 
 def histogram_headline(buckets: Sequence[HistogramBucket]) -> str:
-    """One line naming the peak and how uneven the distribution is.
+    """One line naming the busiest column and how uneven the distribution is.
 
     The ratio is the point: an even spread and a single spike carry the same total, and
-    only one of them is a lead.
+    only one of them is a lead. The time names where that column opens, not any one
+    event in it.
     """
     peak = peak_bucket(buckets)
     if peak is None:
@@ -86,4 +87,6 @@ def histogram_headline(buckets: Sequence[HistogramBucket]) -> str:
     average = total / len(buckets)
     quiet = sum(1 for bucket in buckets if not bucket.count)
     shape = f'{peak.count / average:.0f}x average' if average else 'flat'
-    return f'peak {peak.count} at {peak.start:%H:%M:%S}, {shape}, {quiet}/{len(buckets)} quiet'
+    # `at` named a bucket boundary as if it were an event time, which it is not: one
+    # column can span minutes.
+    return f'peak {peak.count} from {peak.start:%H:%M:%S}, {shape}, {quiet}/{len(buckets)} quiet'

@@ -12,7 +12,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
+from tail_cw.text import ELLIPSIS, shorten
+
 BREADCRUMB_SEPARATOR = ' › '  # ruff: ignore[ambiguous-unicode-character-string]
+HEADER_SEPARATOR = '  ·  '
+"""What separates the tool name, the navigation path, and the window in the header."""
 """Separator joining stack labels in the header breadcrumb."""
 
 
@@ -137,3 +141,28 @@ def sibling(state: NavState, targets: Sequence[NavTarget], *, offset: int) -> Na
 def breadcrumb(state: NavState) -> str:
     """Render the stack labels as the header breadcrumb."""
     return BREADCRUMB_SEPARATOR.join(target.label for target in state.stack)
+
+
+def fit_breadcrumb(app_name: str, path: Sequence[str], window: str, width: int) -> str:
+    """Fit the header breadcrumb into ``width``, dropping whole parts rather than clipping.
+
+    Dropped in order: the window, the tool name, then the outermost path entries,
+    which are replaced by an ellipsis. A clipped breadcrumb ended on a separator
+    with nothing after it, saying a part existed without saying which.
+
+    Args:
+        app_name: The tool's own name, the first thing worth losing after the window.
+        path: Navigation labels, outermost first; the last is the current view.
+        window: The shared time window.
+        width: Cells the breadcrumb has.
+    """
+    # Trails from the full path down to the current view alone, each shortened one
+    # entry from the outside and marked, so no trail is only an ellipsis.
+    trails = [list(path), *([ELLIPSIS, *path[index:]] for index in range(1, len(path)))]
+    for trail in trails:
+        joined = BREADCRUMB_SEPARATOR.join(trail)
+        for parts in ([app_name, joined, window], [app_name, joined], [joined]):
+            candidate = HEADER_SEPARATOR.join(part for part in parts if part)
+            if candidate and len(candidate) <= width:
+                return candidate
+    return shorten(path[-1] if path else app_name, max(1, width))

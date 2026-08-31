@@ -64,6 +64,14 @@ and [AGENTS.md](AGENTS.md) for where to start.
     out of an alarm, collect its spans across every selected group, and either open the
     trace view or write OTLP JSON for a viewer that draws waterfalls
     ([ADR 0012](docs/docs/adr/0012-export-traces-instead-of-drawing-them.md))
+- `tail-cw export stats <groups> --by <field>` counts the values of a payload field
+    across the cached events, in the DuckDB already in the process.
+    It costs no AWS call on a window already fetched, and answers "how many of each
+    outcome" without a `jq` pipeline.
+    Omit `--by` and it reports the most common fields it finds
+- `tail-cw export logs --parsed` emits the payload the cache already decoded instead of
+    the raw line, so nothing downstream re-parses per event, and `--limit` stops the
+    fetch rather than trimming its output
 - `tail-cw export summary` rolls many groups up into the recurring errors and warnings
     behind them, counted per hour or per day and written as markdown.
     It keys on the message body rather than the whole record, then fuzzy-merges shapes
@@ -197,6 +205,9 @@ For stdout instead of a terminal app, use `export`:
 
 ```sh
 uv run tail-cw export logs /aws/lambda/my-fn --start 2h  # NDJSON events
+uv run tail-cw export logs '/aws/lambda/*' --parsed      # the decoded payload, not the raw line
+uv run tail-cw export logs '/aws/lambda/*' --limit 50    # stops the fetch, not just the output
+uv run tail-cw export stats '/aws/*' --by level --by parsed.http.status   # counts, from the cache
 uv run tail-cw export tail /aws/lambda/my-fn             # NDJSON, flushed per line
 uv run tail-cw export groups '/aws/lambda/*'             # NDJSON group metadata
 uv run tail-cw export summary '/aws/*' --start 1h        # markdown rollup of errors and warnings
@@ -224,8 +235,13 @@ logs, `t` opens them streaming.
 
 In a log view: `/` searches, `Enter` opens the record detail, `L` toggles live, `r`
 refreshes, `t` and `T` open the trace views, `p` pivots every selected group onto the
-row's own correlation id, `x` opens the row's trace in X-Ray, and `h` shows when the
-events on screen happened, coloured by the worst severity in each column.
+row's own correlation id, `x` opens the row's trace in X-Ray, `h` shows when the events
+on screen happened, coloured by the worst severity in each column, and `f` moves to the
+field panel, where `Enter` on a value applies it as a filter.
+`:fields` closes the panel and gives its width back to the message column.
+
+In the record detail: the payload leads, syntax-highlighted, and `r` shows the raw line
+it was decoded from.
 
 In an X-Ray waterfall (`:xray <id>`): `s` hides the segments X-Ray synthesized rather
 than received, `r` refetches.
@@ -241,7 +257,19 @@ Commands include `:groups`, `:logs`, `:tail`, `:dash <name>`, `:dashboards`,
 `:xray <id>`, and `:help`.
 In a dashboard, `:add <title>` puts a second panel beside the staged one, `:dive` opens
 the logs behind the focused widget, and `:reset` clears the stage.
-Set `AWS_PROFILE`, `--profile`, or `--region` to pick an account.
+Set `AWS_PROFILE`, `--profile`, or `--region` to pick an account, or put the default in
+config:
+
+```toml
+[aws]
+profile = "read-prod"
+
+[presets.billing] # a preset that lives in another account
+groups = ["/aws/lambda/billing"]
+profile = "read-billing"
+```
+
+`--profile` wins, then the profile a named preset carries, then `[aws].profile`.
 
 ### Shell completion
 

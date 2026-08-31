@@ -14,13 +14,17 @@ case "$cmd" in
     geom=${1:?}; shift
     cols=${geom%x*}; rows=${geom#*x}
     tmux kill-session -t "$sess" 2>/dev/null || true
+    # No stderr redirect: Textual renders the display to stderr, so redirecting it
+    # captures the whole app into a file and leaves every frame blank.
     tmux new-session -d -s "$sess" -x "$cols" -y "$rows" \
-      "cd '$ROOT' && TERM=xterm-256color uv run tail-cw $* 2>tui-eval/frames/$sess.stderr; echo EXIT=\$?; sleep 600"
+      "cd '$ROOT' && TERM=xterm-256color uv run tail-cw $*; echo EXIT=\$?; sleep 600"
     ;;
   keys) tmux send-keys -t "$sess" "$@" ;;
   cap)
     label=${1:-frame}
     tmux capture-pane -p -t "$sess" > "$OUT/$sess-$label.txt"
+    # -pe keeps the escape sequences, which is the only way to check a contrast claim.
+    tmux capture-pane -pe -t "$sess" > "$OUT/$sess-$label.ansi"
     cat "$OUT/$sess-$label.txt"
     ;;
   stop) tmux kill-session -t "$sess" 2>/dev/null || true ;;

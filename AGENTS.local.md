@@ -184,6 +184,46 @@ If you introduce or modify Textual UI code:
         The breadcrumb is docked, so the histogram row landed beside it until `#breadcrumb`
         got `width: 100%`.
         A screenshot caught this; a Pilot test asserting on rendered text never would
+    - Two widgets docked to the same edge land on the same row and the later one paints
+        over the earlier.
+        `#dash_status` docked `bottom` under a `Footer` that also docks `bottom`, and never
+        rendered at any size.
+        A status line belongs in the flow above a `1fr` pane, not docked
+- A `VerticalScroll` with `width: auto` measures 0x0 and scrolls nothing.
+    Give it a percentage or a fixed width.
+    A modal that has to scroll also needs its close hint *outside* the scroll container, or
+    the hint is the first thing to go off screen
+- Anything with a fixed height needs a floor, and a widget that cannot have its floor
+    should say so rather than draw.
+    plotext in four rows returns axis furniture, no data, and an inverted y axis; the
+    dashboard grid now gives up whole rows (`grid_rows_that_fit`) so the stage keeps
+    `STAGE_MIN_HEIGHT`.
+    Give up *whole* rows: a grid height that does not divide into cells squeezes every row
+    instead of dropping the last, which renders as a column of clipped borders
+- A bar chart fills from the axis floor, so fitting the axis to data far from zero would
+    misstate every magnitude.
+    `fitted_ylim` decides, and a fitted series is drawn as a line instead.
+    Without it a RequestCount between 950 and 1350 filled eighteen of twenty-one rows with
+    solid block
+- A nested `Message` subclass inside a widget breaks under `RUNTIME_TYPE_CHECKING_MODE`:
+    the outer class's `__dict__` descriptor resolves to the inner class and every
+    `cached_property` on the widget raises.
+    Declare messages at module level (`FacetSelected`, `ProgressUpdate`)
+- `Screen.active_bindings` is read by the `Footer` and nothing else that matters, so
+    overriding it thins the hints without disabling a key.
+    Textual gives every hint an equal grid column and clips inside it, which is how
+    `/ Searc` reached the footer.
+    Anything that recomposes the footer lays the screen out again, so guard the refit on
+    the width or `on_resize` arrives back at itself
+- Never clip a header, a breadcrumb, or a label to a fixed width without marking the cut.
+    `Timestam` in the table's own header and `logs demo/web-api ·` in the breadcrumb both
+    read as rendering bugs.
+    `fit_breadcrumb` drops whole parts and `tail_cw/text.py:shorten` marks what it cuts;
+    a header narrower than its own label gets a shorter label
+- Dim is not a hierarchy on a row that already carries colour.
+    Dimming the `key=value` remainder of an error row put its status code and latency at
+    1.9:1 against 4.6:1 for an ordinary row, which made the one row worth reading the
+    least legible thing on screen
 - VHS is not ground truth for colour.
     Under `NO_COLOR` a VHS capture rendered the faulted waterfall row as a blank line,
     while the same view in tmux showed it with its glyph and its bar.
@@ -253,6 +293,20 @@ References:
     verbatim rather than re-encoded, because Polars decodes the file straight after.
     Anything spliced must hold no newline: a pretty-printed payload is valid JSON and would
     end the line early, so it takes the re-encoding path
+- A payload shape Parquet cannot hold is repaired rather than refused
+    (`_repair_payload_types`): an always-empty JSON object is dropped and a key logged as
+    two JSON types is widened to text, on a second pass over the staged NDJSON that only
+    runs when the first `sink_parquet` fails.
+    Both sets come back on the write stats and reach stderr or a TUI notice, because
+    retyping a payload key silently is the thing that would be worse than failing
+- `export logs --parsed` emits the decoded payload instead of the raw line, and `--limit`
+    fetches segments one at a time so the fetch itself stops.
+    A literal log group name never lists the account; only a glob or an `@preset` pays for
+    `DescribeLogGroups` (`_target_group_names`)
+- Field counting lives in `tail_cw/query/facets.py` and serves both `export stats --by`
+    and the log view's panel.
+    A field carrying one value per record (`is_identifier_like`) is dropped from the panel:
+    a trace id listed one value per record and crowded out the field that groups
 - A record-field filter (`level:info`) is skipped for a Parquet file whose `parsed`
     struct lacks that field, because both engines raise on an absent struct field and one
     such group failed the search for every other group.

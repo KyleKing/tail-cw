@@ -1,6 +1,7 @@
 # ruff: file-ignore[unused-async] - the AWS fakes are async generators or awaitable stand-ins
 """Unit tests for the CLI module (time parsing, arg parsing, export pipelines)."""
 
+import asyncio
 import contextlib
 import io
 import json
@@ -24,6 +25,7 @@ from tail_cw.cli import (
     FetchRequest,
     Session,
     ShellSeed,
+    StreamCount,
     TailRequest,
     expand_filter,
     expand_presets,
@@ -1962,3 +1964,23 @@ def test_resolve_profile_rejects_two_presets_that_disagree():
 
     with pytest.raises(ValueError, match='more than one profile'):
         resolve_profile(None, ['@a', '@b'], config)
+
+
+def test_export_reports_how_many_records_it_wrote(capsys):
+    """A consumer keeping half an NDJSON stream sees every line parse and the last line whole."""
+    assert run_cli(['export', 'logs', '--demo'], _RecordingShell(), is_tty=False) == 0
+    captured = capsys.readouterr()
+
+    written = len(captured.out.strip().splitlines())
+    assert f'Wrote {written:,} events' in captured.err
+
+
+def test_stream_ndjson_counts_into_a_holder_that_survives_the_interrupt():
+    """A live tail never completes, so a returned count never arrives."""
+    count = StreamCount()
+    stream = io.StringIO()
+
+    written = asyncio.run(stream_ndjson(_async_iter_factory(_make_events(3))(), stream, count))
+
+    assert written == 3
+    assert count.written == 3

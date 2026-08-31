@@ -15,6 +15,7 @@ import re
 import sys
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from functools import partial
@@ -616,14 +617,40 @@ def _stderr_notice(notice: str) -> None:
     sys.stderr.write(f'{notice}\n')
 
 
-async def stream_ndjson(events: AsyncIterator[LogEvent], stream: SupportsWriteFlushStr) -> int:
+def _report_written(count: int, noun: str) -> None:
+    """Say how many records went to stdout, so a truncated read is detectable.
+
+    A consumer that keeps half an NDJSON stream sees every line parse and the last
+    line whole, so nothing in the data contradicts a claim of completeness. The
+    count stays human prose on stderr because stdout is the machine surface: a
+    trailer record would break the one-record-type contract of ADR 0002 and 0008.
+    """
+    sys.stderr.write(f'Wrote {count:,} {noun}\n')
+
+
+@dataclass(slots=True)
+class StreamCount:
+    """Records written so far.
+
+    A live tail never completes, so the count has to survive the interrupt that
+    stops it rather than only being returned.
+    """
+
+    written: int = 0
+
+
+async def stream_ndjson(
+    events: AsyncIterator[LogEvent],
+    stream: SupportsWriteFlushStr,
+    count: StreamCount | None = None,
+) -> int:
     """Write log events as NDJSON, flushing after every line for live consumers."""
-    count = 0
+    counted = count if count is not None else StreamCount()
     async for event in events:
         stream.write(json.dumps(_event_to_record(event), separators=(',', ':')) + '\n')
         stream.flush()
-        count += 1
-    return count
+        counted.written += 1
+    return counted.written
 
 
 RunShell = Callable[[TailCWConfig, Session, ShellSeed], None]
@@ -948,7 +975,8 @@ async def _export_logs(
     if isinstance(read, int):
         return read
     rows = query_parquet_files_to_records(read.paths, read.filter_node, limit=args.limit)
-    await run_blocking(executor, lambda: write_records_ndjson(rows, sys.stdout, parsed=args.parsed))
+    written = await run_blocking(executor, lambda: write_records_ndjson(rows, sys.stdout, parsed=args.parsed))
+    _report_written(written, 'events')
     return 0
 
 
@@ -986,6 +1014,7 @@ async def _export_stats(
         return 0
     for facet in facets:
         _write_json_line(_facet_to_record(facet))
+    _report_written(len(facets), 'fields')
     return 0
 
 
@@ -1032,11 +1061,11 @@ async def _export_tail(
         fetch_events=fetch_events,
         stream_events=stream_events,
     )
+    count = StreamCount()
     async with closing_stream(events) as stream:
-        try:
-            await stream_ndjson(stream, sys.stdout)
-        except (KeyboardInterrupt, asyncio.CancelledError):
-            return 0
+        with suppress(KeyboardInterrupt, asyncio.CancelledError):
+            await stream_ndjson(stream, sys.stdout, count)
+    _report_written(count.written, 'events')
     return 0
 
 
@@ -1049,6 +1078,7 @@ async def _export_groups(pool: ClientProvider, args: argparse.Namespace) -> int:
         groups = resolve_group_pattern(args.pattern, groups)
     for group in groups:
         _write_json_line(_log_group_to_record(group))
+    _report_written(len(groups), 'log groups')
     return 0
 
 
@@ -1278,6 +1308,7 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
     else:
         for row in result.rows:
             _write_json_line(dict(row))
+        _report_written(len(result.rows), 'rows')
     return 0
 
 
@@ -1608,6 +1639,7 @@ async def _export_alarms(pool: ClientProvider, args: argparse.Namespace, now: da
     if not alarms:
         sys.stderr.write('No alarms matched\n')
         return 0
+    _report_written(len(alarms), 'alarms')
     _remember(
         HistoryKind.ALARMS,
         title=f'{len(alarms)} alarms' + (f', {sum(counts.values())} transitions' if counts else ''),
@@ -1660,6 +1692,7 @@ async def _export_metrics(pool: ClientProvider, args: argparse.Namespace, now: d
         sys.stderr.write('No datapoints in the requested range\n')
     for item in series:
         _write_json_line(_metric_series_to_record(item))
+    _report_written(len(series), 'metric series')
     return 0
 
 
@@ -1687,6 +1720,7 @@ async def _export_dimensions(pool: ClientProvider, args: argparse.Namespace) -> 
     if not count:
         sys.stderr.write(f'No metrics published in {args.namespace}\n')
         return 1
+    _report_written(count, 'dimension sets')
     return 0
 
 
@@ -1704,8 +1738,10 @@ def _metric_series_to_record(series: MetricSeries) -> dict[str, object]:
 async def _export_dashboards(pool: ClientProvider, args: argparse.Namespace) -> int:
     if _load_config_or_report(args) is None:
         return 1
-    for summary in await list_dashboards(await pool.client('cloudwatch')):
+    dashboards = await list_dashboards(await pool.client('cloudwatch'))
+    for summary in dashboards:
         _write_json_line(_dashboard_summary_to_record(summary))
+    _report_written(len(dashboards), 'dashboards')
     return 0
 
 

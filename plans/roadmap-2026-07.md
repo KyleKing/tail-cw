@@ -2,24 +2,25 @@
 
 Written 2026-07-05 from a code capability review and a survey of the CloudWatch tooling
 landscape.
-Pruned three times since, most recently on 2026-08-22, each time by moving what shipped
+Pruned four times since, most recently on 2026-08-31, each time by moving what shipped
 into the ADR that records the decision and deleting the planning detail.
 The numbers behind a shipped decision live in its ADR; this file holds what is next.
 
 ## Delivered
 
-| Milestone                      | Outcome                                                                                                                                                  | Record                                                                                                                                        |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0 wire the drivetrain         | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                                                     | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
-| M1 live tail                   | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached                              | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
-| M2 navigation-first discovery  | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets                                       | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
-| M3 investigation tools         | X-Ray reader, the `:xray` waterfall, the `p` and `x` correlation pivots, the `h` histogram                                                               | [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md), [0013](../docs/docs/adr/0013-read-x-ray-directly-for-spans.md)        |
-| M4 dashboards and metrics      | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs                           | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
-| M5 async AWS I/O               | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests                            | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
-| M6 aggregation surface         | `export summary` with fuzzy-merged rollups, `export insights` in CWLI, SQL, and PPL, `export alarms --history`, `export metrics`, CPU budget             | [the evaluation](evaluation-2026-08-21-vs-aws-cli.md)                                                                                         |
-| M7 cache v2 and one front door | segmented cache windows, a schema at 25 bytes per event, rollup/alarms/Insights in the TUI behind a cost gate, one shared history, `cache status`        | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
-| M8 the queue's last five       | Insights scan estimate and a confirmation ceiling, `export trace` as OTLP, a 0.07s CLI start, a log table budgeted by width, `export dimensions`         | [0008](../docs/docs/adr/0008-single-interactive-tui.md), [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)               |
-| M9 the filter surface          | `AND`, `OR`, `NOT`, and parentheses, named filters, a parse error that names its fix, and a translator that refuses what CloudWatch would answer wrongly | [the filter guide](../docs/docs/FILTER_GUIDE.md)                                                                                              |
+| Milestone                      | Outcome                                                                                                                                                                                                | Record                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 wire the drivetrain         | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                                                                                                   | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
+| M1 live tail                   | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached                                                                            | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
+| M2 navigation-first discovery  | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets                                                                                     | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
+| M3 investigation tools         | X-Ray reader, the `:xray` waterfall, the `p` and `x` correlation pivots, the `h` histogram                                                                                                             | [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md), [0013](../docs/docs/adr/0013-read-x-ray-directly-for-spans.md)        |
+| M4 dashboards and metrics      | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs                                                                         | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
+| M5 async AWS I/O               | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests                                                                          | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
+| M6 aggregation surface         | `export summary` with fuzzy-merged rollups, `export insights` in CWLI, SQL, and PPL, `export alarms --history`, `export metrics`, CPU budget                                                           | [the evaluation](evaluation-2026-08-21-vs-aws-cli.md)                                                                                         |
+| M7 cache v2 and one front door | segmented cache windows, a schema at 25 bytes per event, rollup/alarms/Insights in the TUI behind a cost gate, one shared history, `cache status`                                                      | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
+| M8 the queue's last five       | Insights scan estimate and a confirmation ceiling, `export trace` as OTLP, a 0.07s CLI start, a log table budgeted by width, `export dimensions`                                                       | [0008](../docs/docs/adr/0008-single-interactive-tui.md), [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)               |
+| M9 the filter surface          | `AND`, `OR`, `NOT`, and parentheses, named filters, a parse error that names its fix, and a translator that refuses what CloudWatch would answer wrongly                                               | [the filter guide](../docs/docs/FILTER_GUIDE.md)                                                                                              |
+| M10 what a week of use showed  | `export logs --parsed` and `--limit`, `export stats --by`, globs and `--demo` across export, `[aws].profile` and per-preset profiles, the field panel, repaired payload dtypes, and the terminal fixes | [the review](review-2026-08-31.md)                                                                                                            |
 
 Two deviations from the original plans are worth carrying forward, because they change
 what a reader should expect to find.
@@ -34,66 +35,11 @@ gives you.
 
 Nothing is scheduled. Ordered by value against effort.
 
-**Payload dtypes Parquet cannot store abort the whole fetch.** `scan_ndjson` infers a
-schema over arbitrary structlog payloads, and two shapes IRM logs in production make the
-write fail outright rather than degrading.
-An empty JSON object (`{"meta": {}}`) infers a
-zero-field struct Parquet cannot represent, and one key logged as two scalar types
-(`"n": 1` then `"n": true`) fails to parse into the inferred type.
-Both reproduce from a
-single line through `write_log_events_to_parquet`, and both killed
-`export logs irm-prod-ecs-hatchet-workers --start 12h --filter '"lacks searchable text"'`
-against `read-prod` while the same command at `--start 1h` succeeded, so it presents as
-an intermittent window-size bug.
-The failure now names the offending key
-(`Empty JSON object at parsed.a.b`) instead of only the dtype, which is diagnosis, not a
-fix.
-Fetching the same window with `aws logs filter-log-events --filter-pattern` worked
-and returned 57 matching events over 72h.
-Seen again on 2026-08-31, same log group, key `parsed.outcomes`, on both
-`export summary` and `export logs --filter` over a 12h window, so it blocks every read
-path into that group rather than one command.
-
-The fix is a real choice and wants deciding before coding.
-Sanitizing at the NDJSON
-writer is the natural place because the data is still Python there, but the payload text
-is spliced in verbatim on purpose (0.39s to 0.22s over 72,767 events) and re-encoding
-every record gives that back.
-Repairing the inferred schema before `sink_parquet` keeps
-the hot path, and stringifying a nested payload key breaks the struct-field references
-`query/engine.py` builds from `collect_schema()`.
-Dropping an empty object loses nothing;
-reconciling a conflicting key means picking a winning type or widening it to text, and
-the tool's stated position is that silently dropping a payload key is worse than
-failing.
-
-**A truncated NDJSON stream is indistinguishable from a complete one.** On 2026-08-31
-`export alarms --profile read-prod` wrote 124 records over 105,342 bytes, and an agent
-harness consuming it persisted 50 records over 42,486 bytes, cut on a line boundary, and
-labelled the file "Full output saved to".
-Nothing in the stream contradicted that label: every line parsed, the last line was
-whole, and no record carries a total, so the loss read as tail-cw capping at 50 and the
-session spent a turn proposing a pagination key the tool does not need.
-`describe_alarms` (`tail_cw/aws/alarms.py:116`) already walks every page, so what failed
-is detectability, not resumability.
-
-The cheapest repair is a record count on stderr at the end of every export, which leaves
-the NDJSON contract of ADR 0002 and 0008 untouched and runs to about one line per
-command.
-`_export_alarms` already writes to stderr when nothing matches (`cli.py:1287`), so this
-is the same courtesy for the case that succeeds.
-It is the least effort of anything on this list and could reasonably be promoted above
-the Parquet item.
-
-Open: whether it covers `export metrics`, which emits one self-describing object per
-series and gains little from a count; what `export tail` reports, given it never
-completes and would have to count on interrupt; and whether the line stays human prose,
-which it should, because stdout is the machine surface.
-
 **A trailer record would survive `2>/dev/null`, at the cost of a documented contract.**
-The stderr count above dies to any redirect, and the 2026-08-31 session suppressed
-stderr
-on most of its own calls, which makes the signal that matters least likely to arrive.
+Every export now writes `Wrote N events` to stderr, which is the cheap half of this and
+enough to tell a truncated read from a complete one.
+It dies to any redirect, and the 2026-08-31 session suppressed stderr on most of its own
+calls, which makes the signal that matters least likely to arrive.
 A final `{"record":"summary","count":124}` travels with the data instead, and turns
 completeness into one `jq -e`.
 
@@ -112,14 +58,6 @@ one
 today; and whether `export tail` gets a trailer at all.
 Settle the contract question before writing code, because the flag version and the
 default version are different products.
-
-**Per-width binding priority in the footer.** The mid-word garble is gone (the four
-vim-conventional motions moved behind `?`, and the footer sheds its padding and the
-palette hint below 100 columns), but a 60-column log view still truncates after
-`t Trace View`.
-Fixing the rest means ranking bindings and showing as many as fit, which is machinery
-Textual does not provide.
-`?` lists everything either way, so this is polish.
 
 **Benchmark targets gated in CI.** ADR 0003's claim that the local engine is better at
 re-filtering was unmeasured until 2026-08-21 and is now measured once.

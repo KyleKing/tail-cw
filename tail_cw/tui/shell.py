@@ -10,7 +10,7 @@ fakes, so the app itself stays importable without boto3 credentials.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -18,7 +18,7 @@ from typing import ClassVar
 
 from textual import events, on
 from textual.app import App, ComposeResult, InvalidThemeError
-from textual.binding import Binding
+from textual.binding import ActiveBinding, Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Input, Label
 
@@ -43,8 +43,8 @@ from tail_cw.tui.navigation import (
     NavState,
     NavTarget,
     ViewKind,
-    breadcrumb,
     current,
+    fit_breadcrumb,
     initial,
     jump_back,
     jump_forward,
@@ -76,10 +76,46 @@ ScreenFactory = Callable[[NavTarget], 'ShellScreen']
 COMPACT_FOOTER_BELOW = 100
 """Terminal width under which the footer drops its padding and the palette hint.
 
-Textual's ``Footer`` does not prioritise, so past its room it truncates the last hint
-mid-word (``[ Prev  ] Ne^p palette`` at 57 columns). Shedding the padding and the
-command-palette hint buys back the room; ``?`` still lists every key either way.
+Below it every remaining cell belongs to a hint, which is what makes the thinning
+in :func:`hints_that_fit` enough.
 """
+
+_HINT_PADDING = 2
+"""Cells around one footer hint, from the Footer's own grid gutter and padding."""
+
+_PALETTE_RESERVE = 12
+"""Cells the command-palette hint takes, which is shown only on a wide terminal."""
+
+
+def hints_that_fit(
+    bindings: Mapping[str, ActiveBinding],
+    width: int,
+    *,
+    reserve: int = 0,
+) -> dict[str, ActiveBinding]:
+    """Keep the leading footer hints that fit, dropping whole ones from the end.
+
+    A hidden binding costs nothing and is kept, so a lookup by key still finds it.
+
+    Args:
+        bindings: Every binding active on the screen, in the order the footer draws.
+        width: Cells the footer has.
+        reserve: Cells already promised, such as the command-palette hint.
+    """
+    kept: dict[str, ActiveBinding] = {}
+    spent = reserve
+    for key, active in bindings.items():
+        if not active.binding.show:
+            kept[key] = active
+            continue
+        display = active.binding.key_display or active.binding.key
+        cost = len(display) + 1 + len(active.binding.description) + _HINT_PADDING
+        if spent + cost > width:
+            continue
+        spent += cost
+        kept[key] = active
+    return kept
+
 
 MAX_SELECTED_GROUPS = 10
 MAX_LABEL_CHARS = 32
@@ -193,6 +229,9 @@ class ShellScreen(Screen[None]):
         Binding('comma', 'which_key', 'Keys', show=False),
     ]
 
+    _fitted_width = 0
+    """Width the footer and breadcrumb were last fitted to. Compared, never shared."""
+
     def compose(self) -> ComposeResult:
         """Wrap the subclass content in the shared chrome.
 
@@ -216,12 +255,35 @@ class ShellScreen(Screen[None]):
         keeps whatever footer the last width gave it.
         """
         self._fit_footer()
+        self.update_breadcrumb()
+
+    @property
+    def active_bindings(self) -> dict[str, ActiveBinding]:
+        """The bindings the footer draws, thinned to the ones that fit its width.
+
+        Textual gives every hint an equal grid column and clips inside it, so the
+        last hint came out as a truncated word naming no key. Only the footer and
+        the ctrl+C helper read this; key dispatch does not, so a thinned hint list
+        never disables a binding.
+        """
+        bindings = super().active_bindings
+        if self.size.width <= 0:
+            return bindings
+        reserve = _PALETTE_RESERVE if self.size.width >= COMPACT_FOOTER_BELOW else 0
+        return hints_that_fit(bindings, self.size.width, reserve=reserve)
 
     def _fit_footer(self) -> None:
+        if self._fitted_width == self.size.width:
+            return
+        self._fitted_width = self.size.width
         narrow = self.size.width < COMPACT_FOOTER_BELOW
         for footer in self.query(Footer):
             footer.compact = narrow
             footer.show_command_palette = not narrow
+        # The footer recomposes when the bindings change, and a resize changes how many
+        # of them fit. Guarded on the width, because recomposing the footer lays the
+        # screen out again and would arrive back here.
+        self.call_after_refresh(self.refresh_bindings)
 
     def compose_content(self) -> ComposeResult:  # ruff: ignore[no-self-use]
         """Yield the widgets unique to this view."""
@@ -258,8 +320,10 @@ class ShellScreen(Screen[None]):
         self._fit_footer()
 
     def update_breadcrumb(self) -> None:
-        """Redraw the breadcrumb from the app's navigation state."""
-        self.query_one('#breadcrumb', Label).update(self.shell.breadcrumb_text())
+        """Redraw the breadcrumb from the app's navigation state, fitted to the terminal."""
+        crumb = self.query_one('#breadcrumb', Label)
+        # One cell of padding either side, and the label starts at column 1.
+        crumb.update(self.shell.breadcrumb_text(max(1, self.size.width - 2)))
 
     def action_command(self) -> None:
         """Open the command line."""
@@ -389,9 +453,14 @@ class TailCWApp(App[None]):
         """Construct the view for a navigation target."""
         return self._build_screen(target)
 
-    def breadcrumb_text(self) -> str:
-        """The current navigation path, followed by the shared window."""
-        return f'tail-cw  ·  {breadcrumb(self._nav)}  ·  {self.session.window_label()}'
+    def breadcrumb_text(self, width: int) -> str:
+        """The current navigation path and the shared window, fitted to ``width``."""
+        return fit_breadcrumb(
+            'tail-cw',
+            [target.label for target in self._nav.stack],
+            self.session.window_label(),
+            width,
+        )
 
     @property
     def nav(self) -> NavState:

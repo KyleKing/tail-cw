@@ -30,6 +30,7 @@ from textual.worker import get_current_worker
 
 from tail_cw.aws.events import LogEvent
 from tail_cw.aws.xray import as_xray_trace_id
+from tail_cw.cache.storage import parquet_row_count
 from tail_cw.charts.sparkline import sparkline_blocks
 from tail_cw.cli import server_side_pattern
 from tail_cw.concurrency import closing_stream
@@ -501,10 +502,21 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._all_events = events.copy()
         self._load_log_events(events)
         self._load_capped = len(events) >= initial_limit
-        hint = ' · capped, narrow the window or add a filter' if self._load_capped else ''
-        self._update_status(f'Loaded {len(events):,} events{hint}')
+        self._update_status(self._loaded_line(len(events)))
         self._refresh_facets()
         self._open_pending_trace()
+
+    def _loaded_line(self, shown: int) -> str:
+        """Say how many events are on screen, and of how many when that is not all.
+
+        The denominator is the cached window rather than the log group, so it costs
+        a Parquet footer read and no CloudWatch call. Without it the cap read as
+        "1,000 events" with no way to tell a full window from a slice.
+        """
+        if not self._load_capped:
+            return f'Loaded {shown:,} events'
+        cached = sum(parquet_row_count(path) for path in self._parquet_paths)
+        return f'Loaded {shown:,} of {cached:,} cached events · narrow the window or add a filter'
 
     def load_events(self, events: list[LogEvent], parquet_paths: Sequence[Path] | None = None) -> None:
         """Replace the displayed events, optionally pointing search at new files."""

@@ -146,6 +146,7 @@ class GroupsScreen(ShellScreen):
         self._selected: list[str] = []
         self._recent: tuple[str, ...] = ()
         self._previews: dict[str, GroupPreview] = {}
+        self._sampling: str | None = None
         self._preview_debounce: Debounce | None = None
 
     def compose_content(self) -> ComposeResult:  # ruff: ignore[no-self-use]
@@ -205,6 +206,7 @@ class GroupsScreen(ShellScreen):
     def refresh_view(self) -> None:
         """Re-sample previews, since the preview window follows the session."""
         self._previews.clear()
+        self._sampling = None
         self._update_status()
         self._request_preview()
 
@@ -413,6 +415,11 @@ class GroupsScreen(ShellScreen):
             self._preview_debounce.schedule(lambda: self._start_preview(name))
 
     def _start_preview(self, name: str) -> None:
+        if self._sampling == name:
+            # A relayout re-highlights the same row, and the worker is exclusive: a second
+            # start cancels the first mid-flight and samples the group twice.
+            return
+        self._sampling = name
         self.run_worker(
             self._fetch_preview(name),
             name='preview_group',
@@ -429,6 +436,8 @@ class GroupsScreen(ShellScreen):
         except Exception as err:
             self.notify(f'Preview of {name} failed: {err}', severity='warning')
             return
+        finally:
+            self._sampling = None
         self._apply_preview(preview)
 
     def _apply_preview(self, preview: GroupPreview) -> None:

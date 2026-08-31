@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import tempfile
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -220,9 +221,16 @@ def demo_log_events(start: datetime, end: datetime) -> list[LogEvent]:
 
 
 def demo_resolve_logs(_log_group: str, start: datetime, end: datetime) -> Path | None:
-    """Write seed log events to a Parquet file and return its path."""
-    output = Path(tempfile.gettempdir()) / 'tail-cw-demo-logs.parquet'
-    write_log_events_to_parquet(demo_log_events(start, end), output)
+    """Write seed log events to a Parquet file and return its path.
+
+    The name carries the process id, and the file is written aside and moved into
+    place: two processes sharing one path wrote over each other mid-write, and the
+    reader then got a Parquet file with no footer.
+    """
+    output = Path(tempfile.gettempdir()) / f'tail-cw-demo-logs-{os.getpid()}.parquet'
+    staged = output.with_suffix('.staging')
+    write_log_events_to_parquet(demo_log_events(start, end), staged)
+    staged.replace(output)
     return output
 
 
