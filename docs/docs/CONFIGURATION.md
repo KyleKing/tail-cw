@@ -29,6 +29,7 @@ Retrieve this location programmatically via `tail_cw.config.get_default_cache_di
 
 ## Configuration Sections
 
+- `[aws]` sets the profile and region used when `--profile` and `--region` are absent.
 - `[cache]` controls cache storage limits and eviction behaviour.
 - `[fetch]` sets how many segments of a window are fetched at once.
 - `[insights]` sets the estimated scan size a Logs Insights query may reach before it
@@ -50,6 +51,10 @@ Retrieve this location programmatically via `tail_cw.config.get_default_cache_di
 ## Example Configuration
 
 ```toml
+[aws]
+profile = "read-prod"
+region = "us-east-1"
+
 [cache]
 # cache_dir = "/custom/cache/path"
 size_limit_mb = 1024
@@ -57,7 +62,7 @@ default_ttl_seconds = 3600                # 1 hour
 eviction_policy = "least-recently-stored"
 
 [fetch]
-max_concurrent_segments = 4 # segments in flight at once, across every log group
+max_concurrent_segments = 8 # segments in flight at once, across every log group
 
 [insights]
 confirm_above_gb = 1.0 # estimated GB before a query needs --yes or a keypress
@@ -71,6 +76,10 @@ errors = "level:error OR level:critical" # then --filter @errors, or :filter @er
 
 [presets]
 api = ["/aws/lambda/api-a", "/ecs/api-b"]
+
+[presets.billing] # a preset that reads another account
+groups = ["/aws/lambda/billing"]
+profile = "read-billing"
 
 [preview]
 sample_limit = 500   # events read per group preview
@@ -126,13 +135,10 @@ the directory.
 
 ## Performance Tuning
 
-- **Row group size**: larger values improve Parquet scan throughput at the cost of
-    additional memory during writes.
-    Reduce the value when writing on memory constrained machines.
-- **Compression level**: higher ZSTD levels produce smaller files but increase CPU usage.
-    Level 3 is a balanced default; try values between 1 and 6 when iterating.
-- **Schema inference length**: increase when NDJSON payloads contain highly variable
-    structures so late fields are discovered during conversion.
+Parquet writing is not tunable. ZSTD compression and full-file schema inference are
+fixed in `tail_cw.cache.storage`, the second deliberately: a payload key discovered late
+in a file would otherwise be missing from the schema, and nothing can filter on it.
+
 - **TUI chunk threshold / size**: lower thresholds trigger incremental loading sooner,
     which can help when working with deep scrollback buffers.
 - **Live buffer limit**: bounds memory during `tail-cw tail` sessions; older events are
@@ -163,9 +169,12 @@ the directory.
 
 ## Advanced Topics
 
-- **Environment overrides**: future releases may allow environment variables to override
-    individual settings for temporary tuning.
-- **Profiles**: support for multiple configuration profiles (e.g. per project) is under
-    consideration.
-    Until then, script switching by copying template files into place before launching
-    tail-cw.
+- **Environment overrides**: `AWS_PROFILE` and `AWS_REGION` pick the account through
+    botocore's own chain, and `TAIL_CW_CPU_FRACTION` and `TAIL_CW_MAX_THREADS` override the
+    share of the machine DuckDB and Polars may take.
+    No setting in this file has an environment equivalent.
+- **Per-account settings**: `[aws].profile` is the default, a preset naming its own
+    `profile` outranks it for the groups it names, and `--profile` on the command line
+    outranks both.
+    One config file therefore covers several accounts, so there is nothing to copy into
+    place.

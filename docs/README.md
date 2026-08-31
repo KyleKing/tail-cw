@@ -1,40 +1,54 @@
 # tail-cw
 
-Tail and Filter AWS CloudWatch Logs
+Read and explore AWS CloudWatch from the terminal: tail logs live, open a dashboard you
+already built in the console, reshape a metric chart with the keyboard, and drop from
+any
+chart into the logs behind it.
 
-## Installation
+It wraps `StartLiveTail` for real streaming, caches every fetch as local Parquet so
+re-filtering costs nothing, and renders console dashboards as Unicode charts that
+survive
+SSH.
+Every feature lands as a CLI command with NDJSON output under `tail-cw export`, and the
+Textual UI is a view over the same functions, so agents and humans drive one code path.
 
-1. `uv add tail_cw`
+## Install
 
-1. ...
+```sh
+git clone https://github.com/kyleking/tail-cw && cd tail-cw
+uv sync
+```
 
-    ```sh
-    import tail_cw
+## Start here
 
-    # TODO: [Replace with your example code]
-    ```
+```sh
+uv run tail-cw                                   # the log group browser, the home screen
+uv run tail-cw dash --demo                       # synthetic dashboard, no AWS account
+uv run tail-cw logs '/aws/lambda/api*' --start 2h
+uv run tail-cw export logs '/aws/lambda/*' --parsed --start 1h   # NDJSON, payload decoded
+```
 
-1. ...
+`--demo` reaches `logs`, `tail`, and `dash` as well, so the whole app is drivable
+without
+credentials.
+The [project README][readme] carries the full command list, the key bindings, and the
+screenshots.
 
-## Usage
+## Documentation
 
-<!-- TODO: [Add screenshots or terminal recording demonstrating usage] -->
-
-For more example code, see the [scripts] directory or the [tests].
-
-## Project Status
-
-See the `Open Issues` and/or the [CODE_TAG_SUMMARY].
-For release history, see the [CHANGELOG].
+- [CONFIGURATION](docs/CONFIGURATION.md) for the TOML sections, presets, and per-account
+    profiles
+- [FILTER_GUIDE](docs/FILTER_GUIDE.md) for the filter syntax shared by live, historical,
+    and cached data
+- [Architecture decisions](docs/adr/README.md) for why the tool is shaped this way
+- [DEVELOPER_GUIDE](docs/DEVELOPER_GUIDE.md) and [STYLE_GUIDE](docs/STYLE_GUIDE.md) for
+    working on it
+- [CHANGELOG](docs/CHANGELOG.md) for release history
 
 ## Contributing
 
 We welcome pull requests! For your pull request to be accepted smoothly, we suggest that
 you first open a GitHub issue to discuss your idea.
-For resources on getting started with the code base, see the below documentation:
-
-- [DEVELOPER_GUIDE]
-- [STYLE_GUIDE]
 
 ## Code of Conduct
 
@@ -55,11 +69,6 @@ You can reach us at [dev.act.kyle@gmail.com](mailto:dev.act.kyle@gmail.com).
 
 [LICENSE]
 
-[changelog]: https://tail-cw.kyleking.me/docs/CHANGELOG
-[code_tag_summary]: https://tail-cw.kyleking.me/docs/CODE_TAG_SUMMARY
 [contributor-covenant]: https://www.contributor-covenant.org
-[developer_guide]: https://tail-cw.kyleking.me/docs/DEVELOPER_GUIDE
 [license]: https://github.com/kyleking/tail-cw/blob/main/LICENSE
-[scripts]: https://github.com/kyleking/tail-cw/blob/main/scripts
-[style_guide]: https://tail-cw.kyleking.me/docs/STYLE_GUIDE
-[tests]: https://github.com/kyleking/tail-cw/blob/main/tests
+[readme]: https://github.com/kyleking/tail-cw/blob/main/README.md
