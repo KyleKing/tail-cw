@@ -59,11 +59,13 @@ SEVERITY_GLYPHS = {Severity.ERROR: '✖', Severity.WARNING: '⚠', Severity.INFO
 _EXPLICIT_STYLES = {Severity.ERROR: 'bold red', Severity.WARNING: 'bold yellow', Severity.INFO: ''}
 _INFERRED_STYLES = {Severity.ERROR: 'dim red', Severity.WARNING: 'dim yellow', Severity.INFO: ''}
 _PAIR_STYLE = 'dim'
-_PAIR_STYLES = {Severity.ERROR: 'red', Severity.WARNING: 'yellow', Severity.INFO: _PAIR_STYLE}
+_PAIR_STYLES = {Severity.ERROR: '', Severity.WARNING: '', Severity.INFO: _PAIR_STYLE}
 """Style for the ``key=value`` remainder, which is where a status code and a latency live.
 
-Dimming it on an error row made the one row worth reading the least legible thing on
-screen, at 1.9:1 against 4.6:1 for an ordinary row.
+Dim on an ordinary row, plain text on one that matters. Dimming an error row's detail put
+it at 1.9:1, and colouring it the theme's red only reaches 2.7:1, against 7.7:1 for plain
+text: the glyph and the coloured phrase already say the row is an error, so the detail is
+free to be the most readable thing it can be.
 """
 
 
@@ -182,7 +184,11 @@ def _structured_text(data: Mapping[str, Any], config: MessageConfig, *, style: s
             phrase = value
             del remainder[candidate]
             break
-    text = Text(phrase, style=style)
+    # The severity style goes on the phrase as a span, not on the Text: a base style
+    # applies to every append too, so the remainder inherited the error colour and no
+    # per-pair style could give it back.
+    text = Text()
+    text.append(phrase, style=style)
     for key, value in remainder.items():
         if value is None:
             continue

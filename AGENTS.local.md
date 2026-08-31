@@ -223,7 +223,13 @@ If you introduce or modify Textual UI code:
 - Dim is not a hierarchy on a row that already carries colour.
     Dimming the `key=value` remainder of an error row put its status code and latency at
     1.9:1 against 4.6:1 for an ordinary row, which made the one row worth reading the
-    least legible thing on screen
+    least legible thing on screen.
+    Colouring it the theme's red reaches only 2.7:1, so the remainder gets plain text
+    (7.7:1) and the glyph and the coloured phrase carry the signal
+- A base style on a `Text` applies to every `append` too, so a per-span style of `''`
+    inherits it rather than clearing it.
+    Style the phrase as a span (`Text(); text.append(phrase, style=...)`) when the rest of
+    the line must not take its colour
 - VHS is not ground truth for colour.
     Under `NO_COLOR` a VHS capture rendered the faulted waterfall row as a blank line,
     while the same view in tmux showed it with its glyph and its bar.
