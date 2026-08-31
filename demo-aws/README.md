@@ -153,6 +153,47 @@ Because `end_date` is derived from that timestamp, re-applying an expired stack 
 `-replace` leaves the schedule finished.
 That is the intended default: an idle stack generates nothing.
 
+## Unverified against a real account
+
+The stack passes `tofu fmt -check`, `tofu validate`, and the Python suite, and it has
+never been applied.
+Everything here needs one real `tofu apply` to settle, and anything that breaks while
+driving tail-cw against it is a tail-cw bug rather than a demo bug.
+
+- [ ] CloudWatch accepts the dashboard body.
+    The widget schema is written from the documented shape and never round-tripped through
+    `PutDashboard`; the riskiest parts are the invisible metric rows feeding the
+    availability
+    expression and the `alarm` widget's ARN list
+- [ ] Percentile stats resolve on `RequestLatencyMs`, which is charted at p50/p90/p99 and
+    alarmed at p99.
+    A custom metric needs enough samples per period before percentiles
+    return anything
+- [ ] The gateway keeps pace. It drives 90 requests against a 55s timeout, and during the
+    incident one `POST /v1/orders` can spend up to `MAX_SLEEP_SECONDS` in `payments`, so
+    traffic can thin exactly when the demo is most interesting
+- [ ] `tofu destroy` leaves nothing. Log groups are the usual survivor, and these are
+    declared explicitly rather than created by Lambda, so verify in the console
+- [ ] `tail-cw dash tail-cw-demo` renders every widget type: metric, log, text, and alarm
+- [ ] `t` in a log view groups by `trace_id` across all five groups, and a trace shows
+    the
+    gateway leg plus its downstream legs
+- [ ] `d` from a Lambda chart dives into `/aws/lambda/tail-cw-demo-*`, which exercises
+    the
+    `FunctionName` dimension mapping
+- [ ] The group browser preview clusters distinct message shapes per service.
+    One shape per group means the message catalogs in `scenario.py` need widening
+- [ ] `tail-cw tail @demo` streams all five groups under the ten-group Live Tail cap
+
+Two choices are still open.
+Setting a small reserved concurrency per function would give the saturation widget a
+real
+per-function metric and cap runaway cost, at the price of throttling during the
+incident,
+which the scenario does not model.
+And an AWS Budgets alert would sit behind the schedule's `end_date` as a second
+guardrail.
+
 ## Known limits
 
 X-Ray scopes a trace root to one Lambda invocation, and the gateway serves a whole

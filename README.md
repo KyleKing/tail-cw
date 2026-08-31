@@ -138,6 +138,13 @@ Regenerate them
 with `mise run views`. Everything above works without credentials: `tail-cw logs --demo`
 opens the log view on synthetic events, and `--demo` works on `tail` and `dash` too.
 
+For a demo against real CloudWatch, `demo-aws/` is a throwaway OpenTofu stack that
+generates structured logs across five services, a trace id that ties one request
+together
+across all of them, EMF metrics, a dashboard, and alarms that fire.
+It stops generating traffic on its own after fifteen minutes and costs a few cents.
+See [demo-aws/README.md](demo-aws/README.md).
+
 ## Why this exists
 
 Dedicated CloudWatch tailers solved log streaming years ago and then stopped.
