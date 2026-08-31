@@ -26,6 +26,8 @@ INSIGHTS_DEFAULT_LIMIT = 1000
 XRAY_DEFAULT_LIMIT = 1000
 """A three-hour production window held 442,828 traces, so an uncapped sweep is not a default."""
 DEFAULT_HISTORY_WINDOW = '7d'
+DEFAULT_STATS_FIELD_LIMIT = 10
+DEFAULT_STATS_VALUE_LIMIT = 10
 
 
 def _add_aws_flags(parser: argparse.ArgumentParser) -> None:
@@ -48,6 +50,9 @@ def _add_export_parsers(export: argparse.ArgumentParser) -> None:
     """Attach the ``export`` subcommand tree, which owns most of the CLI surface."""
     export_sub = export.add_subparsers(dest='export_command')
     _configure_logs(export_sub.add_parser('logs', help='Write log events for a time range as NDJSON.'))
+    _configure_stats(
+        export_sub.add_parser('stats', help='Count cached events by payload field, without leaving the machine.')
+    )
     _configure_tail(export_sub.add_parser('tail', help='Stream live log events as NDJSON (Ctrl+C to stop).'))
     _configure_groups(export_sub.add_parser('groups', help='Write log group metadata as NDJSON.'))
     _configure_summary(
@@ -76,17 +81,84 @@ def _add_export_parsers(export: argparse.ArgumentParser) -> None:
 
 def _configure_logs(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        'log_group',
-        help='CloudWatch log group name (e.g. /aws/lambda/my-function)',
+        'patterns',
+        nargs='*',
+        help='Log group names or glob patterns (e.g. /aws/lambda/my-function, "/aws/lambda/*")',
     ).completer = log_group_completer  # type: ignore[attr-defined]
     _add_aws_flags(parser)
     _add_window_flags(parser, default_start=DEFAULT_WINDOW)
+    _add_parsed_flag(parser)
+    _add_fetch_limit_flag(parser)
+    _add_demo_flag(parser, 'Read the offline synthetic group instead of AWS (no credentials needed)')
     parser.add_argument(
         '--no-cache',
         dest='no_cache',
         action='store_true',
         help='Bypass the cache read (results are still written to the cache)',
     )
+
+
+def _add_parsed_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        '--parsed',
+        action='store_true',
+        help=(
+            'Emit the decoded payload as "parsed" instead of the raw "message" string, '
+            'for a line that was a JSON object. Saves the reader a per-line re-parse'
+        ),
+    )
+
+
+def _add_fetch_limit_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        '--limit',
+        type=int,
+        default=None,
+        help=(
+            'Stop after this many events. Segments are then fetched one at a time in '
+            'window order, so the fetch itself stops rather than the output being trimmed'
+        ),
+    )
+
+
+def _add_demo_flag(parser: argparse.ArgumentParser, help_text: str) -> None:
+    parser.add_argument('--demo', dest='demo', action='store_true', help=help_text)
+
+
+def _configure_stats(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        'patterns',
+        nargs='*',
+        help='Log group names or glob patterns',
+    ).completer = log_group_completer  # type: ignore[attr-defined]
+    _add_aws_flags(parser)
+    _add_window_flags(parser, default_start=DEFAULT_WINDOW)
+    parser.add_argument(
+        '--by',
+        dest='fields',
+        action='append',
+        default=None,
+        metavar='FIELD',
+        help=(
+            'Payload field to count by, e.g. level or parsed.http.status; repeatable. '
+            f'Omit to report the {DEFAULT_STATS_FIELD_LIMIT} most common fields'
+        ),
+    )
+    parser.add_argument(
+        '--top',
+        type=int,
+        default=DEFAULT_STATS_VALUE_LIMIT,
+        help=f'Values reported per field (default: {DEFAULT_STATS_VALUE_LIMIT})',
+    )
+    parser.add_argument(
+        '--format',
+        dest='output_format',
+        choices=['ndjson', 'md'],
+        default='ndjson',
+        help='One JSON object per field, or a markdown table (default: ndjson)',
+    )
+    _add_demo_flag(parser, 'Read the offline synthetic group instead of AWS (no credentials needed)')
+    parser.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
 
 
 def _configure_tail(parser: argparse.ArgumentParser) -> None:
@@ -155,6 +227,7 @@ def _configure_summary(parser: argparse.ArgumentParser) -> None:
         default=DEFAULT_SIMILARITY,
         help=f'Fuzzy merge threshold for near-identical shapes, 0 to disable (default: {DEFAULT_SIMILARITY})',
     )
+    _add_demo_flag(parser, 'Read the offline synthetic group instead of AWS (no credentials needed)')
     parser.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
 
 
@@ -346,6 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
         description='Read and explore AWS CloudWatch from the terminal. Run with no arguments to browse log groups.',
     )
     _add_aws_flags(parser)
+    _add_demo_flag(parser, 'Browse the offline synthetic groups instead of AWS (no credentials needed)')
     subparsers = parser.add_subparsers(dest='command')
 
     logs = subparsers.add_parser('logs', help='Open the log view on the groups matching a pattern.')

@@ -27,7 +27,7 @@ from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups
 from tail_cw.aws.metrics import MetricSeries, fetch_metric_data
 from tail_cw.aws.xray import XRayTrace, batch_get_traces
 from tail_cw.cache.storage import read_parquet_to_log_events
-from tail_cw.cli import FetchRequest, Session, ShellSeed, dispatch, resolve_parquet_paths
+from tail_cw.cli import FetchRequest, NoticeSink, Session, ShellSeed, dispatch, resolve_parquet_paths
 from tail_cw.concurrency import blocking_pool, fetch_pool, run_blocking, take
 from tail_cw.config import TailCWConfig
 from tail_cw.demo import (
@@ -164,6 +164,8 @@ def _cache_services(
     pool: ClientProvider,
     executor: ThreadPoolExecutor,
     fetch_executor: ThreadPoolExecutor,
+    *,
+    on_notice: NoticeSink,
 ) -> tuple[ResolveLogs, LogVolume, CountEvents, LoadTraces]:
     """Build the services that end in blocking Parquet work.
 
@@ -187,6 +189,7 @@ def _cache_services(
             requests,
             config,
             executor=fetch_executor,
+            on_notice=on_notice,
         )
 
     async def log_volume(log_group: str, start: datetime, end: datetime) -> list[float]:
@@ -275,6 +278,8 @@ def _live_services(
     pool: ClientProvider,
     executor: ThreadPoolExecutor,
     fetch_executor: ThreadPoolExecutor,
+    *,
+    on_notice: NoticeSink,
 ) -> ShellServices:
     resolve_logs, log_volume, count_events, load_traces = _cache_services(
         config,
@@ -282,6 +287,7 @@ def _live_services(
         pool,
         executor,
         fetch_executor,
+        on_notice=on_notice,
     )
     list_alarms, run_insights, sample_rates, fetch_xray_trace = _cloudwatch_services(pool)
 
@@ -368,10 +374,20 @@ async def _run_shell_async(config: TailCWConfig, session: Session, seed: ShellSe
     if seed.demo:
         await _build_app(config, session, seed, _demo_services()).run_async()
         return
+    # The app does not exist yet when the services are built, and it is the only thing
+    # that can show a notice, so the sink is filled in once it does.
+    sink: list[NoticeSink] = []
+
+    def report(notice: str) -> None:
+        for handler in sink:
+            handler(notice)
+
     with blocking_pool() as executor, fetch_pool(config.fetch.max_concurrent_segments) as fetch_executor:
         async with client_pool(profile_name=session.profile, region_name=session.region) as pool:
-            services = _live_services(config, session, pool, executor, fetch_executor)
-            await _build_app(config, session, seed, services).run_async()
+            services = _live_services(config, session, pool, executor, fetch_executor, on_notice=report)
+            app = _build_app(config, session, seed, services)
+            sink.append(lambda notice: app.notify(notice, title='Cached payload', severity='warning', timeout=12))
+            await app.run_async()
 
 
 def _run_shell(config: TailCWConfig, session: Session, seed: ShellSeed) -> None:

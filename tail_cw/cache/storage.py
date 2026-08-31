@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from operator import itemgetter
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, TypedDict
 
 import polars as pl
 from diskcache import Cache, JSONDisk
@@ -183,6 +183,50 @@ _encode = json.JSONEncoder(separators=(',', ':')).encode
 _LINE_BREAKS = ('\n', '\r')
 """What must not appear in text spliced into an NDJSON line. A regex here cost 0.08s per 73k events."""
 
+_PAYLOAD_ROOT = 'parsed'
+"""Column the decoded payload lands in, and the first segment of every reported payload path."""
+
+
+@dataclass(frozen=True)
+class PayloadRepair:
+    """Payload keys the write pass had to change to fit Parquet.
+
+    Attributes:
+        dropped: Paths that held nothing but an empty JSON object.
+        widened: Paths retyped to text, each with the JSON types it was logged
+            as, e.g. ``parsed.count (number, string)``.
+    """
+
+    dropped: tuple[str, ...] = ()
+    widened: tuple[str, ...] = ()
+
+    def notices(self) -> list[str]:
+        """Render one line per change, for a caller that has somewhere to show them."""
+        lines = []
+        if self.widened:
+            lines.append(f'Widened {len(self.widened)} payload key(s) to text: {", ".join(self.widened)}')
+        if self.dropped:
+            lines.append(f'Dropped {len(self.dropped)} empty payload key(s): {", ".join(self.dropped)}')
+        return lines
+
+
+class WriteStats(TypedDict):
+    """What one Parquet write produced.
+
+    Attributes:
+        total_events: Events written.
+        jsonl_events: Of those, the ones whose message decoded as a JSON object.
+        file_size_bytes: Size of the written Parquet file.
+        dropped_payload_keys: Payload paths dropped as empty.
+        widened_payload_keys: Payload paths retyped to text, with their types.
+    """
+
+    total_events: int
+    jsonl_events: int
+    file_size_bytes: int
+    dropped_payload_keys: list[str]
+    widened_payload_keys: list[str]
+
 
 def _parse_jsonl_message(message: str) -> dict[str, Any] | None:
     """Return the message decoded as a JSON object, or None when it is not one."""
@@ -270,7 +314,7 @@ def write_log_events_to_parquet(
     log_events: Iterable[LogEvent],
     output_path: Path,
     progress_callback: ProgressCallback | None = None,
-) -> dict[str, int]:
+) -> WriteStats:
     """Convert LogEvent instances to a compressed Parquet file.
 
     Streams through a temporary NDJSON file so no more than one event is held in
@@ -280,6 +324,9 @@ def write_log_events_to_parquet(
     lines that are not JSON objects; for the rest ``parsed`` is the record and
     :func:`read_parquet_to_log_events` rebuilds the text from it.
 
+    A payload shape Parquet cannot hold is repaired rather than refused, and the
+    keys it changed are named on the result: see :func:`_repair_payload_types`.
+
     Args:
         log_events: Iterator of log events to store.
         output_path: Path where the Parquet file will be written.
@@ -287,11 +334,12 @@ def write_log_events_to_parquet(
             ``(current, total, status_message)``.
 
     Returns:
-        Statistics dict with keys ``total_events``, ``jsonl_events``, and
-        ``file_size_bytes``.
+        Counts of what was written, plus the payload keys the repair pass
+        dropped or widened.
 
     Raises:
-        ValueError: If there are no events to write.
+        ValueError: If there are no events to write, or a payload shape survives
+            the repair pass.
         OSError: If the output file cannot be written.
     """
     temp_file = None
@@ -313,28 +361,61 @@ def write_log_events_to_parquet(
         if progress_callback:
             progress_callback(total_events, total_events, 'Converting to Parquet...')
 
-        # The whole file is scanned to infer the schema. Sampling the first N rows is
-        # unsound over arbitrary log payloads: a key that is null in the sample and a string
-        # later panics the Parquet writer, an int-then-string key fails to parse, and a key
-        # first appearing after the sample is silently dropped and becomes unqueryable.
-        lazy = pl.scan_ndjson(str(temp_file), infer_schema_length=None)
-        # maintain_order keeps events that share a millisecond in the order CloudWatch
-        # returned them, which is the only ordering information they carry.
-        frame = _normalized_columns(lazy).sort('timestamp', maintain_order=True)
-        try:
-            frame.sink_parquet(str(output_path), compression='zstd')
-        except (pl.exceptions.ComputeError, pl.exceptions.InvalidOperationError) as err:
-            raise _unwritable_payload_error(frame, err) from err
-
+        repair = _sink_ndjson_to_parquet(temp_file, output_path, progress_callback=progress_callback)
         return {
             'total_events': total_events,
             'jsonl_events': jsonl_events,
             'file_size_bytes': output_path.stat().st_size,
+            'dropped_payload_keys': list(repair.dropped),
+            'widened_payload_keys': list(repair.widened),
         }
 
     finally:
         if temp_file is not None and temp_file.exists():
             temp_file.unlink()
+
+
+def _scan_ndjson(source: Path) -> pl.LazyFrame:
+    # The whole file is scanned to infer the schema. Sampling the first N rows is
+    # unsound over arbitrary log payloads: a key that is null in the sample and a string
+    # later panics the Parquet writer, an int-then-string key fails to parse, and a key
+    # first appearing after the sample is silently dropped and becomes unqueryable.
+    lazy = pl.scan_ndjson(str(source), infer_schema_length=None)
+    # maintain_order keeps events that share a millisecond in the order CloudWatch
+    # returned them, which is the only ordering information they carry.
+    return _normalized_columns(lazy).sort('timestamp', maintain_order=True)
+
+
+def _sink_ndjson_to_parquet(
+    source: Path,
+    output_path: Path,
+    *,
+    progress_callback: ProgressCallback | None,
+) -> PayloadRepair:
+    """Write the staged NDJSON as Parquet, repairing the payload once if it will not fit.
+
+    The repair costs a second pass over the staged file, so it is only paid on
+    the failure it exists to clear.
+    """
+    frame = _scan_ndjson(source)
+    try:
+        frame.sink_parquet(str(output_path), compression='zstd')
+    except (pl.exceptions.ComputeError, pl.exceptions.InvalidOperationError) as err:
+        first_error = err
+    else:
+        return PayloadRepair((), ())
+
+    if progress_callback:
+        progress_callback(0, TOTAL_UNKNOWN, 'Repairing payload types...')
+    repair = _repair_payload_types(source)
+    if not repair.dropped and not repair.widened:
+        raise _unwritable_payload_error(frame, first_error) from first_error
+    repaired = _scan_ndjson(source)
+    try:
+        repaired.sink_parquet(str(output_path), compression='zstd')
+    except (pl.exceptions.ComputeError, pl.exceptions.InvalidOperationError) as err:
+        raise _unwritable_payload_error(repaired, err) from err
+    return repair
 
 
 def _normalized_columns(lazy: pl.LazyFrame) -> pl.LazyFrame:
@@ -356,6 +437,134 @@ def _normalized_columns(lazy: pl.LazyFrame) -> pl.LazyFrame:
         if name not in schema or schema[name] == pl.Null
     ]
     return lazy.with_columns(*casts, *fills)
+
+
+def _json_kind(value: Any) -> str | None:
+    """Name the Parquet-relevant shape of one JSON value, or None for a null.
+
+    A null never conflicts, because Polars widens it to whatever the other rows
+    hold. ``int`` and ``float`` share one name for the same reason.
+    """
+    match value:
+        case None:
+            return None
+        case bool():
+            return 'bool'
+        case int() | float():
+            return 'number'
+        case dict():
+            return 'object'
+        case list():
+            return 'list'
+        case _:
+            return 'string'
+
+
+def _observe_payload(value: Any, path: str, kinds: dict[str, set[str]], populated: set[str]) -> None:
+    kind = _json_kind(value)
+    if kind is None:
+        return
+    kinds.setdefault(path, set()).add(kind)
+    if kind == 'object':
+        if value:
+            populated.add(path)
+        for key, item in value.items():
+            _observe_payload(item, f'{path}.{key}', kinds, populated)
+    elif kind == 'list':
+        for item in value:
+            _observe_payload(item, f'{path}[]', kinds, populated)
+
+
+def _observe_ndjson_payloads(source: Path) -> tuple[dict[str, set[str]], set[str]]:
+    kinds: dict[str, set[str]] = {}
+    populated: set[str] = set()
+    with source.open(encoding='utf-8') as handle:
+        for line in handle:
+            payload = json.loads(line).get('parsed')
+            if payload is not None:
+                _observe_payload(payload, _PAYLOAD_ROOT, kinds, populated)
+    return kinds, populated
+
+
+def _without_covered_descendants(paths: set[str], covered: set[str]) -> set[str]:
+    """Drop any path an entry of ``covered`` already stands in for.
+
+    Widening a key to text takes its whole subtree with it, so naming a child as
+    well would report a key the repair never looked at.
+    """
+    return {path for path in paths if not any(path.startswith(f'{parent}.') for parent in covered)}
+
+
+def _scalar_text(value: Any) -> Any:
+    if value is None or isinstance(value, str):
+        return value
+    return _encode(value)
+
+
+def _coerce_payload(value: Any, path: str, widen: set[str], drop: set[str]) -> Any:
+    if path in widen:
+        return _encode(value) if isinstance(value, (dict, list)) else _scalar_text(value)
+    if isinstance(value, dict):
+        coerced = {
+            key: _coerce_payload(item, f'{path}.{key}', widen, drop)
+            for key, item in value.items()
+            if f'{path}.{key}' not in drop
+        }
+        # A key whose object was emptied here, or was empty to begin with, infers a
+        # zero-field struct in its parent exactly as the original key did.
+        return {key: item for key, item in coerced.items() if item != {}}
+    if isinstance(value, list):
+        return [_coerce_payload(item, f'{path}[]', widen, drop) for item in value]
+    return value
+
+
+def _rewrite_ndjson_payloads(source: Path, widen: set[str], drop: set[str]) -> None:
+    """Rewrite ``source`` in place with the named payload paths widened and dropped."""
+    staged = source.with_suffix('.repaired')
+    with source.open(encoding='utf-8') as reader, staged.open('w', encoding='utf-8') as writer:
+        for line in reader:
+            record = json.loads(line)
+            payload = record.get('parsed')
+            if payload is None:
+                writer.write(line)
+                continue
+            coerced = _coerce_payload(payload, _PAYLOAD_ROOT, widen, drop)
+            if coerced == {}:
+                # Nothing is left to store as a struct, and the text is still the record.
+                del record['parsed']
+                record['message'] = _encode(payload)
+            else:
+                record['parsed'] = coerced
+            writer.write(_encode(record) + '\n')
+    staged.replace(source)
+
+
+def _repair_payload_types(source: Path) -> PayloadRepair:
+    """Make every payload in the staged NDJSON representable as one Parquet struct.
+
+    Two shapes defeat Polars' inference. A key that is always an empty JSON
+    object infers a zero-field struct Parquet cannot hold, and carries nothing,
+    so it is dropped. A key logged as two different JSON types cannot be parsed
+    into either, so its whole subtree is widened to text, which stays searchable
+    and stays visible in the record detail.
+
+    Widening a key retypes it silently unless the caller says which keys moved,
+    which is why both sets come back rather than being applied and forgotten.
+    """
+    kinds, populated = _observe_ndjson_payloads(source)
+    widen = {path for path, seen in kinds.items() if len(seen) > 1}
+    widen = _without_covered_descendants(widen, widen)
+    drop = _without_covered_descendants(
+        {path for path, seen in kinds.items() if seen == {'object'} and path not in populated},
+        widen,
+    )
+    if not widen and not drop:
+        return PayloadRepair((), ())
+    _rewrite_ndjson_payloads(source, widen, drop)
+    return PayloadRepair(
+        dropped=tuple(sorted(drop)),
+        widened=tuple(f'{path} ({", ".join(sorted(kinds[path]))})' for path in sorted(widen)),
+    )
 
 
 def _empty_struct_paths(dtype: Any, path: str) -> list[str]:
@@ -384,6 +593,11 @@ def _unwritable_payload_error(frame: pl.LazyFrame, err: Exception) -> ValueError
     if empties:
         return ValueError(f'{err}. Empty JSON object at {", ".join(sorted(empties))}, which carries no value to store')
     return ValueError(f'{err}. One payload key is logged as more than one scalar type')
+
+
+def parquet_row_count(parquet_path: Path) -> int:
+    """Count the rows in a cached Parquet file, from its footer rather than its data."""
+    return int(pl.scan_parquet(str(parquet_path)).select(pl.len()).collect().item())
 
 
 def read_parquet_to_log_events(parquet_path: Path) -> Iterator[LogEvent]:
@@ -695,7 +909,7 @@ class LogCache:
         cache_key: str,
         ttl_seconds: TtlSeconds | None = None,
         progress_callback: ProgressCallback | None = None,
-    ) -> dict[str, int]:
+    ) -> WriteStats:
         """Write log events to cache.
 
         Args:

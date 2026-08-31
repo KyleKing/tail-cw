@@ -7,6 +7,7 @@ details.
 """
 
 from tail_cw.config.config import (
+    AwsConfig,
     CacheConfig,
     FetchConfig,
     InsightsConfig,
@@ -22,6 +23,7 @@ from tail_cw.config.config import (
 )
 
 __all__ = [
+    'AwsConfig',
     'CacheConfig',
     'FetchConfig',
     'InsightsConfig',

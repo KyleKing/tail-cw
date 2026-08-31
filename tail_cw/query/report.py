@@ -9,10 +9,12 @@ from collections.abc import Mapping, Sequence
 
 from tail_cw.aws.alarms import AlarmSummary
 from tail_cw.charts.sparkline import sparkline_blocks
+from tail_cw.query.facets import FieldFacet
 from tail_cw.query.rollup import Granularity, PatternRollup, RollupReport
 
 _SPARK_WIDTH = 24
 _SUMMARY_EXAMPLE_CHARS = 110
+_FACET_VALUE_CHARS = 60
 
 
 def render_markdown(report: RollupReport, *, title: str, window_label: str, source: str) -> str:
@@ -58,6 +60,32 @@ def render_rows_markdown(columns: Sequence[str], rows: Sequence[Mapping[str, str
     divider = '|' + '|'.join(['---'] * len(columns)) + '|'
     body = ['| ' + ' | '.join(_escape_cell(row.get(column, '')) for column in columns) + ' |' for row in rows]
     return '\n'.join([header, divider, *body]) + '\n'
+
+
+def render_facets_markdown(facets: Sequence[FieldFacet], *, window_label: str) -> str:
+    """Render field counts as one markdown section per field, widest field first."""
+    lines = ['# Field counts', '', window_label, '']
+    for facet in facets:
+        share = f'{facet.present:,} records, {facet.distinct:,} distinct'
+        if facet.truncated:
+            share += f', top {len(facet.values)} shown'
+        lines.extend([f'## `{facet.path}`', '', share, ''])
+        if facet.values:
+            lines.extend(
+                render_rows_markdown(
+                    ('value', 'count', 'share'),
+                    [
+                        {
+                            'value': _inline_code(_shorten(value.value, _FACET_VALUE_CHARS)),
+                            'count': f'{value.count:,}',
+                            'share': f'{value.count / facet.present:.1%}' if facet.present else '-',
+                        }
+                        for value in facet.values
+                    ],
+                ).splitlines()
+            )
+        lines.append('')
+    return '\n'.join(lines) + '\n'
 
 
 def _escape_cell(value: str) -> str:

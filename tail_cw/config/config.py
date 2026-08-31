@@ -33,6 +33,20 @@ def _expand_path(value: str | os.PathLike[str]) -> Path:
 
 
 @dataclass(slots=True)
+class AwsConfig:
+    """Account defaults, so the most-typed flags need not be typed.
+
+    Attributes:
+        profile: AWS profile used when ``--profile`` is absent. A preset naming
+            its own profile outranks this; ``--profile`` outranks both.
+        region: AWS region used when ``--region`` is absent.
+    """
+
+    profile: str | None = None
+    region: str | None = None
+
+
+@dataclass(slots=True)
 class CacheConfig:
     """Disk cache configuration.
 
@@ -179,6 +193,7 @@ class TailCWConfig:
         errors = "level:error OR level:critical"
 
     Attributes:
+        aws: Default profile and region.
         cache: Cache persistence configuration.
         fetch: How many segment fetches run at once.
         insights: Guards on billed Logs Insights queries.
@@ -188,10 +203,13 @@ class TailCWConfig:
         trace: Trace extraction configuration.
         presets: Named log group sets, referenced as ``@name`` wherever a log
             group pattern is accepted.
+        preset_profiles: The AWS profile a preset names, for the presets that
+            name one.
         filters: Named filter expressions, referenced as ``@name`` wherever a
             filter is accepted, extending the same convention as ``presets``.
     """
 
+    aws: AwsConfig = field(default_factory=AwsConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
     fetch: FetchConfig = field(default_factory=FetchConfig)
     insights: InsightsConfig = field(default_factory=InsightsConfig)
@@ -200,6 +218,7 @@ class TailCWConfig:
     tui: TUIConfig = field(default_factory=TUIConfig)
     trace: TraceConfig = field(default_factory=TraceConfig)
     presets: dict[str, list[str]] = field(default_factory=dict)
+    preset_profiles: dict[str, str] = field(default_factory=dict)
     filters: dict[str, str] = field(default_factory=dict)
 
 
@@ -237,22 +256,46 @@ def _load_section(section: Any, factory: type[Any]) -> dict[str, Any]:
     return {key: section[key] for key in section if key in allowed_fields}
 
 
-def _load_presets(section: Any) -> dict[str, list[str]]:
+def _load_presets(section: Any) -> tuple[dict[str, list[str]], dict[str, str]]:
+    """Read ``[presets]`` in either of its two shapes.
+
+    A preset is a bare list of log groups, or a table with ``groups`` and an
+    optional ``profile`` for a set that lives in another account.
+
+    Returns:
+        The groups per preset, and the profile for those that name one.
+
+    Raises:
+        ValueError: If the section, a preset, or a preset's profile is malformed.
+    """
     match section:
         case None:
-            return {}
+            return {}, {}
         case dict():
             table: dict[str, Any] = section
         case _:
             msg = '[presets] must be a table mapping each name to a list of log groups'
             raise ValueError(msg)
     presets: dict[str, list[str]] = {}
+    profiles: dict[str, str] = {}
     for name, value in table.items():
-        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-            msg = f'Preset {name!r} must be a list of log group names'
-            raise ValueError(msg)
-        presets[name] = list(value)
-    return presets
+        groups, profile = _load_one_preset(name, value)
+        presets[name] = groups
+        if profile is not None:
+            profiles[name] = profile
+    return presets, profiles
+
+
+def _load_one_preset(name: str, value: Any) -> tuple[list[str], str | None]:
+    groups = value.get('groups') if isinstance(value, dict) else value
+    if not isinstance(groups, list) or any(not isinstance(item, str) for item in groups):
+        msg = f'Preset {name!r} must be a list of log group names, or a table with a groups list'
+        raise ValueError(msg)
+    profile = value.get('profile') if isinstance(value, dict) else None
+    if profile is not None and (not isinstance(profile, str) or not profile.strip()):
+        msg = f'Preset {name!r} has a profile that is not a name'
+        raise ValueError(msg)
+    return list(groups), profile
 
 
 def _load_named_filters(section: Any) -> dict[str, str]:
@@ -271,6 +314,19 @@ def _load_named_filters(section: Any) -> dict[str, str]:
             raise ValueError(msg)
         filters[name] = value
     return filters
+
+
+_SECTIONS: Final[dict[str, Any]] = {
+    'aws': AwsConfig,
+    'cache': CacheConfig,
+    'fetch': FetchConfig,
+    'insights': InsightsConfig,
+    'message': MessageConfig,
+    'preview': PreviewConfig,
+    'tui': TUIConfig,
+    'trace': TraceConfig,
+}
+"""TOML section name to its dataclass. Each key is also the matching :class:`TailCWConfig` field."""
 
 
 def load_config(config_path: Path | None = None) -> TailCWConfig:
@@ -311,31 +367,17 @@ def load_config(config_path: Path | None = None) -> TailCWConfig:
     except OSError:
         raise
 
-    cache_kwargs = _load_section(data.get('cache'), CacheConfig)
-    fetch_kwargs = _load_section(data.get('fetch'), FetchConfig)
-    insights_kwargs = _load_section(data.get('insights'), InsightsConfig)
-    message_kwargs = _load_section(data.get('message'), MessageConfig)
-    preview_kwargs = _load_section(data.get('preview'), PreviewConfig)
-    tui_kwargs = _load_section(data.get('tui'), TUIConfig)
-    trace_kwargs = _load_section(data.get('trace'), TraceConfig)
+    sections = {name: _load_section(data.get(name), factory) for name, factory in _SECTIONS.items()}
+    if (cache_dir_value := sections['cache'].get('cache_dir')) is not None:
+        sections['cache']['cache_dir'] = _to_cache_path(cache_dir_value)
+    if (trace_fields := sections['trace'].get('trace_id_fields')) is not None:
+        sections['trace']['trace_id_fields'] = list(trace_fields)
 
-    cache_dir_value = cache_kwargs.get('cache_dir')
-    if cache_dir_value is not None:
-        cache_kwargs['cache_dir'] = _to_cache_path(cache_dir_value)
-
-    trace_fields = trace_kwargs.get('trace_id_fields')
-    if trace_fields is not None:
-        trace_kwargs['trace_id_fields'] = list(trace_fields)
-
+    presets, preset_profiles = _load_presets(data.get('presets'))
     config = TailCWConfig(
-        cache=CacheConfig(**cache_kwargs),
-        fetch=FetchConfig(**fetch_kwargs),
-        insights=InsightsConfig(**insights_kwargs),
-        message=MessageConfig(**message_kwargs),
-        preview=PreviewConfig(**preview_kwargs),
-        tui=TUIConfig(**tui_kwargs),
-        trace=TraceConfig(**trace_kwargs),
-        presets=_load_presets(data.get('presets')),
+        **{name: _SECTIONS[name](**kwargs) for name, kwargs in sections.items()},
+        presets=presets,
+        preset_profiles=preset_profiles,
         filters=_load_named_filters(data.get('filters')),
     )
 
@@ -375,6 +417,10 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
         template = (
             '# Tail CW configuration file\n'
             '# Customize settings and remove comments as needed.\n\n'
+            '[aws]\n'
+            '# Used when --profile and --region are absent.\n'
+            '# profile = "read-prod"\n'
+            '# region = "us-east-1"\n\n'
             '[cache]\n'
             '# cache_dir = "/path/to/cache"\n'
             'size_limit_mb = 1000\n'
@@ -407,7 +453,11 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'trace_id_fields = ["trace_id", "traceId", "x-trace-id"]\n\n'
             '[presets]\n'
             '# Reference a preset as @api wherever a log group pattern is accepted.\n'
-            '# api = ["/aws/lambda/api-a", "/ecs/api-b"]\n\n'
+            '# api = ["/aws/lambda/api-a", "/ecs/api-b"]\n'
+            '# A preset in another account carries its own profile:\n'
+            '# [presets.billing]\n'
+            '# groups = ["/aws/lambda/billing"]\n'
+            '# profile = "read-billing"\n\n'
             '[filters]\n'
             '# Reference a filter as @errors wherever a filter is accepted.\n'
             '# errors = "level:error OR level:critical"\n'

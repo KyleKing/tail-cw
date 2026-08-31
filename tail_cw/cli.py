@@ -17,6 +17,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterat
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from itertools import chain
 from pathlib import Path
 from typing import Any, Literal
@@ -54,24 +55,28 @@ from tail_cw.aws.metrics import (
     list_metric_definitions,
 )
 from tail_cw.aws.xray import XRayTraceSummary, batch_get_traces, iter_trace_summary_pages, scan_cost_usd
-from tail_cw.cache.storage import CacheStatus, LogCache, generate_cache_key
+from tail_cw.cache.records import readable_message, without_nulls
+from tail_cw.cache.storage import CacheStatus, LogCache, PayloadRepair, generate_cache_key, parquet_row_count
 from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import closing_stream, consume_in_thread, fetch_pool, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
-from tail_cw.demo import DEMO_LOG_GROUP, demo_dashboard
+from tail_cw.demo import DEMO_LOG_GROUP, demo_dashboard, demo_resolve_logs
 from tail_cw.history import HistoryKind, append, make_entry
-from tail_cw.parser import DEFAULT_WINDOW, build_parser
-from tail_cw.query.engine import query_parquet_files_to_log_events
+from tail_cw.parser import DEFAULT_STATS_FIELD_LIMIT, DEFAULT_WINDOW, build_parser
+from tail_cw.query.engine import query_parquet_files_to_log_events, query_parquet_files_to_records
 from tail_cw.query.expression import parse_query, portable_filter_pattern
+from tail_cw.query.facets import FieldFacet, count_by_field, discover_field_paths
 from tail_cw.query.otlp import trace_error_summary, trace_groups_to_otlp, xray_trace_summary, xray_traces_to_otlp
 from tail_cw.query.parser import FilterNode
-from tail_cw.query.report import render_alarm_markdown, render_markdown, render_rows_markdown
+from tail_cw.query.report import render_alarm_markdown, render_facets_markdown, render_markdown, render_rows_markdown
 from tail_cw.query.rollup import Granularity, RollupReport, roll_up
 from tail_cw.query.severity import Severity
 from tail_cw.query.trace import query_traces_from_parquet_files
 from tail_cw.recents import load_recents, record_selection, save_recents
 
 FetchEvents = Callable[..., AsyncIterator[LogEvent]]
+NoticeSink = Callable[[str], None]
+"""Where a fetch reports something the caller should know but that does not stop it."""
 StreamEvents = Callable[..., AsyncIterator[LogEvent]]
 ShellView = Literal['groups', 'logs', 'tail', 'dashboards', 'dashboard']
 
@@ -317,6 +322,7 @@ async def _resolve_segment(
     use_cache: bool,
     fetch_events: FetchEvents,
     executor: ThreadPoolExecutor | None,
+    notices: list[str],
 ) -> Path | None:
     cache_key = generate_cache_key(
         request.log_group,
@@ -335,7 +341,15 @@ async def _resolve_segment(
         return None
 
     def write(remaining: Iterator[LogEvent]) -> Path | None:
-        cache.write(chain([first_event], remaining), cache_key, ttl_seconds=segment.ttl_seconds)
+        stats = cache.write(chain([first_event], remaining), cache_key, ttl_seconds=segment.ttl_seconds)
+        # Appended rather than reported here: this runs on a worker thread, and the TUI's
+        # only legal writer is the message loop.
+        notices.extend(
+            PayloadRepair(
+                dropped=tuple(stats['dropped_payload_keys']),
+                widened=tuple(stats['widened_payload_keys']),
+            ).notices()
+        )
         return cache.get_parquet_path(cache_key)
 
     return await consume_in_thread(executor, events, write)
@@ -351,8 +365,15 @@ async def _resolve_into_cache(
     fetch_events: FetchEvents | None,
     executor: ThreadPoolExecutor | None,
     limiter: asyncio.Semaphore,
+    notices: list[str],
+    budget: _FetchBudget | None = None,
 ) -> list[Path]:
-    """Resolve every segment of one window, several at a time, in window order."""
+    """Resolve every segment of one window, several at a time, in window order.
+
+    Under a ``budget`` the segments of this window run one at a time instead, so
+    the count can be checked between them. That is the trade a limit asks for:
+    fetching less matters more than fetching it in parallel.
+    """
     effective_fetch = fetch_events if fetch_events is not None else fetch_log_events
 
     async def resolve(segment: Segment) -> Path | None:
@@ -365,19 +386,58 @@ async def _resolve_into_cache(
                 use_cache=use_cache,
                 fetch_events=effective_fetch,
                 executor=executor,
+                notices=notices,
             )
 
+    segments = plan_segments(request.start_time, request.end_time, now=now)
+    if budget is not None:
+        return await _resolve_within_budget(segments, resolve, budget, executor=executor)
     async with asyncio.TaskGroup() as group:
-        tasks = [
-            group.create_task(resolve(segment))
-            for segment in plan_segments(request.start_time, request.end_time, now=now)
-        ]
+        tasks = [group.create_task(resolve(segment)) for segment in segments]
     paths: list[Path] = []
     for task in tasks:
         path = task.result()
         if path is not None and path not in paths:
             paths.append(path)
     return paths
+
+
+async def _resolve_within_budget(
+    segments: Iterable[Segment],
+    resolve: Callable[[Segment], Awaitable[Path | None]],
+    budget: _FetchBudget,
+    *,
+    executor: ThreadPoolExecutor | None,
+) -> list[Path]:
+    paths: list[Path] = []
+    for segment in segments:
+        if budget.spent:
+            break
+        path = await resolve(segment)
+        if path is None or path in paths:
+            continue
+        paths.append(path)
+        budget.written += await run_blocking(executor, partial(parquet_row_count, path))
+    return paths
+
+
+@dataclass(slots=True)
+class _FetchBudget:
+    """How many events are cached so far, and the point at which fetching stops.
+
+    Shared across every log group in one command, so ``--limit 50`` means fifty
+    events rather than fifty per group. Overshoot is expected and harmless: a
+    segment already in flight when the budget fills still finishes, and the read
+    applies the exact limit afterwards.
+    """
+
+    limit: int
+    written: int = 0
+
+    @property
+    def spent(self) -> bool:
+        """True once enough events are cached to satisfy the caller's limit."""
+        return self.written >= self.limit
 
 
 def _segment_limiter(config: TailCWConfig) -> asyncio.Semaphore:
@@ -398,13 +458,15 @@ async def resolve_parquet_path(
     use_cache: bool = True,
     fetch_events: FetchEvents | None = None,
     executor: ThreadPoolExecutor | None = None,
+    on_notice: NoticeSink | None = None,
 ) -> list[Path]:
     """Return the cached Parquet segments for one request, fetching on miss.
 
     Returns an empty list when the request matches no events.
     """
+    notices: list[str] = []
     with open_log_cache(config) as cache:
-        return await _resolve_into_cache(
+        paths = await _resolve_into_cache(
             client,
             request,
             cache,
@@ -413,7 +475,10 @@ async def resolve_parquet_path(
             fetch_events=fetch_events,
             executor=executor,
             limiter=_segment_limiter(config),
+            notices=notices,
         )
+    _report_notices(notices, on_notice)
+    return paths
 
 
 async def resolve_parquet_paths(
@@ -425,6 +490,8 @@ async def resolve_parquet_paths(
     use_cache: bool = True,
     fetch_events: FetchEvents | None = None,
     executor: ThreadPoolExecutor | None = None,
+    on_notice: NoticeSink | None = None,
+    limit: int | None = None,
 ) -> list[Path]:
     """Resolve several fetches concurrently, dropping the ones with no events.
 
@@ -441,11 +508,17 @@ async def resolve_parquet_paths(
     thread of ``executor`` until it finishes writing. A failure cancels the
     siblings rather than leaving them to finish writing into a cache nobody will
     read.
+
+    ``limit`` stops the fetch rather than trimming its output: once that many
+    events are cached, no further segment is asked for. The groups still run
+    concurrently and share the one budget.
     """
     if not requests:
         return []
     resolved_now = now if now is not None else datetime.now(UTC)
     limiter = _segment_limiter(config)
+    notices: list[str] = []
+    budget = _FetchBudget(limit=limit) if limit is not None and limit > 0 else None
     with open_log_cache(config) as cache:
 
         async def resolve(request: FetchRequest) -> list[Path]:
@@ -458,11 +531,26 @@ async def resolve_parquet_paths(
                 fetch_events=fetch_events,
                 executor=executor,
                 limiter=limiter,
+                notices=notices,
+                budget=budget,
             )
 
         async with asyncio.TaskGroup() as group:
             tasks = [group.create_task(resolve(request)) for request in requests]
+    _report_notices(notices, on_notice)
     return [path for task in tasks for path in task.result()]
+
+
+def _report_notices(notices: Sequence[str], on_notice: NoticeSink | None) -> None:
+    """Hand each distinct notice to the caller's sink, in the order it was raised.
+
+    Every segment of every group repairs its own payload, so one widened key
+    arrives many times over.
+    """
+    if on_notice is None:
+        return
+    for notice in dict.fromkeys(notices):
+        on_notice(notice)
 
 
 def request_cache_dir(config: TailCWConfig) -> Path:
@@ -486,6 +574,46 @@ def write_ndjson(events: Iterable[LogEvent], stream: SupportsWriteStr) -> int:
         stream.write(json.dumps(_event_to_record(event), separators=(',', ':')) + '\n')
         count += 1
     return count
+
+
+def _row_to_record(row: Mapping[str, Any], *, parsed: bool) -> dict[str, Any]:
+    """Turn one cached row into the record ``export logs`` writes.
+
+    With ``parsed``, a line that was a JSON object is emitted as its decoded
+    payload rather than as the text it was reconstructed from, which is what
+    saves the reader a parse per line. A line that was never JSON has no payload
+    to emit and keeps its ``message``.
+    """
+    record: dict[str, Any] = {
+        'timestamp': row['timestamp'].isoformat(),
+        'log_group': row['log_group'],
+        'log_stream': row['log_stream'],
+    }
+    payload = row.get('parsed') if parsed else None
+    if payload is None:
+        record['message'] = readable_message(row)
+    else:
+        record['parsed'] = without_nulls(payload)
+    return record
+
+
+def write_records_ndjson(
+    rows: Iterable[Mapping[str, Any]],
+    stream: SupportsWriteStr,
+    *,
+    parsed: bool = False,
+) -> int:
+    """Write cached rows as NDJSON and return the number written."""
+    count = 0
+    for row in rows:
+        stream.write(json.dumps(_row_to_record(row, parsed=parsed), separators=(',', ':')) + '\n')
+        count += 1
+    return count
+
+
+def _stderr_notice(notice: str) -> None:
+    """Report something the caller should know on stderr, keeping stdout parseable."""
+    sys.stderr.write(f'{notice}\n')
 
 
 async def stream_ndjson(events: AsyncIterator[LogEvent], stream: SupportsWriteFlushStr) -> int:
@@ -520,12 +648,48 @@ def _write_json_line(record: dict[str, object]) -> None:
     sys.stdout.write(json.dumps(record, separators=(',', ':')) + '\n')
 
 
-def _load_config_or_report(config_path: Path | None) -> TailCWConfig | None:
+def _load_config_or_report(args: argparse.Namespace) -> TailCWConfig | None:
+    """Load the config for one command and fill in the account it names.
+
+    Every command reads ``args.profile`` and ``args.region`` afterwards, so the
+    defaults are applied here rather than at each of those reads.
+    """
     try:
-        return load_config(config_path)
+        config = load_config(args.config_path)
     except (OSError, ValueError) as err:
         sys.stderr.write(f'Configuration error: {err}\n')
         return None
+    try:
+        args.profile = resolve_profile(args.profile, getattr(args, 'patterns', ()), config)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return None
+    if args.region is None:
+        args.region = config.aws.region
+    return config
+
+
+def resolve_profile(explicit: str | None, patterns: Sequence[str], config: TailCWConfig) -> str | None:
+    """Decide which AWS profile a command runs under.
+
+    ``--profile`` wins, then the profile a named preset carries, then
+    ``[aws].profile``. Two presets naming different profiles is a conflict rather
+    than a precedence question, because one command reads one account.
+
+    Raises:
+        ValueError: If the patterns name presets that disagree about the profile.
+    """
+    if explicit is not None:
+        return explicit
+    named = {
+        config.preset_profiles[pattern[1:]]
+        for pattern in patterns
+        if pattern.startswith('@') and pattern[1:] in config.preset_profiles
+    }
+    if len(named) > 1:
+        msg = f'Presets name more than one profile ({", ".join(sorted(named))}); pass --profile to choose'
+        raise ValueError(msg)
+    return next(iter(named), None) or config.aws.profile
 
 
 def _window_from_args(args: argparse.Namespace, now: datetime) -> tuple[datetime, datetime]:
@@ -640,7 +804,7 @@ def seed_from_args(args: argparse.Namespace, presets: Mapping[str, Sequence[str]
         case 'dash':
             return ShellSeed(view='dashboards')
         case _:
-            return ShellSeed(view='groups')
+            return ShellSeed(view='groups', demo=getattr(args, 'demo', False))
 
 
 def _run_shell_command(args: argparse.Namespace, now: datetime, run_shell: RunShell | None) -> int:
@@ -652,7 +816,7 @@ def _run_shell_command(args: argparse.Namespace, now: datetime, run_shell: RunSh
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
-    config = _load_config_or_report(args.config_path)
+    config = _load_config_or_report(args)
     if config is None:
         return 1
     try:
@@ -685,6 +849,82 @@ def _remember_literal_groups(targets: Sequence[str], *, profile: str | None) -> 
         return
 
 
+@dataclass(frozen=True)
+class _CacheRead:
+    """A resolved set of cached Parquet files, and what was asked of them."""
+
+    paths: list[Path]
+    filter_node: FilterNode | None
+    group_count: int
+
+
+async def _resolve_export_paths(
+    pool: ClientProvider,
+    args: argparse.Namespace,
+    now: datetime,
+    config: TailCWConfig,
+    *,
+    fetch_events: FetchEvents | None,
+    executor: ThreadPoolExecutor,
+    limit: int | None = None,
+) -> _CacheRead | int:
+    """Turn the log group patterns on the command line into cached Parquet files.
+
+    Returns an exit status instead when nothing can be read, so the caller can
+    return it unchanged.
+    """
+    try:
+        start_time, end_time = _window_from_args(args, now)
+        filter_node = _local_filter(expand_filter(args.filter_pattern, config.filters))
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+    if args.demo:
+        return _CacheRead(paths=_demo_paths(start_time, end_time), filter_node=filter_node, group_count=1)
+    logs = await pool.client('logs')
+    try:
+        names = await _target_group_names(logs, args.patterns, config)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+    if not names:
+        sys.stderr.write(
+            'No log groups matched\n' if args.patterns else 'Name at least one log group or glob, or pass --demo\n',
+        )
+        return 1
+    requests = [
+        FetchRequest(
+            log_group=name,
+            start_time=start_time,
+            end_time=end_time,
+            profile=args.profile,
+            region=args.region,
+        )
+        for name in names
+    ]
+    paths = await resolve_parquet_paths(
+        logs,
+        requests,
+        config,
+        now=now,
+        use_cache=not args.no_cache,
+        fetch_events=fetch_events,
+        executor=executor,
+        on_notice=_stderr_notice,
+        limit=limit,
+    )
+    if not paths:
+        sys.stderr.write('No events found for the requested range\n')
+        return 0
+    return _CacheRead(paths=paths, filter_node=filter_node, group_count=len(names))
+
+
+def _demo_paths(start_time: datetime, end_time: datetime) -> list[Path]:
+    """Stage the synthetic group as Parquet, so every read path behaves as it does live."""
+    path = demo_resolve_logs(DEMO_LOG_GROUP, start_time, end_time)
+    return [path] if path is not None else []
+
+
 async def _export_logs(
     pool: ClientProvider,
     args: argparse.Namespace,
@@ -693,37 +933,70 @@ async def _export_logs(
     fetch_events: FetchEvents | None,
     executor: ThreadPoolExecutor,
 ) -> int:
-    config = _load_config_or_report(args.config_path)
+    config = _load_config_or_report(args)
     if config is None:
         return 1
-    try:
-        start_time, end_time = _window_from_args(args, now)
-        filter_node = _local_filter(expand_filter(args.filter_pattern, config.filters))
-    except ValueError as err:
-        sys.stderr.write(f'{err}\n')
-        return 2
-    request = FetchRequest(
-        log_group=args.log_group,
-        start_time=start_time,
-        end_time=end_time,
-        profile=args.profile,
-        region=args.region,
-    )
-    paths = await resolve_parquet_path(
-        await pool.client('logs'),
-        request,
+    read = await _resolve_export_paths(
+        pool,
+        args,
+        now,
         config,
-        now=now,
-        use_cache=not args.no_cache,
         fetch_events=fetch_events,
         executor=executor,
+        limit=args.limit,
     )
-    if not paths:
-        sys.stderr.write('No events found for the requested range\n')
-        return 0
-    events = query_parquet_files_to_log_events(paths, filter_node)
-    await run_blocking(executor, lambda: write_ndjson(events, sys.stdout))
+    if isinstance(read, int):
+        return read
+    rows = query_parquet_files_to_records(read.paths, read.filter_node, limit=args.limit)
+    await run_blocking(executor, lambda: write_records_ndjson(rows, sys.stdout, parsed=args.parsed))
     return 0
+
+
+async def _export_stats(
+    pool: ClientProvider,
+    args: argparse.Namespace,
+    now: datetime,
+    *,
+    fetch_events: FetchEvents | None,
+    executor: ThreadPoolExecutor,
+) -> int:
+    config = _load_config_or_report(args)
+    if config is None:
+        return 1
+    read = await _resolve_export_paths(pool, args, now, config, fetch_events=fetch_events, executor=executor)
+    if isinstance(read, int):
+        return read
+    paths, filter_node = read.paths, read.filter_node
+    fields = args.fields or await run_blocking(
+        executor,
+        partial(discover_field_paths, paths, limit=DEFAULT_STATS_FIELD_LIMIT),
+    )
+    if not fields:
+        sys.stderr.write('No structured payload fields found in the cached events\n')
+        return 0
+    facets = [
+        await run_blocking(
+            executor,
+            partial(count_by_field, paths, field, filter_node=filter_node, top=args.top),
+        )
+        for field in fields
+    ]
+    if args.output_format == 'md':
+        sys.stdout.write(render_facets_markdown(facets, window_label=_window_label(*_window_from_args(args, now))))
+        return 0
+    for facet in facets:
+        _write_json_line(_facet_to_record(facet))
+    return 0
+
+
+def _facet_to_record(facet: FieldFacet) -> dict[str, object]:
+    return {
+        'field': facet.path,
+        'present': facet.present,
+        'distinct': facet.distinct,
+        'truncated': facet.truncated,
+        'values': [{'value': value.value, 'count': value.count} for value in facet.values],
+    }
 
 
 async def _export_tail(
@@ -743,7 +1016,7 @@ async def _export_tail(
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
-    if _load_config_or_report(args.config_path) is None:
+    if _load_config_or_report(args) is None:
         return 1
     request = TailRequest(
         log_groups=tuple(args.log_groups),
@@ -768,7 +1041,7 @@ async def _export_tail(
 
 
 async def _export_groups(pool: ClientProvider, args: argparse.Namespace) -> int:
-    if _load_config_or_report(args.config_path) is None:
+    if _load_config_or_report(args) is None:
         return 1
     logs = await pool.client('logs')
     groups = [group async for group in describe_log_groups(logs)]
@@ -777,6 +1050,24 @@ async def _export_groups(pool: ClientProvider, args: argparse.Namespace) -> int:
     for group in groups:
         _write_json_line(_log_group_to_record(group))
     return 0
+
+
+async def _target_group_names(logs: Any, patterns: Sequence[str], config: TailCWConfig) -> list[str]:
+    """Resolve patterns to log group names, listing the account only when one is a glob.
+
+    A literal name needs no ``DescribeLogGroups`` sweep, and paying for one on
+    every ``export logs`` would make the common case the expensive one. An
+    unknown ``@preset`` reaches the caller as a :class:`ValueError`.
+    """
+    expanded = expand_presets(patterns, config.presets)
+    if all(not (_PATTERN_CHARACTERS & set(name)) for name in expanded):
+        return list(dict.fromkeys(expanded))
+    groups = [group async for group in describe_log_groups(logs)]
+    resolved: dict[str, None] = {}
+    for pattern in expanded:
+        for group in resolve_group_pattern(pattern, groups):
+            resolved.setdefault(group.name, None)
+    return list(resolved)
 
 
 async def _resolve_summary_groups(
@@ -838,9 +1129,19 @@ async def _export_summary(
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
-    config = _load_config_or_report(args.config_path)
+    config = _load_config_or_report(args)
     if config is None:
         return 1
+    if args.demo:
+        return await _render_summary(
+            _demo_paths(start_time, end_time),
+            args,
+            filter_node,
+            window=(start_time, end_time),
+            names=[DEMO_LOG_GROUP],
+            now=now,
+            executor=executor,
+        )
     logs = await pool.client('logs')
     names = [group.name for group in await _resolve_summary_groups(logs, args.patterns, config.presets)]
     if not names:
@@ -872,10 +1173,31 @@ async def _export_summary(
         fetch_events=fetch_events,
         executor=executor,
     )
+    return await _render_summary(
+        paths,
+        args,
+        filter_node,
+        window=(start_time, end_time),
+        names=names,
+        now=now,
+        executor=executor,
+    )
+
+
+async def _render_summary(
+    paths: Sequence[Path],
+    args: argparse.Namespace,
+    filter_node: FilterNode | None,
+    *,
+    window: tuple[datetime, datetime],
+    names: Sequence[str],
+    now: datetime,
+    executor: ThreadPoolExecutor,
+) -> int:
     if not paths:
         sys.stderr.write('No events found for the requested range\n')
         return 0
-
+    start_time, end_time = window
     report = await run_blocking(
         executor,
         lambda: roll_up(
@@ -916,7 +1238,7 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
-    config = _load_config_or_report(args.config_path)
+    config = _load_config_or_report(args)
     if config is None:
         return 1
     language = QueryLanguage(args.language.upper())
@@ -977,7 +1299,7 @@ async def _export_trace(
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
-    config = _load_config_or_report(args.config_path)
+    config = _load_config_or_report(args)
     if config is None:
         return 1
     logs = await pool.client('logs')
@@ -1260,7 +1582,7 @@ async def _export_alarms(pool: ClientProvider, args: argparse.Namespace, now: da
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
-    if _load_config_or_report(args.config_path) is None:
+    if _load_config_or_report(args) is None:
         return 1
     cloudwatch = await pool.client('cloudwatch')
     alarms = [alarm async for alarm in describe_alarms(cloudwatch, name_prefix=args.prefix, states=args.state)]
@@ -1320,7 +1642,7 @@ async def _export_metrics(pool: ClientProvider, args: argparse.Namespace, now: d
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
-    if _load_config_or_report(args.config_path) is None:
+    if _load_config_or_report(args) is None:
         return 1
 
     # The console's metrics[] shorthand is flat: namespace, metric, then dimension pairs.
@@ -1347,7 +1669,7 @@ async def _export_dimensions(pool: ClientProvider, args: argparse.Namespace) -> 
     ``ApiRequestLatencyMs`` carrying only ``Method`` and ``StatusClass`` is
     otherwise only visible in the emitter's source.
     """
-    if _load_config_or_report(args.config_path) is None:
+    if _load_config_or_report(args) is None:
         return 1
     cloudwatch = await pool.client('cloudwatch')
     definitions = list_metric_definitions(cloudwatch, namespace=args.namespace, metric_name=args.metric)
@@ -1380,7 +1702,7 @@ def _metric_series_to_record(series: MetricSeries) -> dict[str, object]:
 
 
 async def _export_dashboards(pool: ClientProvider, args: argparse.Namespace) -> int:
-    if _load_config_or_report(args.config_path) is None:
+    if _load_config_or_report(args) is None:
         return 1
     for summary in await list_dashboards(await pool.client('cloudwatch')):
         _write_json_line(_dashboard_summary_to_record(summary))
@@ -1391,7 +1713,7 @@ async def _export_dashboard(pool: ClientProvider, args: argparse.Namespace) -> i
     if not args.demo and args.name is None and args.dashboard_file is None:
         sys.stderr.write('Provide a dashboard name, --file, or --demo\n')
         return 2
-    if _load_config_or_report(args.config_path) is None:
+    if _load_config_or_report(args) is None:
         return 1
     try:
         if args.demo:
@@ -1428,7 +1750,7 @@ def _run_cache_command(args: argparse.Namespace, parser: argparse.ArgumentParser
     if args.cache_command is None:
         parser.print_help(sys.stderr)
         return 2
-    config = _load_config_or_report(args.config_path)
+    config = _load_config_or_report(args)
     if config is None:
         return 1
     with open_log_cache(config) as cache:
@@ -1447,6 +1769,7 @@ async def _dispatch_export(
 ) -> int:
     handlers: dict[str, Callable[[], Awaitable[int]]] = {
         'logs': lambda: _export_logs(pool, args, now, fetch_events=fetch_events, executor=executor),
+        'stats': lambda: _export_stats(pool, args, now, fetch_events=fetch_events, executor=executor),
         'tail': lambda: _export_tail(pool, args, now, fetch_events=fetch_events, stream_events=stream_events),
         'groups': lambda: _export_groups(pool, args),
         'summary': lambda: _export_summary(pool, args, now, fetch_events=fetch_events, executor=executor),
@@ -1477,6 +1800,10 @@ async def _run_export_command(
         return 2
     # One pool for the whole export path, sized for the fetch: a CLI export runs one
     # blocking call at a time, so nothing here can starve a query the way the TUI can.
+    # The pool is opened with the account the config resolves to, so the handlers must
+    # not be the first thing to read it.
+    if _load_config_or_report(args) is None:
+        return 1
     with fetch_pool() as executor:
         async with client_pool(profile_name=args.profile, region_name=args.region) as pool:
             return await _dispatch_export(

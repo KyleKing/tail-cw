@@ -2,7 +2,6 @@
 
 import hashlib
 import locale
-import re
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -111,25 +110,78 @@ def test_a_pretty_printed_payload_does_not_break_the_file(fix_test_cache: Path):
 
 
 @pytest.mark.parametrize(
-    ('message', 'expected_path'),
+    ('message', 'expected_path', 'expected_text'),
     [
-        ('{"level":"INFO","meta":{}}', 'parsed.meta'),
-        ('{"level":"INFO","a":{"b":{}}}', 'parsed.a.b'),
+        ('{"level":"INFO","meta":{}}', 'parsed.meta', '{"level":"INFO"}'),
+        # Dropping the inner key empties its parent, which infers the same unwritable struct.
+        ('{"level":"INFO","a":{"b":{}}}', 'parsed.a.b', '{"level":"INFO"}'),
     ],
 )
-def test_an_empty_payload_object_names_the_key_it_came_from(fix_test_cache: Path, message, expected_path):
-    """Polars reports only the dtype, so the bare message cannot be acted on."""
+def test_an_empty_payload_object_is_dropped_and_named(
+    fix_test_cache: Path,
+    message,
+    expected_path,
+    expected_text,
+):
+    """An empty object carries nothing, so refusing the whole fetch over it costs the caller everything."""
     output_path = fix_test_cache / 'empty_struct.parquet'
 
-    with pytest.raises(ValueError, match=f'Empty JSON object at {re.escape(expected_path)}'):
-        write_log_events_to_parquet(make_events([message]), output_path)
+    stats = write_log_events_to_parquet(make_events([message]), output_path)
+
+    assert stats['dropped_payload_keys'] == [expected_path]
+    assert stats['widened_payload_keys'] == []
+    assert [event.message for event in read_parquet_to_log_events(output_path)] == [expected_text]
 
 
-def test_one_key_logged_as_two_scalar_types_says_so(fix_test_cache: Path):
+def test_a_payload_of_only_an_empty_object_reads_back_as_text(fix_test_cache: Path):
+    """Nothing is left to store as a struct, so the record survives as its own text."""
+    output_path = fix_test_cache / 'all_empty.parquet'
+
+    stats = write_log_events_to_parquet(make_events(['{}', '{}']), output_path)
+
+    assert stats['dropped_payload_keys'] == ['parsed']
+    assert [event.message for event in read_parquet_to_log_events(output_path)] == ['{}', '{}']
+
+
+def test_one_key_logged_as_two_types_is_widened_to_text_and_named(fix_test_cache: Path):
     output_path = fix_test_cache / 'conflict.parquet'
 
-    with pytest.raises(ValueError, match='more than one scalar type'):
-        write_log_events_to_parquet(make_events(['{"level":"INFO","n":1}', '{"level":"INFO","n":true}']), output_path)
+    stats = write_log_events_to_parquet(
+        make_events(['{"level":"INFO","n":1}', '{"level":"INFO","n":true}']),
+        output_path,
+    )
+
+    assert stats['widened_payload_keys'] == ['parsed.n (bool, number)']
+    assert [event.message for event in read_parquet_to_log_events(output_path)] == [
+        '{"level":"INFO","n":"1"}',
+        '{"level":"INFO","n":"true"}',
+    ]
+
+
+def test_widening_a_key_takes_its_subtree_and_reports_only_the_root(fix_test_cache: Path):
+    """Naming a child as well would report a key the repair never looked at."""
+    output_path = fix_test_cache / 'subtree.parquet'
+
+    stats = write_log_events_to_parquet(
+        make_events(['{"a":{"b":{"c":1}}}', '{"a":7}']),
+        output_path,
+    )
+
+    assert stats['widened_payload_keys'] == ['parsed.a (number, object)']
+    assert [event.message for event in read_parquet_to_log_events(output_path)] == [
+        '{"a":"{\\"b\\":{\\"c\\":1}}"}',
+        '{"a":"7"}',
+    ]
+
+
+def test_an_int_and_a_float_under_one_key_are_left_alone(fix_test_cache: Path):
+    """Polars widens those itself, so a repair here would retype a key that needed no help."""
+    output_path = fix_test_cache / 'numeric.parquet'
+
+    stats = write_log_events_to_parquet(make_events(['{"n":1}', '{"n":1.5}']), output_path)
+
+    assert stats['widened_payload_keys'] == []
+    assert stats['dropped_payload_keys'] == []
 
 
 def test_write_rejects_an_empty_batch(fix_test_cache: Path):

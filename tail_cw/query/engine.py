@@ -16,6 +16,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 from itertools import islice
+from operator import itemgetter
 from pathlib import Path
 from typing import Any
 
@@ -296,16 +297,8 @@ def _query_with_duckdb(
             con.execute(f'SET threads = {duckdb_threads()}')
             described = con.execute('DESCRIBE SELECT * FROM read_parquet(?)', [str(parquet_path)]).fetchall()
             columns = [row[0] for row in described]
-            source = 'read_parquet(?)'
             params: list[Any] = [str(parquet_path)]
-            where = ''
-
-            if filter_node is not None and filter_node.node_type != FilterNodeType.MATCH_ALL:
-                text_sql = _search_text_sql(has_parsed='parsed' in columns)
-                source = f'(SELECT *, {text_sql} AS {SEARCH_TEXT} FROM read_parquet(?))'  # noqa: S608
-                # Values reaching the clause are escaped by _escape_sql_string; the
-                # identifiers are module constants.
-                where = f' WHERE {_build_duckdb_where_clause(filter_node)}'
+            source, where = duckdb_source_and_where(columns, filter_node)
 
             # Datetimes come back as epoch microseconds and are rebuilt below. DuckDB's
             # own conversion of a timezone-aware timestamp needs pytz, and reading
@@ -335,11 +328,36 @@ def _query_with_duckdb(
         raise ValueError(msg) from e
 
 
+def duckdb_source_and_where(columns: Sequence[str], filter_node: FilterNode | None) -> tuple[str, str]:
+    """Build the ``FROM`` source and ``WHERE`` clause one filtered Parquet read needs.
+
+    A text search reads a column that does not exist in the file, so the filter
+    only means what it says against a source that derives it. Callers that build
+    their own SQL over the cache go through here rather than rebuilding that.
+
+    Args:
+        columns: Column names the file actually has.
+        filter_node: Parsed filter, or None for an unfiltered read.
+
+    Returns:
+        The source expression, which takes the file path as its one parameter,
+        and the ``WHERE`` clause including its leading space (empty when
+        unfiltered).
+    """
+    if filter_node is None or filter_node.node_type == FilterNodeType.MATCH_ALL:
+        return 'read_parquet(?)', ''
+    text_sql = _search_text_sql(has_parsed='parsed' in columns)
+    source = f'(SELECT *, {text_sql} AS {SEARCH_TEXT} FROM read_parquet(?))'  # noqa: S608
+    # Values reaching the clause are escaped by _escape_sql_string; the identifiers are
+    # module constants.
+    return source, f' WHERE {build_duckdb_where_clause(filter_node)}'
+
+
 def _from_epoch_us(microseconds: Any) -> datetime | None:
     return None if microseconds is None else _EPOCH + timedelta(microseconds=int(microseconds))
 
 
-def _build_duckdb_where_clause(node: FilterNode) -> str:
+def build_duckdb_where_clause(node: FilterNode) -> str:
     """Translate FilterNode to a DuckDB SQL WHERE clause snippet.
 
     Returns:
@@ -372,31 +390,31 @@ def _duckdb_clause_regex(node: FilterNode) -> str:
 
 
 def _duckdb_clause_json_equals(node: FilterNode) -> str:
-    field_ref = _build_duckdb_field_reference(node.field_path or [])
+    field_ref = build_field_reference(node.field_path or [])
     value_escaped = _escape_sql_string(node.value or '')
     return f"(parsed IS NOT NULL AND {field_ref} = '{value_escaped}')"
 
 
 def _duckdb_clause_json_not_equals(node: FilterNode) -> str:
-    field_ref = _build_duckdb_field_reference(node.field_path or [])
+    field_ref = build_field_reference(node.field_path or [])
     value_escaped = _escape_sql_string(node.value or '')
     return f"(parsed IS NOT NULL AND {field_ref} != '{value_escaped}')"
 
 
 def _duckdb_clause_json_exists(node: FilterNode) -> str:
-    field_ref = _build_duckdb_field_reference(node.field_path or [])
+    field_ref = build_field_reference(node.field_path or [])
     return f'(parsed IS NOT NULL AND {field_ref} IS NOT NULL)'
 
 
 def _duckdb_clause_json_numeric(node: FilterNode) -> str:
-    field_ref = _build_duckdb_field_reference(node.field_path or [])
+    field_ref = build_field_reference(node.field_path or [])
     operator = node.operator or '='
     value = node.value or '0'
     return f'(parsed IS NOT NULL AND CAST({field_ref} AS DOUBLE) {operator} {value})'
 
 
 def _duckdb_clause_json_regex(node: FilterNode) -> str:
-    field_ref = _build_duckdb_field_reference(node.field_path or [])
+    field_ref = build_field_reference(node.field_path or [])
     pattern_escaped = _escape_sql_string(node.value or '')
     return f"(parsed IS NOT NULL AND regexp_matches({field_ref}, '{pattern_escaped}'))"
 
@@ -406,7 +424,7 @@ def _duckdb_clause_and(node: FilterNode) -> str:
         msg = 'AND node must have children'
         raise ValueError(msg)
 
-    child_clauses = [_build_duckdb_where_clause(child) for child in node.children]
+    child_clauses = [build_duckdb_where_clause(child) for child in node.children]
     return f'({" AND ".join(child_clauses)})'
 
 
@@ -415,7 +433,7 @@ def _duckdb_clause_or(node: FilterNode) -> str:
         msg = 'OR node must have children'
         raise ValueError(msg)
 
-    child_clauses = [_build_duckdb_where_clause(child) for child in node.children]
+    child_clauses = [build_duckdb_where_clause(child) for child in node.children]
     return f'({" OR ".join(child_clauses)})'
 
 
@@ -424,7 +442,7 @@ def _duckdb_clause_not(node: FilterNode) -> str:
         msg = 'NOT node must have exactly one child'
         raise ValueError(msg)
 
-    child_clause = _build_duckdb_where_clause(node.children[0])
+    child_clause = build_duckdb_where_clause(node.children[0])
     return f'NOT ({child_clause})'
 
 
@@ -445,7 +463,7 @@ _DUCKDB_BUILDERS: dict[FilterNodeType, DuckDBClauseBuilder] = {
 }
 
 
-def _build_duckdb_field_reference(field_path: list[str]) -> str:
+def build_field_reference(field_path: list[str]) -> str:
     """Build DuckDB struct field reference from field path.
 
     Args:
@@ -455,13 +473,13 @@ def _build_duckdb_field_reference(field_path: list[str]) -> str:
         DuckDB field reference (e.g., "parsed.level" or "parsed['key-with-hyphen']")
 
     Examples:
-        >>> _build_duckdb_field_reference(['level'])
+        >>> build_field_reference(['level'])
         'parsed.level'
 
-        >>> _build_duckdb_field_reference(['context', 'user', 'id'])
+        >>> build_field_reference(['context', 'user', 'id'])
         'parsed.context.user.id'
 
-        >>> _build_duckdb_field_reference(['key-with-hyphen'])
+        >>> build_field_reference(['key-with-hyphen'])
         "parsed['key-with-hyphen']"
     """
     if not field_path:
@@ -774,6 +792,26 @@ def query_parquet_file_to_log_events(
         limit=limit,
     ):
         yield _dict_to_log_event(row)
+
+
+def query_parquet_files_to_records(
+    parquet_paths: Sequence[Path],
+    filter_node: FilterNode | None = None,
+    *,
+    backend: QueryBackend = QueryBackend.AUTO,
+    limit: int | None = None,
+) -> Iterator[dict[str, Any]]:
+    """Query several Parquet files and yield their rows merged by timestamp.
+
+    The same merge as :func:`query_parquet_files_to_log_events`, except the row
+    keeps ``parsed``, which a :class:`LogEvent` has nowhere to hold.
+
+    Yields:
+        Row dicts in ascending timestamp order across all files
+    """
+    streams = [query_parquet_file(path, filter_node, backend=backend, limit=limit) for path in parquet_paths]
+    merged = heapq.merge(*streams, key=itemgetter('timestamp'))
+    yield from islice(merged, limit) if limit is not None else merged
 
 
 def query_parquet_files_to_log_events(

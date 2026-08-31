@@ -64,13 +64,18 @@ def readable_message(row: Mapping[str, Any]) -> str:
     if message is not None:
         return str(message)
     parsed = row.get('parsed')
-    return json.dumps(_without_nulls(parsed), separators=(',', ':')) if parsed is not None else ''
+    return json.dumps(without_nulls(parsed), separators=(',', ':')) if parsed is not None else ''
 
 
-def _without_nulls(value: Any) -> Any:
-    """Drop the null fields Polars adds when widening a struct across records."""
+def without_nulls(value: Any) -> Any:
+    """Drop the null fields Polars adds when widening a struct across records.
+
+    A struct column carries every key any record in the file used, so a record
+    that never had a key reads back holding it as null. Emitting those would
+    describe the file rather than the event.
+    """
     if isinstance(value, dict):
-        return {key: _without_nulls(item) for key, item in value.items() if item is not None}
+        return {key: without_nulls(item) for key, item in value.items() if item is not None}
     if isinstance(value, list):
-        return [_without_nulls(item) for item in value]
+        return [without_nulls(item) for item in value]
     return value

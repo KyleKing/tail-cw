@@ -56,7 +56,7 @@ class _FakePool:
 def _live(config: TailCWConfig, session: Session) -> tuple[ShellServices, _FakePool]:
     pool = _FakePool()
     with ThreadPoolExecutor(max_workers=1) as executor, ThreadPoolExecutor(max_workers=1) as fetch_executor:
-        return _live_services(config, session, pool, executor, fetch_executor), pool
+        return _live_services(config, session, pool, executor, fetch_executor, on_notice=lambda _notice: None), pool
 
 
 def test_main_function_exists():
@@ -320,7 +320,7 @@ async def test_a_fetch_and_a_query_do_not_share_a_thread_pool(tmp_path):
         return []
 
     with ThreadPoolExecutor(max_workers=1) as queries, ThreadPoolExecutor(max_workers=1) as fetches:
-        services = _live_services(config, session, pool, queries, fetches)
+        services = _live_services(config, session, pool, queries, fetches, on_notice=lambda _notice: None)
         assert services.resolve_logs is not None
         assert services.load_traces is not None
         with patch('tail_cw.services.resolve_parquet_paths', fake_resolve):

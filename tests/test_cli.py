@@ -31,6 +31,7 @@ from tail_cw.cli import (
     parse_time,
     resolve_parquet_path,
     resolve_parquet_paths,
+    resolve_profile,
     run_cli,
     seed_from_args,
     server_side_pattern,
@@ -38,7 +39,7 @@ from tail_cw.cli import (
     stream_ndjson,
     write_ndjson,
 )
-from tail_cw.config import CacheConfig, TailCWConfig
+from tail_cw.config import AwsConfig, CacheConfig, TailCWConfig
 from tail_cw.parser import build_parser
 from tail_cw.recents import Recents
 
@@ -94,6 +95,40 @@ class _FakeFetcher:
         self.calls.append({'log_group': log_group, 'start_time': start_time, 'end_time': end_time, **kwargs})
         for event in self.events:
             yield event
+
+
+def _levelled_events(levels: list[str]) -> list[LogEvent]:
+    """Events inside a two-minute window, so one segment covers them all."""
+    return [
+        LogEvent(
+            log_group='/aws/test/group',
+            log_stream='stream-1',
+            timestamp=NOW - timedelta(seconds=len(levels) - index),
+            message=f'{{"level":"{level}"}}',
+            ingestion_time=None,
+        )
+        for index, level in enumerate(levels)
+    ]
+
+
+class _SegmentFetcher:
+    """Fetcher returning a fixed number of distinct events per segment asked for."""
+
+    def __init__(self, *, per_segment: int) -> None:
+        self.per_segment = per_segment
+        self.calls: list[datetime] = []
+
+    async def __call__(self, _client, log_group, start_time, end_time, **kwargs) -> AsyncIterator[LogEvent]:
+        del end_time, kwargs
+        self.calls.append(start_time)
+        for index in range(self.per_segment):
+            yield LogEvent(
+                log_group=log_group,
+                log_stream='stream-1',
+                timestamp=start_time + timedelta(seconds=index),
+                message=f'{{"level":"INFO","segment":"{start_time.isoformat()}","index":{index}}}',
+                ingestion_time=None,
+            )
 
 
 class _GroupFetcher:
@@ -301,9 +336,11 @@ def test_build_parser_export_logs_defaults():
 
     assert args.command == 'export'
     assert args.export_command == 'logs'
-    assert args.log_group == '/aws/lambda/fn'
+    assert args.patterns == ['/aws/lambda/fn']
     assert args.start == '1h'
     assert args.no_cache is False
+    assert args.parsed is False
+    assert args.limit is None
 
 
 def test_build_parser_export_tail_defaults():
@@ -1759,3 +1796,169 @@ def test_a_sql_insights_query_refuses_log_group_arguments(tmp_path, capsys, monk
 
     assert run_cli(argv, None, is_tty=False) == 2
     assert 'takes no log group arguments' in capsys.readouterr().err
+
+
+def test_export_logs_parsed_replaces_the_raw_message(tmp_path, capsys):
+    """The cache already holds the decoded payload; the reader should not re-parse it."""
+    config_path = _write_config_file(tmp_path)
+
+    result = run_cli(
+        ['export', 'logs', '/aws/test/group', '--start', '2m', '--parsed', '--config', str(config_path)],
+        _RecordingShell(),
+        fetch_events=_FakeFetcher(_make_events(2)),
+        is_tty=False,
+    )
+
+    assert result == 0
+    records = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
+    assert [record['parsed'] for record in records] == [{'level': 'INFO', 'index': 0}, {'level': 'INFO', 'index': 1}]
+    assert all('message' not in record for record in records)
+
+
+def test_export_logs_parsed_keeps_a_message_that_was_never_json(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+    events = [replace(event, message='plain text') for event in _make_events(1)]
+
+    result = run_cli(
+        ['export', 'logs', '/aws/test/group', '--start', '2m', '--parsed', '--config', str(config_path)],
+        _RecordingShell(),
+        fetch_events=_FakeFetcher(events),
+        is_tty=False,
+    )
+
+    assert result == 0
+    assert json.loads(capsys.readouterr().out.strip())['message'] == 'plain text'
+
+
+def test_export_logs_accepts_a_glob(tmp_path, capsys, monkeypatch):
+    """``export summary`` always took one, and the two commands disagreeing was the bug."""
+    config_path = _write_config_file(tmp_path)
+    fetcher = _GroupFetcher({'/aws/test/group', '/aws/other'})
+    monkeypatch.setattr(
+        'tail_cw.cli.describe_log_groups',
+        _async_iter_factory([_make_group('/aws/test/group'), _make_group('/aws/other')]),
+    )
+
+    result = run_cli(
+        ['export', 'logs', '/aws/test/*', '--start', '2m', '--config', str(config_path)],
+        _RecordingShell(),
+        fetch_events=fetcher,
+        is_tty=False,
+    )
+
+    assert result == 0
+    assert fetcher.calls == ['/aws/test/group']
+    assert len(capsys.readouterr().out.strip().splitlines()) == 2
+
+
+def test_export_logs_without_a_glob_never_lists_the_account(tmp_path, monkeypatch):
+    """Paying for a DescribeLogGroups sweep on every literal name makes the common case the costly one."""
+    config_path = _write_config_file(tmp_path)
+
+    def refuse(*_args, **_kwargs):
+        pytest.fail('a literal log group name should not list the account')
+
+    monkeypatch.setattr('tail_cw.cli.describe_log_groups', refuse)
+
+    result = run_cli(
+        ['export', 'logs', '/aws/test/group', '--start', '2m', '--config', str(config_path)],
+        _RecordingShell(),
+        fetch_events=_FakeFetcher(_make_events(1)),
+        is_tty=False,
+    )
+
+    assert result == 0
+
+
+def test_export_logs_limit_stops_the_fetch(tmp_path, capsys):
+    """A ``| head -N`` pipeline paid for the whole window before truncating it."""
+    config_path = _write_config_file(tmp_path)
+    # Five-minute segments over an hour, so a limit of ten must stop well before the last.
+    fetcher = _SegmentFetcher(per_segment=5)
+
+    result = run_cli(
+        ['export', 'logs', '/aws/test/group', '--start', '1h', '--limit', '10', '--config', str(config_path)],
+        _RecordingShell(),
+        fetch_events=fetcher,
+        is_tty=False,
+    )
+
+    assert result == 0
+    assert len(capsys.readouterr().out.strip().splitlines()) == 10
+    assert 2 <= len(fetcher.calls) < 6
+
+
+def test_export_stats_counts_by_field(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+    events = _levelled_events(['INFO', 'ERROR', 'INFO'])
+
+    result = run_cli(
+        ['export', 'stats', '/aws/test/group', '--start', '2m', '--by', 'level', '--config', str(config_path)],
+        _RecordingShell(),
+        fetch_events=_FakeFetcher(events),
+        is_tty=False,
+    )
+
+    assert result == 0
+    record = json.loads(capsys.readouterr().out.strip())
+    assert record['field'] == 'level'
+    assert record['values'] == [{'value': 'INFO', 'count': 2}, {'value': 'ERROR', 'count': 1}]
+
+
+def test_export_stats_discovers_the_fields_when_none_are_named(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+    events = [replace(_levelled_events(['INFO'])[0], message='{"level":"INFO","svc":"api"}')]
+
+    result = run_cli(
+        ['export', 'stats', '/aws/test/group', '--start', '2m', '--config', str(config_path)],
+        _RecordingShell(),
+        fetch_events=_FakeFetcher(events),
+        is_tty=False,
+    )
+
+    assert result == 0
+    fields = [json.loads(line)['field'] for line in capsys.readouterr().out.strip().splitlines()]
+    assert fields == ['level', 'svc']
+
+
+@pytest.mark.parametrize('command', [['export', 'logs'], ['export', 'stats'], ['export', 'summary']])
+def test_export_demo_needs_no_credentials(command, capsys):
+    """The surface every caller uses had no offline smoke test."""
+    assert run_cli([*command, '--demo'], _RecordingShell(), is_tty=False) == 0
+    assert capsys.readouterr().out.strip()
+
+
+def test_export_logs_without_a_group_says_what_to_pass(capsys):
+    assert run_cli(['export', 'logs'], _RecordingShell(), is_tty=False) == 1
+    assert '--demo' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ('explicit', 'patterns', 'expected'),
+    [
+        (None, [], 'from-config'),
+        ('typed', [], 'typed'),
+        (None, ['@billing'], 'from-preset'),
+        ('typed', ['@billing'], 'typed'),
+        (None, ['@api'], 'from-config'),
+    ],
+)
+def test_resolve_profile_precedence(explicit, patterns, expected):
+    config = TailCWConfig(
+        aws=AwsConfig(profile='from-config'),
+        presets={'api': ['/a'], 'billing': ['/b']},
+        preset_profiles={'billing': 'from-preset'},
+    )
+
+    assert resolve_profile(explicit, patterns, config) == expected
+
+
+def test_resolve_profile_rejects_two_presets_that_disagree():
+    """One command reads one account, so this is a conflict rather than a precedence question."""
+    config = TailCWConfig(
+        presets={'a': ['/a'], 'b': ['/b']},
+        preset_profiles={'a': 'one', 'b': 'two'},
+    )
+
+    with pytest.raises(ValueError, match='more than one profile'):
+        resolve_profile(None, ['@a', '@b'], config)
