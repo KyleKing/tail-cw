@@ -35,6 +35,7 @@ from tail_cw.tui.picker import (
     PickerColumn,
     humanize_bytes,
     resolve_name_pattern,
+    should_fetch,
 )
 from tail_cw.tui.shell import ShellCommand, ShellScreen
 
@@ -101,6 +102,7 @@ class DashboardsScreen(ShellScreen):
         self._summaries: list[DashboardSummary] = []
         self._visible: list[DashboardSummary] = []
         self._bodies: dict[str, Dashboard] = {}
+        self._loading: str | None = None
         self._detail_debounce: Debounce | None = None
 
     def compose_content(self) -> ComposeResult:  # ruff: ignore[no-self-use]
@@ -261,6 +263,11 @@ class DashboardsScreen(ShellScreen):
             self._detail_debounce.schedule(lambda: self._start_detail(name))
 
     def _start_detail(self, name: str) -> None:
+        # A relayout re-highlights the same row, and the worker is exclusive: a second
+        # start cancels the first mid-flight, or re-fetches a body already cached.
+        if not should_fetch(name, cached=self._bodies, in_flight=self._loading):
+            return
+        self._loading = name
         self.run_worker(
             self._fetch_detail(name),
             name='load_dashboard',
@@ -277,6 +284,8 @@ class DashboardsScreen(ShellScreen):
         except Exception as err:
             self.notify(f'Loading {name} failed: {err}', severity='warning')
             return
+        finally:
+            self._loading = None
         self._apply_detail(dashboard)
 
     def _apply_detail(self, dashboard: Dashboard) -> None:

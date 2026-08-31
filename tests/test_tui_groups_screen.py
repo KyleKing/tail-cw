@@ -388,6 +388,40 @@ async def test_a_cached_preview_is_not_refetched() -> None:
         assert requested == ['/aws/lambda/api', '/aws/lambda/api-worker']
 
 
+async def test_a_preview_that_arrives_while_pending_is_not_refetched() -> None:
+    """A fire after the value landed is the double-sample Windows CI reproduced."""
+    requested: list[str] = []
+    release = asyncio.Event()
+
+    async def preview_group(name: str) -> GroupPreview:
+        requested.append(name)
+        await release.wait()
+        return GroupPreview(log_group=name, event_count=7, window_seconds=900, patterns=[])
+
+    app = _app(ShellServices(list_groups=calls(lambda: list(_GROUPS)), preview_group=preview_group), debounce=30.0)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await _settle(app, pilot)
+        screen = _screen(app)
+        assert screen._preview_debounce is not None
+
+        await pilot.press('down')
+        await pilot.pause()
+        screen._preview_debounce.flush()
+        await pilot.pause()
+        assert requested == ['/aws/lambda/api-worker']
+
+        await pilot.press('up')
+        await pilot.press('down')
+        await pilot.pause()
+        assert screen._preview_debounce.pending
+
+        release.set()
+        await _settle(app, pilot)
+        screen._preview_debounce.flush()
+        await _settle(app, pilot)
+        assert requested == ['/aws/lambda/api-worker']
+
+
 async def test_refresh_view_resamples_after_the_window_moves() -> None:
     requested: list[str] = []
 

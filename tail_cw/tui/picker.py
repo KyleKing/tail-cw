@@ -8,7 +8,7 @@ here too rather than being written twice.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -94,6 +94,16 @@ def selection_status(*, visible: int, total: int, selected: int, cap: int) -> st
     """Render the status line under a picker table."""
     counts = f'{visible} of {total}' if visible != total else f'{total}'
     return f'{counts} shown  ·  {selected}/{cap} selected'
+
+
+def should_fetch(name: str, *, cached: Collection[str], in_flight: str | None) -> bool:
+    """Whether a deferred detail fetch is still worth dispatching.
+
+    A debounced call fires after the request that scheduled it, so the value can
+    arrive in between. Re-checking both the cache and the in-flight name at fire
+    time is what keeps a row highlighted twice from costing two API calls.
+    """
+    return name not in cached and in_flight != name
 
 
 class Debounce:

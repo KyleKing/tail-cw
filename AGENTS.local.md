@@ -250,6 +250,11 @@ If you introduce or modify Textual UI code:
     `[/path.parquet]`, which Rich parses as a closing tag and raises `MarkupError`
     from inside `update`, so the error handler took the app down on every failed
     search
+- A debounced fetch must re-check its cache *at fire time*, not only when scheduled
+    (`should_fetch` in `tail_cw/tui/picker.py`).
+    The value can arrive between the two, and the browsers paid for a second API call per
+    highlight on Windows because of it: four TUI tests failed there and nowhere else, each
+    with the requested name twice
     - Never handle `on_descendant_blur` to restore focus.
         It fires when another control opens
         and steals the focus straight back; watch the one widget you mean

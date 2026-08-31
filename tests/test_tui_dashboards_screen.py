@@ -266,6 +266,42 @@ async def test_a_cached_body_is_not_refetched() -> None:
         assert requested == ['prod-overview', 'prod-lambda']
 
 
+async def test_a_body_that_arrives_while_pending_is_not_refetched() -> None:
+    """A fire after the value landed is the double-fetch Windows CI reproduced."""
+    requested: list[str] = []
+    release = asyncio.Event()
+
+    async def load_dashboard(name: str) -> Dashboard:
+        requested.append(name)
+        await release.wait()
+        return Dashboard(name=name)
+
+    app = _app(
+        ShellServices(list_dashboards=calls(lambda: list(_SUMMARIES)), load_dashboard=load_dashboard), debounce=30.0
+    )
+    async with app.run_test(size=(140, 40)) as pilot:
+        await _settle(app, pilot)
+        screen = _screen(app)
+        assert screen._detail_debounce is not None
+
+        await pilot.press('down')
+        await pilot.pause()
+        screen._detail_debounce.flush()
+        await pilot.pause()
+        assert requested == ['prod-lambda']
+
+        await pilot.press('up')
+        await pilot.press('down')
+        await pilot.pause()
+        assert screen._detail_debounce.pending
+
+        release.set()
+        await _settle(app, pilot)
+        screen._detail_debounce.flush()
+        await _settle(app, pilot)
+        assert requested == ['prod-lambda']
+
+
 async def test_failures_leave_the_view_usable() -> None:
     async def load_dashboard(name: str) -> Dashboard:
         msg = f'boom {name}'

@@ -33,6 +33,7 @@ from tail_cw.tui.picker import (
     format_window,
     humanize_bytes,
     selection_status,
+    should_fetch,
 )
 from tail_cw.tui.shell import MAX_SELECTED_GROUPS, ShellCommand, ShellScreen
 
@@ -415,9 +416,9 @@ class GroupsScreen(ShellScreen):
             self._preview_debounce.schedule(lambda: self._start_preview(name))
 
     def _start_preview(self, name: str) -> None:
-        if self._sampling == name:
-            # A relayout re-highlights the same row, and the worker is exclusive: a second
-            # start cancels the first mid-flight and samples the group twice.
+        # A relayout re-highlights the same row, and the worker is exclusive: a second
+        # start cancels the first mid-flight, or re-samples a group already cached.
+        if not should_fetch(name, cached=self._previews, in_flight=self._sampling):
             return
         self._sampling = name
         self.run_worker(
