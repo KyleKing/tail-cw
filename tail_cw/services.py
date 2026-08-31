@@ -44,6 +44,7 @@ from tail_cw.demo import (
 from tail_cw.preview import Activity, GroupPreview, bucket_event_counts, build_group_preview
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.expression import parse_query
+from tail_cw.query.facets import FieldFacet, count_by_field, discover_field_paths, worth_showing
 from tail_cw.query.patterns import cluster_messages
 from tail_cw.query.rollup import RollupReport, roll_up
 from tail_cw.query.severity import Severity
@@ -52,6 +53,7 @@ from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.shell import (
     CountEvents,
     FetchXRayTrace,
+    FieldFacets,
     ListAlarms,
     LoadTraces,
     LogVolume,
@@ -66,6 +68,13 @@ from tail_cw.tui.views import build_screen
 T = TypeVar('T')
 
 _COUNT_EVENTS_CAP = 1000
+
+FACET_FIELD_LIMIT = 8
+"""Payload fields the log view's panel counts.
+
+Each one is a separate group-by over every cached file, so the cap is what keeps
+a wide payload from turning one keystroke into thirty scans.
+"""
 
 
 def _seed_to_target(seed: ShellSeed) -> NavTarget:
@@ -121,7 +130,14 @@ def _demo_services() -> ShellServices:
         list_groups=lambda: _ready(_demo_groups()),
         preview_group=lambda group: _ready(_demo_preview(group)),
         fetch_xray_trace=lambda trace_id: _ready(demo_xray_trace(trace_id)),
+        field_facets=lambda paths, filter_pattern, top: _ready(_demo_facets(paths, filter_pattern, top)),
     )
+
+
+def _demo_facets(paths: Sequence[Path], filter_pattern: str | None, top: int) -> list[FieldFacet]:
+    filter_node = parse_query(filter_pattern) if filter_pattern else None
+    fields = discover_field_paths(list(paths), limit=FACET_FIELD_LIMIT)
+    return worth_showing([count_by_field(list(paths), field, filter_node=filter_node, top=top) for field in fields])
 
 
 def _demo_groups() -> list[LogGroupInfo]:
@@ -166,7 +182,7 @@ def _cache_services(
     fetch_executor: ThreadPoolExecutor,
     *,
     on_notice: NoticeSink,
-) -> tuple[ResolveLogs, LogVolume, CountEvents, LoadTraces]:
+) -> tuple[ResolveLogs, LogVolume, CountEvents, LoadTraces, FieldFacets]:
     """Build the services that end in blocking Parquet work.
 
     Query work goes to ``executor`` and segment writes to ``fetch_executor``, so a
@@ -208,6 +224,17 @@ def _cache_services(
         events = await take(fetch_log_events(client, log_group, start, end), _COUNT_EVENTS_CAP)
         return len(events)
 
+    async def field_facets(paths: Sequence[Path], filter_pattern: str | None, top: int) -> list[FieldFacet]:
+        filter_node = parse_query(filter_pattern) if filter_pattern else None
+
+        def count() -> list[FieldFacet]:
+            fields = discover_field_paths(list(paths), limit=FACET_FIELD_LIMIT)
+            return worth_showing(
+                [count_by_field(list(paths), field, filter_node=filter_node, top=top) for field in fields],
+            )
+
+        return await run_blocking(executor, count)
+
     async def load_traces(
         paths: Sequence[Path],
         trace_id: str | None,
@@ -224,7 +251,7 @@ def _cache_services(
 
         return await run_blocking(executor, group)
 
-    return resolve_logs, log_volume, count_events, load_traces
+    return resolve_logs, log_volume, count_events, load_traces, field_facets
 
 
 def _cloudwatch_services(pool: ClientProvider) -> tuple[ListAlarms, RunInsights, SampleRates, FetchXRayTrace]:
@@ -281,7 +308,7 @@ def _live_services(
     *,
     on_notice: NoticeSink,
 ) -> ShellServices:
-    resolve_logs, log_volume, count_events, load_traces = _cache_services(
+    resolve_logs, log_volume, count_events, load_traces, field_facets = _cache_services(
         config,
         session,
         pool,
@@ -348,6 +375,7 @@ def _live_services(
         log_volume=log_volume,
         count_events=count_events,
         load_traces=load_traces,
+        field_facets=field_facets,
         roll_up_logs=roll_up_logs,
         list_alarms=list_alarms,
         run_insights=run_insights,

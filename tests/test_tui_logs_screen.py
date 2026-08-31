@@ -11,12 +11,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from textual.pilot import Pilot
 from textual.widgets import DataTable, Label
 
 from tail_cw.aws.events import LogEvent
 from tail_cw.cache.storage import write_log_events_to_parquet
 from tail_cw.cli import Session
 from tail_cw.config import TailCWConfig, TUIConfig
+from tail_cw.query.expression import parse_query
+from tail_cw.query.facets import FieldFacet, count_by_field, discover_field_paths, worth_showing
+from tail_cw.tui.facets_panel import FacetsPanel
 from tail_cw.tui.logs_screen import LogsScreen, ProgressUpdate, _field_syntax_hint
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.shell import ShellServices, TailCWApp
@@ -855,7 +859,7 @@ async def test_view_commands_toggle_live_and_trace():
     async with running(app) as pilot:
         screen = _logs_screen(app)
 
-        assert set(screen.commands()) == {'live', 'pivot', 'trace'}
+        assert set(screen.commands()) == {'fields', 'live', 'pivot', 'trace'}
         assert screen.run_view_command('nope', '') is False
         assert screen.run_view_command('live', '') is True
         await pilot.pause()
@@ -1469,3 +1473,118 @@ async def test_h_shows_when_the_events_happened_and_marks_a_capped_load(tmp_path
         await pilot.press('h')
         await pilot.pause()
         assert not row.has_class('shown')
+
+
+def _facet_services(paths: Sequence[Path]) -> ShellServices:
+    """Resolve to ``paths``, and count their fields the way the live service does."""
+
+    async def resolve(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
+        del groups, start, end
+        return list(paths)
+
+    async def facets(files: Sequence[Path], filter_pattern: str | None, top: int) -> list[FieldFacet]:
+        filter_node = parse_query(filter_pattern) if filter_pattern else None
+        fields = discover_field_paths(list(files), limit=8)
+        return worth_showing([count_by_field(list(files), field, filter_node=filter_node, top=top) for field in fields])
+
+    return ShellServices(resolve_logs=resolve, field_facets=facets)
+
+
+async def _settle(app: TailCWApp, pilot: Pilot[None]) -> None:
+    """Wait out the load, then the field counts the load starts."""
+    for _ in range(4):
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+
+def _facet_app(tmp_path: Path, messages: list[str]) -> TailCWApp:
+    """A log view whose one cached file holds exactly these messages."""
+    events = [
+        LogEvent(
+            timestamp=BASE_TIME + timedelta(seconds=index),
+            message=message,
+            log_group=DEFAULT_GROUP,
+            log_stream='stream-0',
+            ingestion_time=None,
+        )
+        for index, message in enumerate(messages)
+    ]
+    return _make_app(services=_facet_services([_write_parquet(events, tmp_path / 'facets.parquet')]))
+
+
+@pytest.mark.asyncio
+async def test_the_field_panel_counts_what_the_window_holds(tmp_path: Path):
+    """Half the log view was empty, and knowing the payload schema was a prerequisite."""
+    app = _facet_app(tmp_path, ['{"level":"info"}'] * 3 + ['{"level":"error"}'])
+
+    async with app.run_test(size=(120, 30)) as pilot:
+        await _settle(app, pilot)
+        panel = app.screen.query_one('#facets', FacetsPanel)
+
+        assert panel.has_class('shown')
+        prompts = [str(option.prompt) for option in panel._options]
+        assert any(prompt.strip() == 'level' for prompt in prompts)
+        assert any('info' in prompt and '3' in prompt for prompt in prompts)
+
+
+@pytest.mark.asyncio
+async def test_a_narrow_terminal_gives_the_panels_cells_to_the_message(tmp_path: Path):
+    """Below the threshold the message column is the thing that needs them."""
+    app = _facet_app(tmp_path, ['{"level":"info"}'])
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await _settle(app, pilot)
+
+        assert not app.screen.query_one('#facets', FacetsPanel).has_class('shown')
+
+
+@pytest.mark.asyncio
+async def test_pressing_f_moves_between_the_table_and_the_field_panel(tmp_path: Path):
+    """A binding is not covered until a test presses the key."""
+    app = _facet_app(tmp_path, ['{"level":"info"}'])
+
+    async with app.run_test(size=(120, 30)) as pilot:
+        await _settle(app, pilot)
+        panel = app.screen.query_one('#facets', FacetsPanel)
+
+        await pilot.press('f')
+        await pilot.pause()
+        assert panel.has_focus
+
+        await pilot.press('f')
+        await pilot.pause()
+        assert app.screen.query_one('#log_table', DataTable).has_focus
+
+
+@pytest.mark.asyncio
+async def test_choosing_a_field_value_filters_the_table(tmp_path: Path):
+    app = _facet_app(tmp_path, ['{"level":"info"}'] * 3 + ['{"level":"error"}'])
+
+    async with app.run_test(size=(120, 30)) as pilot:
+        await _settle(app, pilot)
+        screen = _logs_screen(app)
+        assert screen.query_one('#log_table', DataTable).row_count == 4
+
+        await pilot.press('f')
+        await pilot.pause()
+        await pilot.press('down', 'enter')
+        await _settle(app, pilot)
+
+        assert screen._search_input is not None
+        assert screen._search_input.value == 'level:info'
+
+
+@pytest.mark.asyncio
+async def test_hiding_the_panel_gives_its_width_back_to_the_message(tmp_path: Path):
+    app = _facet_app(tmp_path, ['{"level":"info"}'])
+
+    async with app.run_test(size=(120, 30)) as pilot:
+        await _settle(app, pilot)
+        screen = _logs_screen(app)
+        narrow = next(column.width for column in screen._columns if column.key == 'message')
+
+        screen.run_view_command('fields', '')
+        await _settle(app, pilot)
+
+        wide = next(column.width for column in screen._columns if column.key == 'message')
+        assert wide > narrow

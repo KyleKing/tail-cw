@@ -33,6 +33,7 @@ from tail_cw.cli import Session, expand_filter, expand_presets
 from tail_cw.config import TailCWConfig
 from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.preview import GroupPreview
+from tail_cw.query.facets import FieldFacet
 from tail_cw.query.rollup import RollupReport
 from tail_cw.query.trace import TraceGroup
 from tail_cw.recents import Recents, load_recents, profile_recents, record_selection, save_recents
@@ -64,6 +65,7 @@ LiveStream = Callable[[Sequence[str], str | None], AsyncIterator[LogEvent]]
 LogVolume = Callable[[str, datetime, datetime], Awaitable[list[float]]]
 CountEvents = Callable[[str, datetime, datetime], Awaitable[int]]
 LoadTraces = Callable[[Sequence[Path], str | None, Sequence[str], int | None], Awaitable[list[TraceGroup]]]
+FieldFacets = Callable[[Sequence[Path], str | None, int], Awaitable[list[FieldFacet]]]
 RollUpLogs = Callable[[Sequence[str], datetime, datetime], Awaitable[RollupReport]]
 ListAlarms = Callable[[datetime, datetime], Awaitable[tuple[list[AlarmSummary], dict[str, int]]]]
 RunInsights = Callable[[Sequence[str], str, datetime, datetime], Awaitable[InsightsResult]]
@@ -106,6 +108,7 @@ class ShellServices:
     log_volume: LogVolume | None = None
     count_events: CountEvents | None = None
     load_traces: LoadTraces | None = None
+    field_facets: FieldFacets | None = None
     roll_up_logs: RollUpLogs | None = None
     list_alarms: ListAlarms | None = None
     run_insights: RunInsights | None = None

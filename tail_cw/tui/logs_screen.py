@@ -22,7 +22,7 @@ from rich.text import Text
 from textual import events, on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container
+from textual.containers import Container, Horizontal
 from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import DataTable, Input, Label
@@ -46,6 +46,7 @@ from tail_cw.query.trace import (
     query_traces_from_parquet_files,
 )
 from tail_cw.tui.command_bar import SearchLine
+from tail_cw.tui.facets_panel import MIN_TERMINAL_WIDTH, PANEL_WIDTH, FacetSelected, FacetsPanel
 from tail_cw.tui.log_viewer import Column, format_rows, plan_columns
 from tail_cw.tui.navigation import NavTarget, ViewKind
 from tail_cw.tui.record_detail import RecordDetailScreen
@@ -58,6 +59,8 @@ _LIVE_FLUSH_INTERVAL_SECONDS = 0.25
 _LOAD_TICK_SECONDS = 1.0
 _PIVOT_FIELDS_NAMED = 3
 _HISTOGRAM_MARGIN = 52
+_FACET_VALUES = 6
+"""Values named per field in the panel. Beyond this the panel scrolls more than it tells."""
 """Columns the headline and the capped note keep beside the bars."""
 _HISTOGRAM_MIN_COLUMNS = 8
 _HISTOGRAM_COLORS = {Severity.INFO: 'cyan', Severity.WARNING: 'yellow', Severity.ERROR: 'red'}
@@ -128,9 +131,24 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         layout: vertical;
     }
 
-    #log_table {
+    #log_body {
         height: 1fr;
         width: 100%;
+    }
+
+    #log_table {
+        height: 1fr;
+        width: 1fr;
+    }
+
+    #facets {
+        height: 1fr;
+        width: 30;
+        display: none;
+    }
+
+    #facets.shown {
+        display: block;
     }
 
     #histogram {
@@ -169,6 +187,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         Binding('x', 'pivot_xray', 'X-Ray', show=True),
         Binding('p', 'pivot', 'Pivot', show=True),
         Binding('h', 'toggle_histogram', 'Histogram', show=True),
+        Binding('f', 'toggle_facets', 'Fields', show=True),
         # DataTable answers to the arrow keys; these are the vim motions over the
         # same cursor, so hjkl-hands never reach for the arrows.
         Binding('j', 'move(1)', 'Down', show=False),
@@ -205,6 +224,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._live_sampled = False
         self._live_event_count = 0
         self._show_histogram = False
+        self._show_facets = True
         self._load_capped = False
         self._load_timer: Timer | None = None
         self._loading_since: float | None = None
@@ -232,13 +252,14 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         yield SearchLine(placeholder='Search (CloudWatch syntax or key:value)...')
         yield Label('', id='histogram')
         with Container():
-            yield DataTable(
-                id='log_table',
-                show_header=True,
-                show_cursor=True,
-                zebra_stripes=True,
-                cursor_type='row',
-            )
+            with Horizontal(id='log_body'):
+                yield DataTable(
+                    id='log_table',
+                    show_header=True,
+                    show_cursor=True,
+                    cursor_type='row',
+                )
+                yield FacetsPanel(id='facets')
             yield Label('No logs loaded', id='status')
 
     def on_mount(self) -> None:
@@ -263,6 +284,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             'live': ShellCommand('Toggle between the historical window and a live stream'),
             'trace': ShellCommand('Open the trace view, over one id or the whole window', ('<trace>',)),
             'pivot': ShellCommand("Search every selected group for the row's own id", ('<field>',)),
+            'fields': ShellCommand('Show or hide the field-count panel'),
         }
 
     def run_view_command(self, name: str, argument: str) -> bool:
@@ -274,6 +296,8 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
                 self.show_trace(argument.strip() or None)
             case 'pivot':
                 self.action_pivot(argument.strip())
+            case 'fields':
+                self._toggle_facets_panel()
             case _:
                 return False
         return True
@@ -330,10 +354,14 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
     def _plan(self) -> tuple[Column, ...]:
         session = self.shell.session
         return plan_columns(
-            self._table_width() - _ROW_RESERVE,
+            self._table_width() - _ROW_RESERVE - self._facets_reserve(),
             single_group=len(self._log_groups) <= 1,
             multi_day=session.start.date() != session.end.date(),
         )
+
+    def _facets_reserve(self) -> int:
+        """Cells the field panel takes, so the column budget is planned without them."""
+        return PANEL_WIDTH if self._show_facets and self._facets_fit() else 0
 
     def _table_width(self) -> int:
         """Width the column budget is planned against.
@@ -356,6 +384,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         super().on_resize(_event)
         if self._table is None:
             return
+        self._refresh_facets()
         planned = self._plan()
         if planned == self._columns:
             return
@@ -455,6 +484,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             self._all_events = []
             self._load_log_events([])
             self._update_status('No events found')
+            self._refresh_facets()
             return
 
         initial_limit = self._config.tui.initial_load_limit
@@ -473,6 +503,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._load_capped = len(events) >= initial_limit
         hint = ' · capped, narrow the window or add a filter' if self._load_capped else ''
         self._update_status(f'Loaded {len(events):,} events{hint}')
+        self._refresh_facets()
         self._open_pending_trace()
 
     def load_events(self, events: list[LogEvent], parquet_paths: Sequence[Path] | None = None) -> None:
@@ -485,6 +516,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             self._parquet_paths = list(parquet_paths)
 
         self._update_status(f'Loaded {len(events)} events')
+        self._refresh_facets()
 
     def _load_log_events(self, events: list[LogEvent] | None = None) -> None:
         if self._table is None:
@@ -761,6 +793,68 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
 
         self.show_trace(trace_id)
 
+    def action_toggle_facets(self) -> None:
+        """Move between the table and the field panel, opening the panel if it is closed."""
+        panel = self.query_one('#facets', FacetsPanel)
+        if not self._show_facets:
+            self._toggle_facets_panel()
+        if not panel.has_class('shown'):
+            self.notify(f'The field panel needs {MIN_TERMINAL_WIDTH} columns', severity='information')
+            return
+        if panel.has_focus and self._table is not None:
+            self._table.focus()
+            return
+        panel.focus()
+
+    def _toggle_facets_panel(self) -> None:
+        """Show or hide the panel, giving its cells back to the message column."""
+        self._show_facets = not self._show_facets
+        self._refresh_facets()
+        self._setup_table_columns()
+        self._load_log_events()
+
+    def _facets_fit(self) -> bool:
+        """True when the panel can have its cells without starving the message column."""
+        return self.size.width >= MIN_TERMINAL_WIDTH
+
+    def _refresh_facets(self) -> None:
+        """Show, hide, or recount the field panel to match the current state."""
+        panel = self.query_one('#facets', FacetsPanel)
+        visible = self._show_facets and self._facets_fit()
+        panel.set_class(visible, 'shown')
+        if not visible:
+            self.workers.cancel_group(self, 'facets')
+            return
+        if not self._parquet_paths:
+            panel.set_message('live stream: no counts')
+            return
+        panel.set_message('counting…')
+        self.run_worker(self._load_facets(), name='facets', group='facets', exclusive=True)
+
+    async def _load_facets(self) -> None:
+        """Count the payload fields off the message loop, then render them."""
+        count = self.shell.services.field_facets
+        if count is None:
+            self.query_one('#facets', FacetsPanel).set_message('no field counts wired')
+            return
+        query = self._search_input.value.strip() if self._search_input is not None else ''
+        try:
+            facets = await count(self._parquet_paths, query or None, _FACET_VALUES)
+        except Exception as err:
+            self.query_one('#facets', FacetsPanel).set_message(f'counts failed: {err}')
+            return
+        self.query_one('#facets', FacetsPanel).set_facets(facets)
+
+    def on_facet_selected(self, event: FacetSelected) -> None:
+        """Turn a chosen field value into the filter that would have found it."""
+        event.stop()
+        if (search := self._search_input) is None:
+            return
+        search.open()
+        search.value = f'{event.field}:{event.value}'
+        if self._table is not None:
+            self._table.focus()
+
     def action_toggle_histogram(self) -> None:
         """Show or hide when the events on screen actually happened."""
         self._show_histogram = not self._show_histogram
@@ -895,6 +989,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             self._log_events = self._all_events
             self._load_log_events(self._all_events)
             self._update_status(f'Showing all {len(self._all_events)} events')
+            self._refresh_facets()
             return
 
         def execute_search() -> None:
@@ -904,6 +999,8 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
                 group='search',
                 exclusive=True,
             )
+            # The counts describe what the table shows, so a narrowed table narrows them.
+            self._refresh_facets()
 
         self.set_timer(0.3, execute_search)
 

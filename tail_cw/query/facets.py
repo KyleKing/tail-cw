@@ -13,6 +13,7 @@ message loop.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,25 @@ class FieldFacet:
     def truncated(self) -> bool:
         """True when the field holds values this facet does not name."""
         return self.distinct > len(self.values)
+
+
+IDENTIFIER_MIN_RECORDS = 5
+"""Records a field needs before its cardinality says anything about it."""
+
+
+def is_identifier_like(facet: FieldFacet) -> bool:
+    """True when nearly every record carries its own value, which makes a poor facet.
+
+    A trace id counted this way lists one value per record with a count of one
+    each, crowding out the field that actually groups.
+    """
+    return facet.present >= IDENTIFIER_MIN_RECORDS and facet.distinct >= facet.present
+
+
+def worth_showing(facets: Sequence[FieldFacet]) -> list[FieldFacet]:
+    """Drop the identifier-like fields, unless that would leave nothing."""
+    grouping = [facet for facet in facets if not is_identifier_like(facet)]
+    return grouping or list(facets)
 
 
 def normalize_field_path(field: str) -> tuple[str, ...]:

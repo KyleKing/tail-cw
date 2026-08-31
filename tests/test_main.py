@@ -192,6 +192,7 @@ def test_demo_services_are_callable():
         'count_events',
         'fetch_metrics',
         'fetch_xray_trace',
+        'field_facets',
         'list_dashboards',
         'list_groups',
         'load_dashboard',
