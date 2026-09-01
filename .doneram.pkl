@@ -39,6 +39,7 @@ local setupAction = ".github/actions/setup/action.yml"
 local freshnessYml = ".github/workflows/freshness.yml"
 local mkdocsYml = "mkdocs.yml"
 local preCommit = ".pre-commit-config.yaml"
+local miseToml = "mise.toml"
 
 /// A `uses: owner/repo@<sha> # <tag>` GitHub Action pin, one capture group
 /// spanning the sha and the tag together, since github-action patches both
@@ -54,7 +55,7 @@ local function actionPin(action: String, sourceFile: String, count: Int): Site =
 /// with another hook's.
 local function hookPin(repoUrl: String, versionPattern: String): Site = new {
   file = preCommit
-  pattern = #"repo: https://github\.com/\#(repoUrl)\n\s*rev: \#(versionPattern)"#
+  pattern = #"repo: https://github\.com/\#(repoUrl)\n\s*rev: "?\#(versionPattern)"?"#
   window = 2
 }
 
@@ -93,12 +94,21 @@ tools: Mapping<String, Tool> = new {
     resolver = "github-release"
     resolverName = "pre-commit/mirrors-prettier"
     pattern = "4.0.0-alpha.*"
-    sites = new { hookPin("pre-commit/mirrors-prettier", #""v(4\.0\.0-alpha\.\d+)""#) }
+    sites = new { hookPin("pre-commit/mirrors-prettier", #"v(4\.0\.0-alpha\.\d+)"#) }
   }
   ["mise-action"] = new {
     resolver = "github-action"
     resolverName = "jdx/mise-action"
     sites = new { actionPin("jdx/mise-action", freshnessYml, 1) }
+  }
+  ["pkl"] = new {
+    resolver = "mise"
+    sites = new {
+      new Site {
+        file = miseToml
+        pattern = #"pkl = "([\d.]+)""#
+      }
+    }
   }
   ["pre-commit-hooks"] = new {
     resolver = "github-release"
