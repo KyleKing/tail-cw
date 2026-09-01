@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from rich.console import Console
 
 from tail_cw.aws.metrics import MetricSeries
-from tail_cw.charts.sparkline import ReduceMode, build_compact, reduce_rows, sparkline_text
+from tail_cw.charts.sparkline import ReduceMode, build_compact, reduce_rows, sparkline_blocks, sparkline_text
 
 _BLOCKS = set('▁▂▃▄▅▆▇█')
 
@@ -27,6 +27,20 @@ def test_sparkline_text_uses_block_chars_at_target_width() -> None:
 def test_sparkline_resamples_down_to_width() -> None:
     text = sparkline_text([float(i) for i in range(100)], color='#fff', width=10)
     assert len(text.plain) == 10
+
+
+def test_sparkline_survives_a_single_column_spike() -> None:
+    values = [1.0] * 1440
+    values[700] = 500.0
+    blocks = sparkline_blocks(values, width=40, bars=True, lo=0.0)
+    assert blocks.count('█') == 1
+
+
+def test_sparkline_flat_baseline_does_not_render_as_full_blocks() -> None:
+    values = [1.0] * 1440
+    values[700] = 500.0
+    blocks = sparkline_blocks(values, width=40, bars=True, lo=0.0)
+    assert blocks.count('▁') > 30
 
 
 def test_reduce_each_when_two_or_fewer_series() -> None:

@@ -10,18 +10,23 @@ character.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from statistics import fmean
 
 from rich.console import Group, RenderableType
 from rich.text import Text
 
 from tail_cw.aws.metrics import MetricSeries
-from tail_cw.charts.palette import role_color, series_color
+from tail_cw.charts.palette import MetricRole, role_color, role_for, series_color
 from tail_cw.text import shorten
 
 _BLOCKS = '▁▂▃▄▅▆▇█'
 _BAR_BLOCKS = '▁▂▃▄▅▆▇█'
+
+Aggregate = Callable[[Sequence[float]], float]
+"""How a column's source values collapse to one: `max` for counts and errors, `fmean` for gauges."""
 
 
 class ReduceMode(StrEnum):
@@ -50,13 +55,23 @@ class SparkRow:
     color: str
 
 
-def _resample(values: list[float], width: int) -> list[float]:
+def _resample(values: list[float], width: int, aggregate: Aggregate) -> list[float]:
+    """Downsample by aggregating each column's slice of source values, not by sampling one.
+
+    Column boundaries are rounded independently, so every source value falls in exactly
+    one column and none are dropped.
+    """
     if width <= 0 or not values:
         return []
     if len(values) <= width:
-        return values
+        return list(values)
     step = len(values) / width
-    return [values[min(len(values) - 1, int(i * step))] for i in range(width)]
+    columns = []
+    for index in range(width):
+        start = round(index * step)
+        end = max(round((index + 1) * step), start + 1)
+        columns.append(values[start:end] or [values[min(start, len(values) - 1)]])
+    return [aggregate(column) for column in columns]
 
 
 def _blocks_for(values: list[float], charset: str, *, lo: float, hi: float) -> str:
@@ -74,24 +89,33 @@ def sparkline_blocks(
     bars: bool = False,
     lo: float | None = None,
     hi: float | None = None,
+    aggregate: Aggregate = max,
 ) -> str:
     """Render values as a bare block sparkline.
 
-    The scale spans the data unless `lo` or `hi` pins it. Counts usually want ``lo=0``, so a
-    flat non-zero series does not render as the empty baseline.
+    The scale spans the source data unless `lo` or `hi` pins it, so a downsampled cell
+    still shows the real extremes. Counts usually want ``lo=0``, so a flat non-zero series
+    does not render as the empty baseline.
     """
-    resampled = _resample(values, width)
-    if not resampled:
+    if width <= 0 or not values:
         return ''
+    low = min(values) if lo is None else lo
+    high = max(values) if hi is None else hi
+    resampled = _resample(values, width, aggregate)
     charset = _BAR_BLOCKS if bars else _BLOCKS
-    low = min(resampled) if lo is None else lo
-    high = max(resampled) if hi is None else hi
     return _blocks_for(resampled, charset, lo=low, hi=high)
 
 
-def sparkline_text(values: list[float], *, color: str, width: int, bars: bool = False) -> Text:
+def sparkline_text(
+    values: list[float],
+    *,
+    color: str,
+    width: int,
+    bars: bool = False,
+    aggregate: Aggregate = max,
+) -> Text:
     """Render values as a single-line block sparkline in the given color."""
-    return Text(sparkline_blocks(values, width=width, bars=bars), style=color)
+    return Text(sparkline_blocks(values, width=width, bars=bars, aggregate=aggregate), style=color)
 
 
 def _percentile(sorted_values: list[float], percentile: float) -> float:
@@ -150,6 +174,9 @@ def build_compact(
 ) -> RenderableType:
     """Build the Rich renderable for a compact overview cell."""
     accent = role_color(title)
+    role = role_for(title)
+    gauge_roles = {MetricRole.LATENCY, MetricRole.SATURATION, MetricRole.AVAILABILITY}
+    aggregate: Aggregate = fmean if role in gauge_roles else max
     if not series or not any(item.values for item in series):
         return Group(Text(title or '(untitled)', style=f'bold {accent}'), Text('no data', style='dim'))
 
@@ -161,7 +188,7 @@ def build_compact(
     )
 
     if view == 'singleValue':
-        trend = sparkline_text(series[0].values, color=accent, width=width)
+        trend = sparkline_text(series[0].values, color=accent, width=width, aggregate=aggregate)
         return Group(header, trend)
 
     bars = view == 'bar'
@@ -170,7 +197,7 @@ def build_compact(
     lines: list[RenderableType] = [header]
     for row in rows:
         spark_width = max(1, width - 6) if show_labels else max(1, width)
-        spark = sparkline_text(row.values, color=row.color, width=spark_width, bars=bars)
+        spark = sparkline_text(row.values, color=row.color, width=spark_width, bars=bars, aggregate=aggregate)
         prefix = Text(f'{shorten(row.label, _LABEL_WIDTH):>{_LABEL_WIDTH}} ', style='dim') if show_labels else Text('')
         lines.append(Text.assemble(prefix, spark))
     return Group(*lines)
