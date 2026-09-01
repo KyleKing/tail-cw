@@ -56,6 +56,17 @@ async def test_plot_renders_title_and_legend_natively() -> None:
 
 
 @pytest.mark.asyncio
+async def test_replot_never_forces_the_dark_theme() -> None:
+    app = _Harness()
+    async with app.run_test(size=(100, 30)) as pilot:
+        themes_set: list[str | None] = []
+        app.chart._plot.theme = themes_set.append  # type: ignore[assignment]
+        app.chart.set_series(_series())
+        await pilot.pause()
+        assert 'dark' not in themes_set
+
+
+@pytest.mark.asyncio
 async def test_plot_message_when_no_data() -> None:
     app = _Harness()
     async with app.run_test(size=(100, 30)) as pilot:

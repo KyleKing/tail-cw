@@ -90,7 +90,6 @@ class PlotChart(PlotextPlot):
     def _replot(self) -> None:
         plt = self.plt
         plt.clear_figure()
-        plt.theme('dark')
         if not self._series:
             # plotext will not draw a title without any data, so plot a faint
             # baseline to carry the message.
