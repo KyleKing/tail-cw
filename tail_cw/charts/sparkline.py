@@ -10,7 +10,7 @@ character.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from statistics import fmean
@@ -171,9 +171,10 @@ def build_compact(
     width: int,
     reduce_mode: ReduceMode = ReduceMode.BAND,
     percentile: float = 50.0,
+    theme_colors: Mapping[str, str] | None = None,
 ) -> RenderableType:
     """Build the Rich renderable for a compact overview cell."""
-    accent = role_color(title)
+    accent = role_color(title, theme_colors=theme_colors)
     role = role_for(title)
     gauge_roles = {MetricRole.LATENCY, MetricRole.SATURATION, MetricRole.AVAILABILITY}
     aggregate: Aggregate = fmean if role in gauge_roles else max

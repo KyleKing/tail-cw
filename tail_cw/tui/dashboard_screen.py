@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar
@@ -113,10 +113,10 @@ def _widget_source(widget: Widget) -> str | None:
     return candidates[0][0] if candidates else None
 
 
-def _full_content(widget: Widget) -> Static | Markdown:
+def _full_content(widget: Widget, *, theme_colors: Mapping[str, str] | None = None) -> Static | Markdown:
     match widget:
         case LogWidget():
-            accent = role_color(widget.title or 'logs')
+            accent = role_color(widget.title or 'logs', theme_colors=theme_colors)
             return Static(f'[bold {accent}]{widget.title or "Logs"}[/]\n\n{widget.query}')
         case TextWidget():
             return Markdown(widget.markdown)
@@ -183,6 +183,7 @@ class CompactPanel(Static):
                 width=width,
                 reduce_mode=self._reduce_mode,
                 percentile=self._percentile,
+                theme_colors=self.app.theme_variables,
             ),
         )
 
@@ -354,19 +355,19 @@ class DashboardScreen(ShellScreen):
             if isinstance(panel.widget, MetricWidget) and panel.series:
                 panel.cell.set_series(panel.series)
 
-    @staticmethod
-    def _render_fixed_cell(panel: _Panel) -> None:
+    def _render_fixed_cell(self, panel: _Panel) -> None:
         widget = panel.widget
+        theme_colors = self.app.theme_variables
         match widget:
             case LogWidget():
-                accent = role_color(widget.title or 'logs')
+                accent = role_color(widget.title or 'logs', theme_colors=theme_colors)
                 source = _widget_source(widget) or 'logs'
                 panel.cell.render_static(f'[bold {accent}]{widget.title or "Logs"}[/]\n[dim]{source}[/]')
             case TextWidget():
                 heading = next((line for line in widget.markdown.splitlines() if line.strip()), '')
                 panel.cell.render_static(f'[dim]{heading.lstrip("# ").strip()[:60]}[/]')
             case AlarmWidget():
-                accent = role_color(widget.title or 'alarms')
+                accent = role_color(widget.title or 'alarms', theme_colors=theme_colors)
                 count = len(widget.alarms)
                 panel.cell.render_static(f'[bold {accent}]{widget.title or "Alarms"}[/]\n[dim]{count} alarms[/]')
             case UnknownWidget():
@@ -403,10 +404,9 @@ class DashboardScreen(ShellScreen):
             return
         self._render_log_volume(panel, volume)
 
-    @staticmethod
-    def _render_log_volume(panel: _Panel, volume: list[float]) -> None:
+    def _render_log_volume(self, panel: _Panel, volume: list[float]) -> None:
         title = getattr(panel.widget, 'title', '') or 'Logs'
-        accent = role_color(title)
+        accent = role_color(title, theme_colors=self.app.theme_variables)
         latest = int(volume[-1]) if volume else 0
         header = Text.assemble((title, f'bold {accent}'), ('  ', ''), (f'{latest}/bucket', 'dim'))
         spark = sparkline_text(volume, color=accent, width=max(1, panel.cell.content_size.width), bars=True)
@@ -506,12 +506,17 @@ class DashboardScreen(ShellScreen):
         widget = panel.widget
         if isinstance(widget, MetricWidget):
             kind = ChartKind.BAR if widget.view == 'bar' else ChartKind.LINE
-            colors = [role_color(widget.title)] if len(panel.series) == 1 else _series_colors(panel.series)
+            theme_colors = self.app.theme_variables
+            colors = (
+                [role_color(widget.title, theme_colors=theme_colors)]
+                if len(panel.series) == 1
+                else _series_colors(panel.series)
+            )
             chart = PlotChart(title=widget.title or '(untitled)', kind=kind, colors=colors)
             chart.set_series(panel.series)
             caption = Label(self._metric_caption(panel), classes='chart_caption')
             return Vertical(caption, chart)
-        return VerticalScroll(_full_content(widget))
+        return VerticalScroll(_full_content(widget, theme_colors=self.app.theme_variables))
 
     def _metric_caption(self, panel: _Panel) -> str:
         widget = panel.widget
