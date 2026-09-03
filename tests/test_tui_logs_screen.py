@@ -540,6 +540,27 @@ async def test_empty_search_restores_all_events():
 
 
 @pytest.mark.asyncio
+async def test_clearing_search_cancels_the_pending_debounced_query():
+    """A stale debounce firing after the clear must not clobber the restored view."""
+    app = _make_app()
+
+    async with running(app) as pilot:
+        screen = _logs_screen(app)
+        screen.load_events(_make_test_log_events(4))
+        assert screen._search_input is not None
+        screen._search_input.value = 'x'
+        await pilot.pause()
+        screen._search_input.value = ''
+        await pilot.pause()
+
+        assert not screen._search_debounce.pending
+        screen._search_debounce.flush()
+        await pilot.pause()
+
+        assert len(screen._log_events) == 4
+
+
+@pytest.mark.asyncio
 async def test_search_submit_moves_focus_to_table():
     app = _make_app()
 

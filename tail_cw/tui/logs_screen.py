@@ -50,6 +50,7 @@ from tail_cw.tui.command_bar import SearchLine
 from tail_cw.tui.facets_panel import MIN_TERMINAL_WIDTH, PANEL_WIDTH, FacetSelected, FacetsPanel
 from tail_cw.tui.log_viewer import Column, format_rows, plan_columns
 from tail_cw.tui.navigation import NavTarget, ViewKind
+from tail_cw.tui.picker import Debounce
 from tail_cw.tui.record_detail import RecordDetailScreen
 from tail_cw.tui.shell import MAX_LABEL_CHARS, ResolveLogs, ShellCommand, ShellScreen
 from tail_cw.tui.trace_viewer import TraceViewerScreen
@@ -58,6 +59,7 @@ LiveStreamFactory = Callable[[], AsyncIterator[LogEvent]]
 
 _LIVE_FLUSH_INTERVAL_SECONDS = 0.25
 _LOAD_TICK_SECONDS = 1.0
+_SEARCH_DEBOUNCE_SECONDS = 0.3
 _PIVOT_FIELDS_NAMED = 3
 _HISTOGRAM_MARGIN = 52
 _FACET_VALUES = 6
@@ -229,6 +231,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._load_capped = False
         self._load_timer: Timer | None = None
         self._loading_since: float | None = None
+        self._search_debounce = Debounce(self, delay=_SEARCH_DEBOUNCE_SECONDS)
 
     @property
     def _config(self) -> TailCWConfig:
@@ -999,6 +1002,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         """Search as the user types, debounced by 300ms."""
         query = event.value.strip()
         self.workers.cancel_group(self, 'search')
+        self._search_debounce.cancel()
 
         if not query:
             self._log_events = self._all_events
@@ -1017,7 +1021,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
             # The counts describe what the table shows, so a narrowed table narrows them.
             self._refresh_facets()
 
-        self.set_timer(0.3, execute_search)
+        self._search_debounce.schedule(execute_search)
 
     @on(Input.Blurred, '#search_input')
     def on_search_input_blurred(self, _event: Input.Blurred) -> None:
