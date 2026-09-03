@@ -50,7 +50,6 @@ tail-cw = "tail_cw.__main__:main"
 "Repository" = "https://github.com/kyleking/tail-cw"
 
 [tool.commitizen]
-changelog_file = "docs/docs/CHANGELOG.md"
 pre_bump_hooks = ["uv lock"]
 version = "0.0.1"
 version_files = ["pyproject.toml:^version", "tail_cw/__init__.py:^__version"]

@@ -10,6 +10,7 @@ and every `--json` flag moved under `tail-cw export`.
 
 ### Feat
 
+- **charts**: color roles from the active theme with a contrast floor
 - **tui**: count the payload fields beside the log table
 - **export**: emit the parsed payload, count by field, and stop a fetch at a limit
 - **tui**: theme from config, and fit the chrome to the terminal
@@ -57,6 +58,9 @@ and every `--json` flag moved under `tail-cw export`.
 
 ### Fix
 
+- **tui**: stop forcing the plot dark, let it follow the app theme
+- **charts**: aggregate compact-cell columns instead of point-sampling
+- **doneram**: match unquoted pre-commit revs and track the pkl pin
 - **tui**: create the facet-count coroutine only when its worker starts
 - **tui**: re-check the cache when a debounced fetch fires, not only when it is scheduled
 - **tui**: give an error row's detail the most readable colour available
