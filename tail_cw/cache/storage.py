@@ -18,6 +18,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, TypedDict
 
+import msgspec
 import polars as pl
 from diskcache import Cache, JSONDisk
 
@@ -178,10 +179,14 @@ def _metadata_path(metadata_value: Any) -> str:
 
 
 _encode = json.JSONEncoder(separators=(',', ':')).encode
-"""Encode one value as compact JSON. Bound once, because it is called per field per event."""
+"""Encode one value as compact JSON for the payload-repair pass, which runs once per failed
+write rather than once per event, so the stdlib encoder's cost there does not matter."""
 
-_LINE_BREAKS = ('\n', '\r')
-"""What must not appear in text spliced into an NDJSON line. A regex here cost 0.08s per 73k events."""
+_ndjson_encoder = msgspec.json.Encoder()
+"""Bound once: builds the hot-path NDJSON line, which stdlib ``json`` cannot beat (below)."""
+
+_ndjson_decoder = msgspec.json.Decoder()
+"""Bound once: validates a message is a JSON object before its text is trusted as one."""
 
 _PAYLOAD_ROOT = 'parsed'
 """Column the decoded payload lands in, and the first segment of every reported payload path."""
@@ -233,10 +238,20 @@ def _parse_jsonl_message(message: str) -> dict[str, Any] | None:
     if not is_jsonl_message(message):
         return None
     try:
-        parsed = json.loads(message)
-    except json.JSONDecodeError:
+        parsed = _ndjson_decoder.decode(message)
+    except msgspec.DecodeError:
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def _epoch_us(moment: datetime) -> int:
+    """Microseconds since the epoch, as an int the staged NDJSON can hold without quoting.
+
+    Written instead of ``isoformat()`` because a Parquet-bound timestamp column is cast
+    from this on the Polars side (:func:`_normalized_columns`) either way, and an int
+    column costs the sink nothing extra to infer, unlike a string one.
+    """
+    return round(moment.timestamp() * 1_000_000)
 
 
 def _log_events_to_ndjson_file(
@@ -246,17 +261,17 @@ def _log_events_to_ndjson_file(
 ) -> tuple[int, int]:
     """Write LogEvent instances to a temporary NDJSON file.
 
-    Each line is one event. A message that decodes as a JSON object is spliced
-    into the line as the ``parsed`` value verbatim, rather than being re-encoded
-    from the dict the check produced: Polars decodes the file straight after, so
-    re-encoding the payload is work nobody reads. Measured over 72,767 cached
-    events that took the Python side of the write from 0.39s to 0.22s, against
-    0.64s for the Polars half, which is where the real parse happens.
+    Each line is one event, built as a dict and handed to :data:`_ndjson_encoder`
+    rather than assembled field by field: msgspec's own JSON writer beats hand-built
+    string splicing even after accounting for re-encoding a payload that was already
+    JSON text, which a stdlib-``json``-based splice was written to avoid. Measured
+    against 1.5M synthetic prod-API-shaped events: 166k events/s for the previous
+    stdlib-``json``-plus-splicing shape against 251k events/s for this one, with the
+    same JSON-object validation kept on every message.
 
-    The message is still decoded once, to prove it is a JSON object before its
-    text is trusted as one. Skipping that check as well saves another 0.077s and
-    costs the guarantee: one malformed line that starts with a brace would make
-    the whole file unreadable rather than being stored as text.
+    A message that decodes as a JSON object is stored as ``parsed`` (however it was
+    written, since msgspec is doing the encoding either way now); anything else is
+    stored as ``message`` verbatim.
 
     Args:
         log_events: Iterator of log events to write.
@@ -274,7 +289,7 @@ def _log_events_to_ndjson_file(
     total_events = 0
     jsonl_events = 0
 
-    with output_path.open('w', encoding='utf-8') as handle:
+    with output_path.open('wb') as handle:
         for event in log_events:
             total_events += 1
 
@@ -282,32 +297,21 @@ def _log_events_to_ndjson_file(
                 progress_callback(total_events, TOTAL_UNKNOWN, 'Parsing JSONL...')
 
             parsed = _parse_jsonl_message(event.message)
+            record: dict[str, Any] = {
+                'log_group': event.log_group,
+                'log_stream': event.log_stream,
+                'timestamp': _epoch_us(event.timestamp),
+                'ingestion_time': _epoch_us(event.ingestion_time) if event.ingestion_time else None,
+            }
             if parsed is None:
-                # The raw line is only stored when nothing else can reproduce it. For a
-                # JSON line it duplicates ``parsed`` and costs 41% of the file.
-                handle.write(_ndjson_line(event, 'message', _encode(event.message)))
-                continue
-            jsonl_events += 1
-            # A pretty-printed payload is valid JSON and still cannot be spliced: its
-            # newlines would end the NDJSON line early and make the file unreadable.
-            payload = event.message if not _has_line_break(event.message) else _encode(parsed)
-            handle.write(_ndjson_line(event, 'parsed', payload))
+                record['message'] = event.message
+            else:
+                jsonl_events += 1
+                record['parsed'] = parsed
+            handle.write(_ndjson_encoder.encode(record))
+            handle.write(b'\n')
 
     return total_events, jsonl_events
-
-
-def _has_line_break(text: str) -> bool:
-    return any(character in text for character in _LINE_BREAKS)
-
-
-def _ndjson_line(event: LogEvent, payload_field: str, payload_text: str) -> str:
-    """Build one NDJSON line, splicing ``payload_text`` in as already-encoded JSON."""
-    ingestion = 'null' if event.ingestion_time is None else _encode(event.ingestion_time.isoformat())
-    return (
-        f'{{"log_group":{_encode(event.log_group)},"log_stream":{_encode(event.log_stream)},'
-        f'"timestamp":{_encode(event.timestamp.isoformat())},"ingestion_time":{ingestion},'
-        f'"{payload_field}":{payload_text}}}\n'
-    )
 
 
 def write_log_events_to_parquet(
@@ -421,15 +425,18 @@ def _sink_ndjson_to_parquet(
 def _normalized_columns(lazy: pl.LazyFrame) -> pl.LazyFrame:
     """Give the frame the full v2 schema with real datetime columns.
 
-    Timestamps arrive as ISO strings, and ``message`` or ``parsed`` are absent
-    entirely when every line in the batch went the other way, so both are
-    materialized as typed nulls to keep one schema across every cached file.
+    Timestamps arrive as epoch-microsecond ints, and ``message`` or ``parsed``
+    are absent entirely when every line in the batch went the other way, so
+    both are materialized as typed nulls to keep one schema across every
+    cached file. ``ingestion_time`` lands as ``Null`` rather than ``Int64``
+    when every event in the batch omitted it, so the epoch cast only applies
+    where there is an int column to cast.
     """
     schema = lazy.collect_schema()
     casts = [
-        pl.col(name).str.to_datetime(time_zone='UTC', strict=False)
+        pl.from_epoch(pl.col(name), time_unit='us').dt.replace_time_zone('UTC')
         for name in ('timestamp', 'ingestion_time')
-        if schema.get(name) == pl.String
+        if schema.get(name) == pl.Int64
     ]
     fills = [
         pl.lit(None, dtype=pl.String).alias(name)

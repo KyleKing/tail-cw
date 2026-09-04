@@ -314,10 +314,12 @@ References:
 - If you’re unsure between feature breadth and testability, choose testability.
 - When in doubt about performance in Textual, profile and reduce work per frame; batch and
     reuse renderables.
-- A message that decodes as a JSON object is spliced into the cache's NDJSON line
-    verbatim rather than re-encoded, because Polars decodes the file straight after.
-    Anything spliced must hold no newline: a pretty-printed payload is valid JSON and would
-    end the line early, so it takes the re-encoding path
+- The cache's NDJSON stage (`_log_events_to_ndjson_file`) always re-encodes through
+    `msgspec.json.Encoder`, timestamps included as epoch-microsecond ints rather than
+    `isoformat()` strings, because msgspec's own encoder beat splicing pre-encoded text
+    even after accounting for the re-encode: 251k events/s against 166k, measured against
+    1.5M synthetic prod-shaped events.
+    `_normalized_columns` casts the int columns back to UTC datetimes with `pl.from_epoch`
 - A payload shape Parquet cannot hold is repaired rather than refused
     (`_repair_payload_types`): an always-empty JSON object is dropped and a key logged as
     two JSON types is widened to text, on a second pass over the staged NDJSON that only
