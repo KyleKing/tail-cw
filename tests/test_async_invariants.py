@@ -17,7 +17,9 @@ from pathlib import Path
 
 import pytest
 
+from tail_cw import cpu_budget
 from tail_cw.aws.events import LogEvent
+from tail_cw.cache import storage
 from tail_cw.cli import FetchRequest, resolve_parquet_paths
 from tail_cw.concurrency import DEFAULT_BLOCKING_WORKERS, blocking_pool
 from tail_cw.config import CacheConfig, FetchConfig, TailCWConfig
@@ -227,6 +229,49 @@ async def test_segment_concurrency_stays_inside_its_configured_ceiling(tmp_path:
 
     assert len(paths) > ceiling
     assert peak == ceiling, f'{peak} segments were in flight against a ceiling of {ceiling}'
+
+
+async def test_segment_writes_stay_inside_the_cpu_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fetch pool is wide, but a Parquet write is CPU work and must respect the query budget."""
+    budget = 2
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+    barrier = threading.Barrier(budget, timeout=_BARRIER_TIMEOUT)
+
+    def fake_write(log_events: object, output_path: Path, progress_callback: object = None) -> dict[str, object]:
+        nonlocal active, peak
+        list(log_events)  # type: ignore[call-overload]
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        barrier.wait()
+        output_path.write_bytes(b'')
+        with lock:
+            active -= 1
+        return {
+            'total_events': 1,
+            'jsonl_events': 0,
+            'file_size_bytes': 0,
+            'dropped_payload_keys': [],
+            'widened_payload_keys': [],
+        }
+
+    monkeypatch.setattr(cpu_budget, 'max_threads', lambda: budget)
+    monkeypatch.setattr(storage, 'write_log_events_to_parquet', fake_write)
+
+    async def fetch(_client: object, log_group: str, *_args: object, **_kwargs: object) -> AsyncIterator[LogEvent]:
+        await asyncio.sleep(0)
+        yield _event(log_group)
+
+    config = TailCWConfig(
+        cache=CacheConfig(cache_dir=tmp_path / 'cache'),
+        fetch=FetchConfig(max_concurrent_segments=budget + 2),
+    )
+    with blocking_pool(max_workers=budget + 2) as pool:
+        await resolve_parquet_paths(object(), _requests(budget + 2), config, fetch_events=fetch, executor=pool)
+
+    assert peak == budget, f'{peak} Parquet writes ran at once against a CPU budget of {budget}'
 
 
 async def test_resolve_parquet_paths_cancels_siblings_when_one_fails(tmp_path: Path) -> None:

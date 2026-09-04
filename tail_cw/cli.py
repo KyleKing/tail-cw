@@ -13,6 +13,7 @@ import asyncio
 import json
 import re
 import sys
+import threading
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
@@ -61,6 +62,7 @@ from tail_cw.cache.storage import CacheStatus, LogCache, PayloadRepair, generate
 from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import closing_stream, consume_in_thread, fetch_pool, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
+from tail_cw.cpu_budget import lower_priority_for_batch_work, native_write_gate
 from tail_cw.demo import DEMO_LOG_GROUP, demo_dashboard, demo_resolve_logs
 from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.parser import DEFAULT_STATS_FIELD_LIMIT, DEFAULT_WINDOW, build_parser
@@ -323,6 +325,7 @@ async def _resolve_segment(
     use_cache: bool,
     fetch_events: FetchEvents,
     executor: ThreadPoolExecutor | None,
+    write_gate: threading.Semaphore,
     notices: list[str],
 ) -> Path | None:
     cache_key = generate_cache_key(
@@ -342,7 +345,11 @@ async def _resolve_segment(
         return None
 
     def write(remaining: Iterator[LogEvent]) -> Path | None:
-        stats = cache.write(chain([first_event], remaining), cache_key, ttl_seconds=segment.ttl_seconds)
+        # The fetch pool is wide because most of a segment's life is network wait, but the
+        # Parquet conversion below is CPU work like any query, so it gets the query budget
+        # instead of the fetch pool's width.
+        with write_gate:
+            stats = cache.write(chain([first_event], remaining), cache_key, ttl_seconds=segment.ttl_seconds)
         # Appended rather than reported here: this runs on a worker thread, and the TUI's
         # only legal writer is the message loop.
         notices.extend(
@@ -366,6 +373,7 @@ async def _resolve_into_cache(
     fetch_events: FetchEvents | None,
     executor: ThreadPoolExecutor | None,
     limiter: asyncio.Semaphore,
+    write_gate: threading.Semaphore,
     notices: list[str],
     budget: _FetchBudget | None = None,
 ) -> list[Path]:
@@ -387,6 +395,7 @@ async def _resolve_into_cache(
                 use_cache=use_cache,
                 fetch_events=effective_fetch,
                 executor=executor,
+                write_gate=write_gate,
                 notices=notices,
             )
 
@@ -476,6 +485,7 @@ async def resolve_parquet_path(
             fetch_events=fetch_events,
             executor=executor,
             limiter=_segment_limiter(config),
+            write_gate=native_write_gate(),
             notices=notices,
         )
     _report_notices(notices, on_notice)
@@ -508,7 +518,9 @@ async def resolve_parquet_paths(
     ``[fetch].max_concurrent_segments`` slots, because each one in flight holds a
     thread of ``executor`` until it finishes writing. A failure cancels the
     siblings rather than leaving them to finish writing into a cache nobody will
-    read.
+    read. The Parquet-write tail of each segment also competes for
+    :func:`native_write_gate`'s slots, capped by the CPU budget rather than the
+    fetch width, since that part is compute rather than a network wait.
 
     ``limit`` stops the fetch rather than trimming its output: once that many
     events are cached, no further segment is asked for. The groups still run
@@ -518,6 +530,7 @@ async def resolve_parquet_paths(
         return []
     resolved_now = now if now is not None else datetime.now(UTC)
     limiter = _segment_limiter(config)
+    write_gate = native_write_gate()
     notices: list[str] = []
     budget = _FetchBudget(limit=limit) if limit is not None and limit > 0 else None
     with open_log_cache(config) as cache:
@@ -532,6 +545,7 @@ async def resolve_parquet_paths(
                 fetch_events=fetch_events,
                 executor=executor,
                 limiter=limiter,
+                write_gate=write_gate,
                 notices=notices,
                 budget=budget,
             )
@@ -1840,6 +1854,9 @@ async def _run_export_command(
     # not be the first thing to read it.
     if _load_config_or_report(args) is None:
         return 1
+    # A batch export has no one waiting on its next keystroke, unlike the TUI, so it
+    # yields to interactive work under contention instead of competing for the CPU evenly.
+    lower_priority_for_batch_work()
     with fetch_pool() as executor:
         async with client_pool(profile_name=args.profile, region_name=args.region) as pool:
             return await _dispatch_export(

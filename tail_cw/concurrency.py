@@ -78,10 +78,15 @@ def fetch_pool(max_workers: int = DEFAULT_FETCH_WORKERS) -> Iterator[ThreadPoolE
 
     Separate from :func:`blocking_pool` because the two are bounded by different
     things. A query is CPU work inside DuckDB or Polars, so its pool stays narrow.
-    A segment writer spends nearly all of its life waiting on the network (99% of a
-    cold hour, measured), so a wider pool costs little and buys concurrent round
-    trips. Sharing one pool made the two compete: four groups fetching filled it
-    and a search waited for the fetch.
+    A segment writer spends nearly all of a cold hour waiting on the network (99%,
+    measured), so a wider pool costs little and buys concurrent round trips.
+    Sharing one pool made the two compete: four groups fetching filled it and a
+    search waited for the fetch.
+
+    That 99% figure does not hold for a high-volume segment: the Parquet-write
+    tail at the end of a busy hour is the same native compute a query does, so it
+    goes through :func:`tail_cw.cpu_budget.native_write_gate` rather than being
+    left to however wide this pool is.
 
     Yields:
         The pool, shut down when the block exits.

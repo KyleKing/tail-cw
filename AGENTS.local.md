@@ -29,6 +29,11 @@ Use the direct commands listed below instead
     Textual Pilot tests are the bulk).
     Drop `-n auto` when debugging one test or using `--pdb`, which xdist cannot support
 - Pre-Commit: `prek run --all-files`
+- Profile: `uv tool install py-spy`, then
+    `py-spy record -o profile.svg -- uv run tail-cw <command>`
+    for a flamegraph, or `py-spy dump --pid <pid>` against an already-running one.
+    `benchmark_backends()` in `tail_cw/query/engine.py` times DuckDB against Polars for one
+    Parquet file without needing py-spy at all
 - Docs: `uv run python docs/gen_ref_nav.py && uv run mkdocs build --strict`.
     The generator must run first, because mkdocs collects files before any plugin does and a
     stub written during a build is a build late.
@@ -148,8 +153,12 @@ If you introduce or modify Textual UI code:
         that pool.
     - There are two blocking pools, and the difference matters: `blocking_pool` is narrow
         because DuckDB and Polars are CPU work, `fetch_pool` is wider because a segment
-        writer spends its life on the network.
+        writer spends most of a cold hour waiting on the network.
         Do not put query work on the fetch pool in the TUI, where the two run at once.
+        A busy segment's write tail is CPU work like a query once the network wait is over,
+        so it still runs on `fetch_pool`'s thread but must acquire
+        `cpu_budget.native_write_gate()` first, capping it at the query budget regardless of
+        `fetch_pool`'s width
     - Never declare an `asyncio.Semaphore`, `Lock`, or `Event` at module level.
         They bind to the first event loop that touches them.
         Build them inside the running loop.
