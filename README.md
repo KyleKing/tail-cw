@@ -151,17 +151,26 @@ Dedicated CloudWatch tailers solved log streaming years ago and then stopped.
 The gap now is everything around the logs: live streaming through the current API,
 dashboards and metrics without the console, and a fast path from a chart to the logs
 that explain it.
+Adjacent tools solve a piece of this well, for CloudWatch or for a
+different platform entirely, but you probably want to know about one of these first:
 
-- Grafana or the CloudWatch console: richer and mouse-driven, and out of the terminal.
-    Reach for them when you want a web GUI
-- awslogs, saw, cw, utern: the dedicated tailers, all dormant and predating Live Tail and
-    the newer Insights query languages
-- `aws logs tail` / `start-live-tail`: native, but a bare pane with no structure, no
-    caching, and no dashboards
-- Gonzo: a strong log-analysis TUI with no native CloudWatch source, so you pipe
-    `aws logs tail` into it
-- AWS CloudWatch MCP server: Insights and pattern analysis for agents, with no live tail
-    and no human surface
+| Service                                                                                         | Notes                                                                                                                                                           |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`aws logs tail`](https://docs.aws.amazon.com/cli/latest/reference/logs/tail.html)              | "Tails the logs for a CloudWatch Logs group." Native, but a bare pane with no caching or dashboards                                                             |
+| [AWS CloudWatch MCP server](https://github.com/awslabs/mcp/tree/main/src/cloudwatch-mcp-server) | "Enables your troubleshooting agents to use CloudWatch data to do AI-powered root cause analysis" (for agents, no live tail and no human surface)               |
+| [awslogs](https://github.com/jorgebastida/awslogs)                                              | "AWS CloudWatch logs for Humans™" (dormant since 2024)                                                                                                          |
+| [cw](https://github.com/lucagrulla/cw)                                                          | "The best way to tail AWS CloudWatch Logs from your terminal" (dormant since 2024)                                                                              |
+| [Gonzo](https://github.com/control-theory/gonzo)                                                | "The Go based TUI log analysis tool", with no native CloudWatch source so you pipe `aws logs tail` into it                                                      |
+| [Grafana](https://github.com/grafana/grafana)                                                   | "The open and composable observability and data visualization platform", with a CloudWatch data source plugin. Richer and mouse-driven, and out of the terminal |
+| [Honeycomb CLI](https://github.com/bendrucker/honeycomb-cli)                                    | "CLI for interacting with the Honeycomb API" (unofficial, and Honeycomb itself is Closed source)                                                                |
+| [k9s](https://github.com/derailed/k9s)                                                          | "Kubernetes CLI To Manage Your Clusters In Style!" The Kubernetes analogue for a cluster TUI, not logs                                                          |
+| [kail](https://github.com/boz/kail)                                                             | "kubernetes log viewer", tailing many pods at once the way this tails many log groups                                                                           |
+| [kubetail](https://github.com/kubetail-org/kubetail)                                            | "Real-time logging dashboard for Kubernetes. View logs in a terminal or a browser"                                                                              |
+| [lnav](https://github.com/tstack/lnav)                                                          | "Log file navigator" for local and piped files, with no CloudWatch source of its own                                                                            |
+| [Pup](https://github.com/DataDog/pup)                                                           | "A CLI companion with 200+ commands across 33+ Datadog products" (Datadog itself is Closed source)                                                              |
+| [saw](https://github.com/TylerBrock/saw)                                                        | "Fast, multi-purpose tool for AWS CloudWatch Logs" (dormant since 2023)                                                                                         |
+| [stern](https://github.com/stern/stern)                                                         | "Multi pod and container log tailing for Kubernetes", the Kubernetes analogue to tailing many log groups                                                        |
+| [utern](https://github.com/knqyf263/utern)                                                      | "Multi group and stream log tailing for AWS CloudWatch Logs." (dormant since 2022)                                                                              |
 
 ## CPU use
 
