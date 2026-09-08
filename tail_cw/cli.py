@@ -631,6 +631,17 @@ def _stderr_notice(notice: str) -> None:
     sys.stderr.write(f'{notice}\n')
 
 
+def _warn_if_capped(names: Sequence[str], max_groups: int, *, verb: str) -> None:
+    """Write the standard capped-groups warning when ``names`` exceeds ``max_groups``.
+
+    ``verb`` names what a dropped group missed out on ('fetched', 'queried', ...),
+    so the message says what the cap actually cost here.
+    """
+    if len(names) > max_groups:
+        dropped = names[max_groups:]
+        _stderr_notice(f'Capped at {max_groups} of {len(names)} matching groups; not {verb}: {", ".join(dropped)}')
+
+
 def _report_written(count: int, noun: str) -> None:
     """Say how many records went to stdout, so a truncated read is detectable.
 
@@ -1191,12 +1202,8 @@ async def _export_summary(
     if not names:
         sys.stderr.write('No log groups matched\n')
         return 1
-    if len(names) > args.max_groups:
-        dropped = names[args.max_groups :]
-        sys.stderr.write(
-            f'Capped at {args.max_groups} of {len(names)} matching groups; not fetched: {", ".join(dropped)}\n',
-        )
-        names = names[: args.max_groups]
+    _warn_if_capped(names, args.max_groups, verb='fetched')
+    names = names[: args.max_groups]
 
     requests = [
         FetchRequest(
@@ -1352,6 +1359,7 @@ async def _export_trace(
     if not names:
         sys.stderr.write('No log groups matched\n')
         return 1
+    _warn_if_capped(names, args.max_groups, verb='searched')
     names = names[: args.max_groups]
     paths = await resolve_parquet_paths(
         logs,
@@ -1492,12 +1500,8 @@ async def _insights_targets(
     if not groups:
         sys.stderr.write('No log groups matched\n')
         return 1
-    if len(groups) > args.max_groups:
-        sys.stderr.write(
-            f'Capped at {args.max_groups} of {len(groups)} matching groups; '
-            f'not queried: {", ".join(group.name for group in groups[args.max_groups :])}\n',
-        )
-        groups = groups[: args.max_groups]
+    _warn_if_capped([group.name for group in groups], args.max_groups, verb='queried')
+    groups = groups[: args.max_groups]
     names = [group.name for group in groups]
     start_time, end_time = window
     rates = await measure_group_rates(logs, names, start=start_time, end=end_time)

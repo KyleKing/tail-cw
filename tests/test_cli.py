@@ -1296,6 +1296,20 @@ def test_run_cli_export_trace_writes_otlp_for_the_spans_it_found(tmp_path, capsy
     assert 'first error in payments' in captured.err
 
 
+def test_run_cli_export_trace_names_the_groups_it_capped(tmp_path, capsys, monkeypatch):
+    trace_id = '1-68a1f2c3-4d5e6f708192a3b4c5d6e7f8'
+    _install_groups(monkeypatch, ['/aws/lambda/one', '/aws/lambda/two'])
+    fetcher = _SeverityFetcher({'/aws/lambda/one': [f'{{"trace_id":"{trace_id}","event":"in"}}']})
+    config = str(_write_config_file(tmp_path))
+    argv = ['export', 'trace', trace_id, '--start', '2m', '--config', config, '--max-groups', '1']
+
+    result = run_cli(argv, None, fetch_events=fetcher, is_tty=False)
+
+    assert result == 0
+    assert fetcher.calls == ['/aws/lambda/one']
+    assert 'not searched: /aws/lambda/two' in capsys.readouterr().err
+
+
 def test_run_cli_export_trace_says_so_when_the_trace_is_not_in_the_window(tmp_path, capsys, monkeypatch):
     _install_groups(monkeypatch, ['/aws/lambda/one'])
     fetcher = _SeverityFetcher({'/aws/lambda/one': ['{"trace_id":"other","event":"in"}']})
