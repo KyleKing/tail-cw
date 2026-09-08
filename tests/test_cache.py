@@ -184,6 +184,26 @@ def test_an_int_and_a_float_under_one_key_are_left_alone(fix_test_cache: Path):
     assert stats['dropped_payload_keys'] == []
 
 
+def test_a_key_logged_as_a_scalar_and_a_list_is_widened_to_text(fix_test_cache: Path):
+    """A scalar/list conflict fails while Polars builds the scan's schema.
+
+    That is earlier than ``one_key_logged_as_two_types`` covers (a parse-time
+    ComputeError), so it needs its own repair attempt.
+    """
+    output_path = fix_test_cache / 'scalar_vs_list.parquet'
+
+    stats = write_log_events_to_parquet(
+        make_events(['{"level":"INFO","x":1}', '{"level":"INFO","x":[1,2]}']),
+        output_path,
+    )
+
+    assert stats['widened_payload_keys'] == ['parsed.x (list, number)']
+    assert [event.message for event in read_parquet_to_log_events(output_path)] == [
+        '{"level":"INFO","x":"1"}',
+        '{"level":"INFO","x":"[1,2]"}',
+    ]
+
+
 def test_write_rejects_an_empty_batch(fix_test_cache: Path):
     output_path = fix_test_cache / 'empty.parquet'
 

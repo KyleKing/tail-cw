@@ -390,6 +390,16 @@ def _scan_ndjson(source: Path) -> pl.LazyFrame:
     return _normalized_columns(lazy).sort('timestamp', maintain_order=True)
 
 
+_PAYLOAD_SHAPE_ERRORS = (pl.exceptions.ComputeError, pl.exceptions.InvalidOperationError, pl.exceptions.SchemaError)
+"""What a payload shape Parquet cannot hold raises as.
+
+A key logged as two conflicting scalar types fails at ``sink_parquet`` with
+``ComputeError``/``InvalidOperationError``; two records whose ``parsed`` structs
+cannot be reconciled into one supertype fail earlier, while merely building the
+scan's schema, as ``SchemaError``. Both are the repair pass's problem to fix.
+"""
+
+
 def _sink_ndjson_to_parquet(
     source: Path,
     output_path: Path,
@@ -401,10 +411,9 @@ def _sink_ndjson_to_parquet(
     The repair costs a second pass over the staged file, so it is only paid on
     the failure it exists to clear.
     """
-    frame = _scan_ndjson(source)
     try:
-        frame.sink_parquet(str(output_path), compression='zstd')
-    except (pl.exceptions.ComputeError, pl.exceptions.InvalidOperationError) as err:
+        _scan_ndjson(source).sink_parquet(str(output_path), compression='zstd')
+    except _PAYLOAD_SHAPE_ERRORS as err:
         first_error = err
     else:
         return PayloadRepair((), ())
@@ -413,13 +422,21 @@ def _sink_ndjson_to_parquet(
         progress_callback(0, TOTAL_UNKNOWN, 'Repairing payload types...')
     repair = _repair_payload_types(source)
     if not repair.dropped and not repair.widened:
-        raise _unwritable_payload_error(frame, first_error) from first_error
-    repaired = _scan_ndjson(source)
+        raise _unwritable_payload_error(_unnormalized_scan(source), first_error) from first_error
     try:
-        repaired.sink_parquet(str(output_path), compression='zstd')
-    except (pl.exceptions.ComputeError, pl.exceptions.InvalidOperationError) as err:
-        raise _unwritable_payload_error(repaired, err) from err
+        _scan_ndjson(source).sink_parquet(str(output_path), compression='zstd')
+    except _PAYLOAD_SHAPE_ERRORS as err:
+        raise _unwritable_payload_error(_unnormalized_scan(source), err) from err
     return repair
+
+
+def _unnormalized_scan(source: Path) -> pl.LazyFrame:
+    """A raw scan for error reporting, when even ``_scan_ndjson`` could not build one.
+
+    ``_unwritable_payload_error`` collects this frame's schema on a best-effort
+    basis and already tolerates that failing too.
+    """
+    return pl.scan_ndjson(str(source), infer_schema_length=None)
 
 
 def _normalized_columns(lazy: pl.LazyFrame) -> pl.LazyFrame:
