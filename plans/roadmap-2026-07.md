@@ -57,6 +57,61 @@ is already fetched by `export groups`) suggesting `export insights` before the c
 sits silent.
 Not attempted as an in-passing fix: picking the threshold and deciding
 whether to auto-switch or just hint needs its own design pass, not a rewrite mid-task.
+The 2026-09-16 SKILL.md update carries a hand-written version of this warning for now
+(`## Free is not the same as fast`), which is a stopgap: it only reaches an agent that
+reads the skill before running the command, not one that pastes a command from memory or
+a human at the prompt.
+
+Design options to revisit, none implemented:
+
+- **A. Warn, don't switch.** Before the first `FilterLogEvents` call, check the target
+    group's `stored_bytes` (already fetched by `export groups`, cheap) and print a stderr
+    hint — "`<group>` is N GB; a keyword filter here can take minutes.
+    Consider `export insights` instead." — when size crosses a configurable threshold (say
+    2GB) and the
+    window exceeds ~30min.
+    Cheapest to build, changes no behavior, and a wrong threshold
+    only costs an extra line of stderr rather than a silently wrong answer.
+    Downside: an
+    agent or script running unattended never reads stderr hints, so it still eats the
+    timeout it would have hit anyway; the hint only helps an interactive session.
+- **B. Auto-route through Insights above the threshold.** Same trigger as A, but
+    transparently issue an Insights query (`fields @timestamp, @message | filter ...`)
+    built from the parsed filter tree, in place of `FilterLogEvents`, and warn on stderr
+    that it did so (Insights bills per GB scanned, so this crosses from the free surface
+    into the billed one without the caller asking — the existing `--yes`/confirm-above-gb
+    gate on `export insights` would need to apply here too).
+    Requires translating the
+    full filter grammar (`AND`/`OR`/`NOT`, parens, field comparisons) to an Insights
+    `filter` clause, not just the CloudWatch `FilterPattern` subset `server_side_pattern`
+    already handles — the two pattern languages diverge on regex and field-path syntax,
+    so this is real translation work, not just a call swap.
+    Gets the speed win without a
+    second command, at the cost of surprising a caller who expected `export logs` to stay
+    free.
+- **C. Split the FilterLogEvents call across log streams concurrently**, the way segment
+    resolution already splits across time (`_resolve_into_cache`).
+    `filter_log_events`
+    today issues one paginated call across the whole group; CloudWatch's per-call scan
+    rate is roughly fixed regardless of stream count, so fanning out N concurrent calls
+    (one per stream, or per shard of streams) could multiply effective throughput up to
+    the account's `FilterLogEvents` TPS quota.
+    Unverified: needs a benchmark against a
+    group like `irm-prod-ecs-hatchet-workers` to know whether streams-in-parallel actually
+    beats Insights, or just gets closer while adding a lot of concurrency-control
+    complexity (rate limiting, partial-failure handling, interleaving order) for a smaller
+    win than A or B.
+- **D. Do nothing beyond the SKILL.md warning.** Insights already exists and answers
+    this need; the gap is discoverability, not capability, and the design principle
+    ("prefer sending query power to Logs Insights over reimplementing it") already points
+    an agent at `export insights` if it reads far enough.
+    Lowest effort, but relies on
+    every future reader noticing before they burn a timeout, which is the failure mode
+    that motivated this entry.
+
+No recommendation yet — A is the safe next step if anything ships, since it changes
+no existing behavior and is cheap to revert; B is the one worth prototyping if agents
+keep hitting the timeout after A ships.
 
 **A trailer record would survive `2>/dev/null`, at the cost of a documented contract.**
 Every export now writes `Wrote N events` to stderr, which is the cheap half of this and
