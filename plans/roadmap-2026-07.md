@@ -33,7 +33,30 @@ gives you.
 
 ## Open
 
-Nothing is scheduled. Ordered by value against effort.
+Ordered by value against effort.
+
+**`export logs`/`export summary` with a keyword `--filter` stall on a busy group, where
+Insights answers in seconds.** Investigating a recurring OOM against
+`irm-prod-ecs-hatchet-workers` (9GB, continuous high-volume writers),
+`export logs 'irm-prod-ecs-hatchet-workers' --start 2h --filter 'soffice OR OOM OR ...'`
+and `export summary ... --start 6h` both exceeded a 150s/120s timeout with no output.
+The equivalent
+`aws logs start-query` (Logs Insights) with a `like` filter over the same ~3h window
+returned in about 8 seconds.
+`FilterLogEvents` (what `fetch_log_events` in
+`tail_cw/aws/client.py` calls, even with a server-side pattern from
+`server_side_pattern`) scans a busy group's streams at a rate Insights doesn't share,
+and
+segment-level concurrency (`_resolve_into_cache`) doesn't change that per-call scan
+cost.
+In the spirit of "prefer sending query power to Logs Insights over reimplementing it,"
+either route a keyword `--filter` on a group above some size/volume threshold through
+Insights transparently, or print an early stderr hint (group size from
+`DescribeLogGroups`
+is already fetched by `export groups`) suggesting `export insights` before the command
+sits silent.
+Not attempted as an in-passing fix: picking the threshold and deciding
+whether to auto-switch or just hint needs its own design pass, not a rewrite mid-task.
 
 **A trailer record would survive `2>/dev/null`, at the cost of a documented contract.**
 Every export now writes `Wrote N events` to stderr, which is the cheap half of this and
