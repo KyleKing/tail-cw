@@ -266,6 +266,22 @@ def test_build_parser_no_subcommand():
     assert args.config_path is None
 
 
+@pytest.mark.parametrize(
+    'argv',
+    [
+        ['--profile', 'read-prod', 'export', 'insights', 'g', '--query', 'q'],
+        ['--profile', 'read-prod', 'logs', 'g'],
+        ['export', 'insights', 'g', '--query', 'q', '--profile', 'read-prod'],
+    ],
+)
+def test_build_parser_profile_before_or_after_the_subcommand(argv):
+    args = build_parser().parse_args(argv)
+
+    assert args.profile == 'read-prod'
+    assert args.region is None
+    assert args.config_path is None
+
+
 def test_build_parser_logs_defaults():
     args = build_parser().parse_args(['logs', '/aws/lambda/fn'])
 

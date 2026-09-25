@@ -30,10 +30,12 @@ DEFAULT_STATS_FIELD_LIMIT = 10
 DEFAULT_STATS_VALUE_LIMIT = 10
 
 
-def _add_aws_flags(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument('--config', dest='config_path', type=Path, default=None, help='Config file path override')
-    parser.add_argument('--profile', default=None, help='AWS profile name')
-    parser.add_argument('--region', default=None, help='AWS region name')
+def _add_aws_flags(parser: argparse.ArgumentParser, *, root: bool = False) -> None:
+    # A subcommand's default would overwrite the value given before the subcommand.
+    default = None if root else argparse.SUPPRESS
+    parser.add_argument('--config', dest='config_path', type=Path, default=default, help='Config file path override')
+    parser.add_argument('--profile', default=default, help='AWS profile name')
+    parser.add_argument('--region', default=default, help='AWS region name')
 
 
 def _add_window_flags(parser: argparse.ArgumentParser, *, default_start: str) -> None:
@@ -418,7 +420,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog='tail-cw',
         description='Read and explore AWS CloudWatch from the terminal. Run with no arguments to browse log groups.',
     )
-    _add_aws_flags(parser)
+    _add_aws_flags(parser, root=True)
     _add_demo_flag(parser, 'Browse the offline synthetic groups instead of AWS (no credentials needed)')
     subparsers = parser.add_subparsers(dest='command')
 
