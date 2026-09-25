@@ -123,8 +123,9 @@ def _add_fetch_limit_flag(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_demo_flag(parser: argparse.ArgumentParser, help_text: str) -> None:
-    parser.add_argument('--demo', dest='demo', action='store_true', help=help_text)
+def _add_demo_flag(parser: argparse.ArgumentParser, help_text: str, *, root: bool = False) -> None:
+    default = False if root else argparse.SUPPRESS
+    parser.add_argument('--demo', dest='demo', action='store_true', default=default, help=help_text)
 
 
 def _configure_stats(parser: argparse.ArgumentParser) -> None:
@@ -398,6 +399,7 @@ def _configure_dashboard(parser: argparse.ArgumentParser) -> None:
         '--demo',
         dest='demo',
         action='store_true',
+        default=argparse.SUPPRESS,
         help='Emit the synthetic demo dashboard (no AWS calls)',
     )
     parser.add_argument(
@@ -421,7 +423,7 @@ def build_parser() -> argparse.ArgumentParser:
         description='Read and explore AWS CloudWatch from the terminal. Run with no arguments to browse log groups.',
     )
     _add_aws_flags(parser, root=True)
-    _add_demo_flag(parser, 'Browse the offline synthetic groups instead of AWS (no credentials needed)')
+    _add_demo_flag(parser, 'Browse the offline synthetic groups instead of AWS (no credentials needed)', root=True)
     subparsers = parser.add_subparsers(dest='command')
 
     logs = subparsers.add_parser('logs', help='Open the log view on the groups matching a pattern.')
@@ -436,6 +438,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--demo',
         dest='demo',
         action='store_true',
+        default=argparse.SUPPRESS,
         help='Use the offline synthetic data instead of AWS (no credentials needed)',
     )
     logs.add_argument(
@@ -457,6 +460,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--demo',
         dest='demo',
         action='store_true',
+        default=argparse.SUPPRESS,
         help='Use the offline synthetic data instead of AWS (no credentials needed)',
     )
 
@@ -468,6 +472,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--demo',
         dest='demo',
         action='store_true',
+        default=argparse.SUPPRESS,
         help='Open a synthetic dashboard with generated seed data (no AWS calls)',
     )
 

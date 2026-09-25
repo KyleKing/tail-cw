@@ -282,6 +282,21 @@ def test_build_parser_profile_before_or_after_the_subcommand(argv):
     assert args.config_path is None
 
 
+@pytest.mark.parametrize(
+    'argv',
+    [
+        ['--demo', 'logs', 'g'],
+        ['--demo', 'export', 'dashboard'],
+        ['--demo', 'dash'],
+        ['--demo', 'tail', 'g'],
+    ],
+)
+def test_build_parser_demo_before_the_subcommand(argv):
+    args = build_parser().parse_args(argv)
+
+    assert args.demo is True
+
+
 def test_build_parser_logs_defaults():
     args = build_parser().parse_args(['logs', '/aws/lambda/fn'])
 
