@@ -29,12 +29,13 @@ _ERROR_LEVELS = {'ERROR', 'FATAL', 'CRITICAL'}
 _WARNING_LEVELS = {'WARN', 'WARNING'}
 # A line that labels its own level says more than a keyword anywhere in its body, so
 # "WARNING: Bedrock transient error" is a warning rather than an error. The label may sit
-# behind a leading timestamp, and the single-letter form with "!" is what the CloudWatch
-# agent and other Go tools emit.
+# behind a leading timestamp, a bracketed one may be padded (structlog's `[info     ]`),
+# and the single-letter form with "!" is what the CloudWatch agent and other Go tools emit.
 _TIMESTAMP_PREFIX = r'(?:\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s+)?'
 _LEVEL_WORDS = 'TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|FATAL|CRITICAL'
 _LEVEL_PREFIX_RE = re.compile(
-    rf'^\s*{_TIMESTAMP_PREFIX}(?:[\[\(<]?(?P<word>{_LEVEL_WORDS})[\]\)>]?\s*[:\-|]|(?P<letter>[EWID])!)',
+    rf'^\s*{_TIMESTAMP_PREFIX}(?:\[\s*(?P<bracketed>{_LEVEL_WORDS})\s*\]'
+    rf'|[\(<]?(?P<word>{_LEVEL_WORDS})[\)>]?\s*[:\-|]|(?P<letter>[EWID])!)',
     re.IGNORECASE,
 )
 _LETTER_LEVELS = {'E': 'ERROR', 'W': 'WARNING', 'I': 'INFO', 'D': 'DEBUG'}
@@ -108,7 +109,7 @@ def classify_event(event: LogEvent) -> Classification:
 def keyword_severity(message: str) -> Severity:
     """Classify free text by its own level prefix when it has one, else by keyword."""
     if match := _LEVEL_PREFIX_RE.match(message):
-        word = match.group('word') or _LETTER_LEVELS[match.group('letter').upper()]
+        word = match.group('bracketed') or match.group('word') or _LETTER_LEVELS[match.group('letter').upper()]
         return _level_severity(word.upper())
     lowered = message.lower()
     if any(keyword in lowered for keyword in ERROR_KEYWORDS):

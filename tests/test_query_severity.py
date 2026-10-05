@@ -57,6 +57,10 @@ def test_event_severity_reads_structured_fields(payload, expected):
         # The label may sit behind a timestamp, and Go tools abbreviate it to one letter.
         ('2026-08-21 18:00:00,123 - dagster - WARNING - job failed', Severity.WARNING),
         ('2026-08-21T18:00:00Z [warning ] no entity relationships', Severity.WARNING),
+        # structlog pads its bracketed level, and a key named `error` is not the level.
+        ('2026-10-05T23:17:24.510350Z [info     ] approval_decided error=none', Severity.INFO),
+        ('2026-10-05T23:17:24Z [warning  ] bedrock_failover error="503 from Bedrock"', Severity.WARNING),
+        ('[INFO] retried after an exception', Severity.INFO),
         ('2026-08-21T18:00:00Z I! {"detail":"error"}', Severity.INFO),
         ('2026-08-21T18:00:00Z E! {"detail":"x"}', Severity.ERROR),
         ('Interesting! nothing to see', Severity.INFO),
