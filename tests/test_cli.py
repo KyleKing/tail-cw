@@ -1273,6 +1273,7 @@ def test_run_cli_export_summary_writes_markdown(tmp_path, capsys, monkeypatch):
     # The glob excluded /other, so it was never fetched.
     assert sorted(fetcher.calls) == ['/aws/lambda/one', '/aws/lambda/two']
     assert '# Warning-and-above patterns' in out
+    assert '2 of 2 groups with events' in out
     assert 'warning a disk nearly full' in out
     assert 'fine' not in out
 

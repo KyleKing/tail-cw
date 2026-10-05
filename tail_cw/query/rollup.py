@@ -53,6 +53,7 @@ class RollupReport:
     granularity: Granularity
     bucket_labels: tuple[str, ...]
     scanned: int
+    groups_scanned: int
     matched: int
     severity_totals: tuple[tuple[Severity, int], ...]
     distinct_shapes: int
@@ -121,7 +122,9 @@ def roll_up(
     Passing `window` labels every bucket in the range, so periods with no events render as
     zeros rather than vanishing. `similarity` of None skips the fuzzy merge.
     """
-    tallies, severity_totals, scanned, matched = _tally(events, min_severity=min_severity, granularity=granularity)
+    tallies, severity_totals, scanned, groups, matched = _tally(
+        events, min_severity=min_severity, granularity=granularity
+    )
     distinct_shapes = len(tallies)
     ranked = _rank(tallies)
     if similarity is not None:
@@ -133,6 +136,7 @@ def roll_up(
         granularity=granularity,
         bucket_labels=bucket_labels_for_window(*window, granularity) if window else (),
         scanned=scanned,
+        groups_scanned=len(groups),
         matched=matched,
         severity_totals=tuple(sorted(severity_totals.items(), reverse=True)),
         distinct_shapes=distinct_shapes,
@@ -145,13 +149,15 @@ def _tally(
     *,
     min_severity: Severity,
     granularity: Granularity,
-) -> tuple[dict[str, _Accumulator], Counter[Severity], int, int]:
+) -> tuple[dict[str, _Accumulator], Counter[Severity], int, set[str], int]:
     tallies: dict[str, _Accumulator] = {}
     severity_totals: Counter[Severity] = Counter()
     scanned = 0
+    groups: set[str] = set()
     matched = 0
     for event in events:
         scanned += 1
+        groups.add(event.log_group)
         severity = event_severity(event)
         if severity < min_severity:
             continue
@@ -173,7 +179,7 @@ def _tally(
         tally.last_seen = max(tally.last_seen, event.timestamp)
         tally.log_groups[event.log_group] += 1
         tally.buckets[bucket_label(event.timestamp, granularity)] += 1
-    return tallies, severity_totals, scanned, matched
+    return tallies, severity_totals, scanned, groups, matched
 
 
 def _rank(tallies: dict[str, _Accumulator]) -> list[str]:

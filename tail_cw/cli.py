@@ -1261,7 +1261,7 @@ async def _render_summary(
         ),
     )
     window_label = _window_label(start_time, end_time)
-    source = f'{len(paths)} of {len(names)} groups with events'
+    source = f'{report.groups_scanned} of {len(names)} groups with events'
     table = render_markdown(
         report,
         title=f'{args.level.capitalize()}-and-above patterns',
