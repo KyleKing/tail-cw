@@ -172,6 +172,17 @@ Polars does not, but the Polars path already does `scan_parquet` into
 `collect(engine='streaming')`, so the premise is weak.
 If pursued, use a configured byte ceiling rather than adding `psutil`.
 
+**No way to read one log stream.** CodeBuild writes one stream per build, named by the
+build id, so "show me build `1878a4c2`'s log" is the common question for a job log
+group.
+`export logs` takes groups and a `--filter` on the message, never a stream name, so a
+watch-doggo investigation fell back to
+`aws logs get-log-events --log-group-name /watchdoggo/jobs/review --log-stream-name <build-id> --start-from-head`
+(and `filter-log-events --log-stream-names` for a keyword inside one build).
+A
+`--stream <name|prefix>` on `export logs` that maps to `logStreamNames` /
+`logStreamNamePrefix` would cover both.
+
 ## Blocked application-side, not here
 
 M3's cross-service pivot needs a key present on both sides of the Hatchet boundary, and
