@@ -102,14 +102,52 @@ Two properties keep the result honest:
 - a ragged end is keyed to one request and nothing else will ask for it, so it is written
     with a short TTL and reclaimed instead of accumulating
 
-The filter is no longer part of the key, and a historical fetch no longer sends
-`filterPattern`.
+The filter is no longer part of the key by default, and a historical fetch sends
+`filterPattern` only for the filter shapes covered below.
 One cached window therefore serves every filter asked of it, evaluated locally by the
-query engine.
-The cost is bandwidth on a filtered cold fetch, which now downloads the whole window;
-the gain is that the second question about that window is free no matter how it is
+query engine, whether or not that filter was also sent to CloudWatch.
+The gain is that the second question about that window is free no matter how it is
 filtered, which is what a real investigation looks like.
 Live tail keeps its server-side filter, because nothing caches it.
+
+### Filtered exports send the pattern (added 2026-10-05)
+
+A busy group makes the whole-window download unusable.
+Measured against a production ECS group on 2026-10-05, `export logs --start 30h` with
+`--filter '"Perplexity quota exhausted"'` ran 1,596 seconds without finishing, having
+written two 18 MB segments at 6 GB RSS, to find a phrase Insights had matched 19 times.
+A 2 hour slice of the same group through raw `FilterLogEvents` took 5.3 seconds with the
+pattern and 24.9 seconds without (one sample each).
+
+`export logs`, `export stats`, and `export summary` send `pushdown_filter_pattern`'s
+result as `filterPattern` on a cold fetch.
+The rule it protects: a pattern must never drop an event the local filter would keep,
+because the local filter cannot bring back what CloudWatch did not return.
+A pattern that keeps extra events is harmless, since the local filter still runs on
+read.
+So a shape is sent only after a live check showed CloudWatch matches it the same way:
+
+- text terms and phrases are a case-sensitive substring match on both sides (`info`,
+    `inf`, `nfo`, and `"inf"` each matched 1,038 of 1,038 events, `INFO` and `Info` none),
+    which is why local text matching became case-sensitive first
+- field `=` is exact, case-sensitive string equality, and field `!=` skips an event that
+    lacks the field, as the local engine does
+
+A text value holding a quote, a backslash, or a non-ASCII character stays local, because
+the cache matches a JSON event's text re-encoded from `parsed` while CloudWatch matches
+the raw line, and the two differ on exactly those characters.
+`NOT` over a field stays local too: locally it keeps a line that is not JSON, and
+CloudWatch matches a JSON pattern against JSON events only.
+Regexes, numeric comparisons, field existence, and field regexes stay local until each
+gets the same check.
+
+A segment is looked up under its whole-window key first, because a segment fetched whole
+answers any filter.
+A filtered fetch is written under a key that includes the pattern, and the key gains no
+pattern field when none was sent, so existing whole-window entries stay valid.
+
+The TUI's fetch (`resolve_logs` in `tail_cw/services.py`) keeps fetching whole windows
+and filtering on every keystroke, since a whole window is what makes that free.
 
 ### What the v2 schema stores
 
@@ -160,7 +198,8 @@ The cost of the dual dispatch tables is bounded because both consume the same AS
 - A JSON event's text does not round-trip byte for byte: whitespace, key order, and
     explicit nulls are lost.
     Everything that reads an event sees valid compact JSON, and no field value is lost
-- A filtered cold fetch now downloads the whole window rather than the matching lines
+- A filtered cold fetch downloads the whole window rather than the matching lines when
+    the filter cannot be pushed down, and always in the TUI
 - Live tail events are not yet flushed into the cache (see ADR 0004), so live scrollback
     is memory-only
 - DuckDB SQL is built with manual string escaping for values (paths and limits are

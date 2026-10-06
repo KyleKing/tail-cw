@@ -8,8 +8,9 @@ from tail_cw.query.expression import (
     FilterParseError,
     parse_query,
     portable_filter_pattern,
+    pushdown_filter_pattern,
 )
-from tail_cw.query.parser import FilterNodeType, filter_to_string
+from tail_cw.query.parser import FilterNode, FilterNodeType, filter_to_string
 
 
 def _types(text: str) -> list[str]:
@@ -162,3 +163,37 @@ def test_quoting_the_number_forces_the_string_comparison_back() -> None:
     assert quoted.node_type is FilterNodeType.JSON_FIELD_EQUALS
     assert quoted.value == '503'
     assert parse_query('level:error').node_type is FilterNodeType.JSON_FIELD_EQUALS
+
+
+@pytest.mark.parametrize(
+    ('node', 'pattern'),
+    [
+        (parse_query('"internal server error"'), '"internal server error"'),
+        (parse_query('ERROR AND NOT ARGUMENTS'), 'ERROR -ARGUMENTS'),
+        (parse_query('level:error'), '{ $.level = "error" }'),
+        (parse_query('level:error OR level:warn'), '{ ($.level = "error") || ($.level = "warn") }'),
+    ],
+)
+def test_pushdown_sends_what_the_cache_and_cloudwatch_agree_on(node: FilterNode, pattern: str) -> None:
+    assert pushdown_filter_pattern(node).pattern == pattern
+
+
+@pytest.mark.parametrize(
+    ('node', 'expected_in_reason'),
+    [
+        (parse_query('%[Ee]rror%'), 'not yet checked against cloudwatch'),
+        (parse_query('status:>=500'), 'not yet checked against cloudwatch'),
+        (parse_query('NOT level:info'), 'not json'),
+        (FilterNode(node_type=FilterNodeType.EXACT_PHRASE, value='she said "hi"'), 'quote, backslash'),
+        (FilterNode(node_type=FilterNodeType.EXACT_PHRASE, value='café'), 'quote, backslash'),
+        (FilterNode(node_type=FilterNodeType.TEXT_SEARCH, value='a\\b'), 'quote, backslash'),
+    ],
+)
+def test_pushdown_refuses_what_the_cache_and_cloudwatch_might_read_differently(
+    node: FilterNode,
+    expected_in_reason: str,
+) -> None:
+    portable = pushdown_filter_pattern(node)
+
+    assert portable.pattern is None
+    assert expected_in_reason in portable.reason.lower()

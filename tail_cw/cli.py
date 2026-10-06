@@ -73,7 +73,7 @@ from tail_cw.demo import DEMO_LOG_GROUP, demo_dashboard, demo_resolve_logs
 from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.parser import DEFAULT_STATS_FIELD_LIMIT, DEFAULT_WINDOW, build_parser
 from tail_cw.query.engine import query_parquet_files_to_log_events, query_parquet_files_to_records
-from tail_cw.query.expression import parse_query, portable_filter_pattern
+from tail_cw.query.expression import parse_query, portable_filter_pattern, pushdown_filter_pattern
 from tail_cw.query.facets import FieldFacet, count_by_field, discover_field_paths
 from tail_cw.query.otlp import trace_error_summary, trace_groups_to_otlp, xray_trace_summary, xray_traces_to_otlp
 from tail_cw.query.parser import FilterNode
@@ -118,9 +118,8 @@ class FetchRequest:
         end_time: End of the time range (timezone-aware).
         profile: Optional AWS profile name.
         region: Optional AWS region name.
-
-    No filter belongs here: a historical fetch retrieves the whole window so one
-    cached copy serves every filter, which is then applied locally on read.
+        filter_pattern: A pattern from :func:`tail_cw.query.expression.pushdown_filter_pattern`
+            that narrows the fetch, cached under its own key. The local filter still runs on read.
     """
 
     log_group: str
@@ -128,6 +127,7 @@ class FetchRequest:
     end_time: datetime
     profile: str | None = None
     region: str | None = None
+    filter_pattern: str | None = None
 
 
 @dataclass(frozen=True)
@@ -312,6 +312,22 @@ def _local_filter(filter_pattern: str | None) -> FilterNode | None:
     return parse_query(filter_pattern) if filter_pattern else None
 
 
+def _historical_fetch_pattern(filter_node: FilterNode | None, text: str, *, demo: bool) -> str | None:
+    """Return the pattern a historical fetch sends to CloudWatch, or None to fetch whole.
+
+    Writes a notice when a filter was given but cannot be pushed down, unless this is
+    ``--demo``, which never reaches CloudWatch.
+    """
+    if filter_node is None:
+        return None
+    portable = pushdown_filter_pattern(filter_node)
+    if portable.pattern is None and not demo:
+        _stderr_notice(
+            f'--filter {text!r} runs locally after downloading the whole window: {portable.reason}',
+        )
+    return portable.pattern
+
+
 def open_log_cache(config: TailCWConfig) -> LogCache:
     """Open the configured log cache. Close it, or use it as a context manager."""
     return LogCache(
@@ -334,18 +350,34 @@ async def _resolve_segment(
     write_gate: threading.Semaphore,
     notices: list[str],
 ) -> Path | None:
-    cache_key = generate_cache_key(
+    whole_window_key = generate_cache_key(
         request.log_group,
         segment.start,
         segment.end,
         region_name=request.region,
         profile_name=request.profile,
     )
+    cache_key = (
+        whole_window_key
+        if request.filter_pattern is None
+        else generate_cache_key(
+            request.log_group,
+            segment.start,
+            segment.end,
+            region_name=request.region,
+            profile_name=request.profile,
+            filter_pattern=request.filter_pattern,
+        )
+    )
     # An unsettled segment is short of events CloudWatch had not ingested yet, so a
     # hit on it is refetched rather than served.
-    if use_cache and segment.settled and (cached_path := cache.get_parquet_path(cache_key)) is not None:
-        return cached_path
-    events = fetch_events(client, request.log_group, segment.start, segment.end)
+    if use_cache and segment.settled:
+        # A segment fetched whole serves any filter, because the local filter runs on read.
+        if (cached_path := cache.get_parquet_path(whole_window_key)) is not None:
+            return cached_path
+        if cache_key != whole_window_key and (cached_path := cache.get_parquet_path(cache_key)) is not None:
+            return cached_path
+    events = fetch_events(client, request.log_group, segment.start, segment.end, filter_pattern=request.filter_pattern)
     first_event = await anext(events, None)
     if first_event is None:
         return None
@@ -933,10 +965,12 @@ async def _resolve_export_paths(
     """
     try:
         start_time, end_time = _window_from_args(args, now)
-        filter_node = _local_filter(expand_filter(args.filter_pattern, config.filters))
+        filter_text = expand_filter(args.filter_pattern, config.filters)
+        filter_node = _local_filter(filter_text)
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
+    sent_pattern = _historical_fetch_pattern(filter_node, filter_text or '', demo=args.demo)
     if args.demo:
         return _CacheRead(paths=_demo_paths(start_time, end_time), filter_node=filter_node, group_count=1)
     logs = await pool.client('logs')
@@ -957,6 +991,7 @@ async def _resolve_export_paths(
             end_time=end_time,
             profile=args.profile,
             region=args.region,
+            filter_pattern=sent_pattern,
         )
         for name in names
     ]
@@ -972,7 +1007,9 @@ async def _resolve_export_paths(
         limit=limit,
     )
     if not paths:
-        sys.stderr.write('No events found for the requested range\n')
+        sys.stderr.write(
+            'No events matched the filter\n' if sent_pattern else 'No events found for the requested range\n',
+        )
         return 0
     return _CacheRead(paths=paths, filter_node=filter_node, group_count=len(names))
 
@@ -1193,6 +1230,7 @@ async def _export_summary(
     config = _load_config_or_report(args)
     if config is None:
         return 1
+    sent_pattern = _historical_fetch_pattern(filter_node, args.filter_pattern or '', demo=args.demo)
     if args.demo:
         return await _render_summary(
             _demo_paths(start_time, end_time),
@@ -1202,6 +1240,7 @@ async def _export_summary(
             names=[DEMO_LOG_GROUP],
             now=now,
             executor=executor,
+            sent_pattern=sent_pattern,
         )
     logs = await pool.client('logs')
     names = [group.name for group in await _resolve_summary_groups(logs, args.patterns, config.presets)]
@@ -1218,6 +1257,7 @@ async def _export_summary(
             end_time=end_time,
             profile=args.profile,
             region=args.region,
+            filter_pattern=sent_pattern,
         )
         for name in names
     ]
@@ -1238,6 +1278,7 @@ async def _export_summary(
         names=names,
         now=now,
         executor=executor,
+        sent_pattern=sent_pattern,
     )
 
 
@@ -1250,9 +1291,12 @@ async def _render_summary(
     names: Sequence[str],
     now: datetime,
     executor: ThreadPoolExecutor,
+    sent_pattern: str | None = None,
 ) -> int:
     if not paths:
-        sys.stderr.write('No events found for the requested range\n')
+        sys.stderr.write(
+            'No events matched the filter\n' if sent_pattern else 'No events found for the requested range\n',
+        )
         return 0
     start_time, end_time = window
     report = await run_blocking(

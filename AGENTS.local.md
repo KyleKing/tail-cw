@@ -361,7 +361,10 @@ References:
     *ignores* its `?` any-of terms when they are mixed with anything else instead of
     rejecting the pattern, so sending a mixed expression returns the wrong events with no
     error.
-    Never widen what it translates without checking that CloudWatch can mean it exactly
+    Never widen what it translates without checking that CloudWatch can mean it exactly.
+    A historical export's cold fetch gates through the stricter `pushdown_filter_pattern`
+    instead, because the cache matches an event's text re-encoded from its `parsed`
+    struct while CloudWatch matches the raw line
 - A native engine panic (`pyo3_runtime.PanicException`) derives from `BaseException`, so
     every `except Exception` in the tool looks past it.
     `query_parquet_file` converts it to `EnginePanicError`; keep new Polars and DuckDB

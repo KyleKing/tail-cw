@@ -57,6 +57,7 @@ def generate_cache_key(
     log_stream_names: list[str] | None = None,
     region_name: str | None = None,
     profile_name: str | None = None,
+    filter_pattern: str | None = None,
 ) -> str:
     """Generate a deterministic cache key from CloudWatch query parameters.
 
@@ -65,9 +66,11 @@ def generate_cache_key(
     ``event_id`` and a raw duplicate of every JSON message) from being read back
     under the current schema.
 
-    No filter is part of the key. Historical fetches always retrieve the whole
-    window and filter locally, so one cached window serves every filter asked of
-    it.
+    A whole-window fetch (``filter_pattern=None``) serves every filter asked of a
+    segment, evaluated locally by the query engine, and this is the key every segment is
+    checked under first. ``filter_pattern`` only changes the key when it is given, so a
+    historical fetch that sends one to CloudWatch gets its own key rather than colliding
+    with, or widening, the whole-window entry.
 
     Args:
         log_group: CloudWatch log group name.
@@ -79,6 +82,7 @@ def generate_cache_key(
         profile_name: Optional AWS profile name. Included so results fetched
             with different profiles (potentially different accounts) do not
             collide in the cache.
+        filter_pattern: Optional CloudWatch filter pattern sent with the fetch.
 
     Returns:
         Cache key in format: cache:v2:{base64url_digest}
@@ -106,6 +110,9 @@ def generate_cache_key(
 
     if profile_name is not None:
         canonical['profile_name'] = profile_name
+
+    if filter_pattern is not None:
+        canonical['filter_pattern'] = filter_pattern
 
     return _hash_canonical(canonical, prefix=CACHE_KEY_PREFIX)
 

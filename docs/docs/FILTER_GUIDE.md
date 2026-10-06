@@ -5,8 +5,8 @@ CloudWatch's own pattern syntax, so a filter you already know keeps working. The
 operators and the `field:value` shorthand are additions, and they run locally.
 
 Text and phrase terms match case-sensitively, the same substring rule CloudWatch's
-`FilterLogEvents` uses, so a filter returns the same events whether it runs live or from
-cache.
+`FilterLogEvents` uses, so a filter returns the same events whether it runs live, from
+cache, or sent to CloudWatch as part of an export.
 For a case-insensitive search, use a regex: `%(?i)timeout%`.
 
 ## Terms
@@ -43,12 +43,18 @@ Parentheses are grouping. To search for a literal parenthesis, quote it: `"(retr
 
 ## What can be sent to CloudWatch, and what cannot
 
-A historical fetch always retrieves the whole window and filters locally, so every filter
-above works on cached and historical events. The filter is not part of the cache key,
-which is why one cached window serves every filter you ask of it.
+A historical fetch filters locally on every read, so every filter above works on cached
+and historical events.
+On a cold fetch, `export logs`, `export stats`, and `export summary` also send the filter
+to CloudWatch when it is made of text terms, phrases, and `field:value` or `field!=value`
+conditions, in the shapes live tail can send below.
+CloudWatch then returns only the matching events instead of the whole window.
+A regex, a numeric comparison, a field-existence check, `NOT` over a field, or text
+holding a quote, a backslash, or a non-ASCII character runs locally after the whole
+window downloads, and the export says so on stderr.
 
-Live tail is different: CloudWatch applies the filter, so the filter has to be something
-CloudWatch can mean exactly. These translate:
+Live tail works the same way for what it can send: CloudWatch applies the filter there
+too, so the filter has to be something CloudWatch can mean exactly. These translate:
 
 | Yours                            | Sent as                             |
 | -------------------------------- | ----------------------------------- |

@@ -346,6 +346,49 @@ def _json_value(node: FilterNode) -> str:
     return f'"{node.value}"'
 
 
+_PUSHDOWN_LEAF_TYPES = frozenset(
+    {
+        FilterNodeType.TEXT_SEARCH,
+        FilterNodeType.EXACT_PHRASE,
+        FilterNodeType.JSON_FIELD_EQUALS,
+        FilterNodeType.JSON_FIELD_NOT_EQUALS,
+    },
+)
+
+
+def pushdown_filter_pattern(node: FilterNode) -> Portability:
+    """Translate a filter for a historical fetch, refusing anything that could drop an event the local filter keeps.
+
+    The cache matches a JSON event's text re-encoded from ``parsed`` while CloudWatch matches the
+    raw line, and the two can differ on a quote, a backslash, or a non-ASCII character. Regex,
+    numeric, existence, and field-regex leaves stay local until each is checked against CloudWatch.
+    """
+    reason = _pushdown_refusal(node)
+    return Portability(pattern=None, reason=reason) if reason is not None else portable_filter_pattern(node)
+
+
+def _pushdown_refusal(node: FilterNode) -> str | None:
+    if node.node_type in {FilterNodeType.AND, FilterNodeType.OR, FilterNodeType.NOT}:
+        if node.node_type is FilterNodeType.NOT and _holds_a_field(node):
+            return 'NOT over a field keeps a line that is not JSON here, and CloudWatch drops it'
+        return next((reason for child in node.children or [] if (reason := _pushdown_refusal(child))), None)
+    if node.node_type in _TEXT_TYPES and _unsafe_for_cached_text(str(node.value)):
+        return 'a quote, backslash, or non-ASCII character can match the cache and CloudWatch differently'
+    if node.node_type in _PUSHDOWN_LEAF_TYPES or node.node_type is FilterNodeType.MATCH_ALL:
+        return None
+    return f'a {node.node_type.value.replace("_", " ")} is not yet checked against CloudWatch'
+
+
+def _holds_a_field(node: FilterNode) -> bool:
+    if node.node_type in {FilterNodeType.AND, FilterNodeType.OR, FilterNodeType.NOT}:
+        return any(_holds_a_field(child) for child in node.children or [])
+    return node.node_type.value.startswith('json_field_')
+
+
+def _unsafe_for_cached_text(value: str) -> bool:
+    return not value.isascii() or '"' in value or '\\' in value
+
+
 _PORTABLE_BUILDERS: dict[FilterNodeType, Callable[[FilterNode], Portability]] = {
     FilterNodeType.TEXT_SEARCH: _portable_text,
     FilterNodeType.EXACT_PHRASE: _portable_phrase,

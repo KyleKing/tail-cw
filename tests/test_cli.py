@@ -201,6 +201,7 @@ def _make_request(
     *,
     profile: str | None = None,
     region: str | None = None,
+    filter_pattern: str | None = None,
 ) -> FetchRequest:
     """A request over one aligned five-minute segment, well behind the ingestion window."""
     return FetchRequest(
@@ -209,6 +210,7 @@ def _make_request(
         end_time=NOW - timedelta(minutes=55),
         profile=profile,
         region=region,
+        filter_pattern=filter_pattern,
     )
 
 
@@ -613,9 +615,56 @@ async def test_resolve_parquet_path_threads_fetch_parameters(tmp_path):
     assert call['log_group'] == '/aws/test/group'
     assert (call['start_time'], call['end_time']) == (request.start_time, request.end_time)
     # No server-side filter: the whole window is cached once and filtered on read.
-    assert 'filter_pattern' not in call
+    assert call['filter_pattern'] is None
     # Profile and region reach the pool that built the client, and the cache key, not the fetch itself
     assert 'profile_name' not in call
+
+
+async def test_resolve_parquet_path_patterned_request_passes_pattern_and_caches(tmp_path):
+    config = _make_config(tmp_path)
+    request = _make_request(filter_pattern='ERROR')
+    fetcher = _FakeFetcher(_make_events())
+
+    first_paths = await resolve_parquet_path(_CLIENT, request, config, fetch_events=fetcher)
+
+    assert fetcher.calls[0]['filter_pattern'] == 'ERROR'
+
+    second_fetcher = _FakeFetcher(_make_events())
+    second_paths = await resolve_parquet_path(_CLIENT, request, config, fetch_events=second_fetcher)
+
+    assert second_paths == first_paths
+    assert second_fetcher.calls == []
+
+
+async def test_resolve_parquet_path_whole_window_segment_serves_patterned_request(tmp_path):
+    config = _make_config(tmp_path)
+    await resolve_parquet_path(_CLIENT, _make_request(), config, fetch_events=_FakeFetcher(_make_events()))
+
+    patterned_fetcher = _FakeFetcher(_make_events())
+    await resolve_parquet_path(
+        _CLIENT,
+        _make_request(filter_pattern='ERROR'),
+        config,
+        fetch_events=patterned_fetcher,
+    )
+
+    assert patterned_fetcher.calls == []
+
+
+async def test_resolve_parquet_path_patterned_segment_does_not_serve_whole_window_request(tmp_path):
+    config = _make_config(tmp_path)
+    await resolve_parquet_path(
+        _CLIENT,
+        _make_request(filter_pattern='ERROR'),
+        config,
+        fetch_events=_FakeFetcher(_make_events()),
+    )
+
+    whole_fetcher = _FakeFetcher(_make_events())
+    await resolve_parquet_path(_CLIENT, _make_request(), config, fetch_events=whole_fetcher)
+
+    assert len(whole_fetcher.calls) == 1
+    assert whole_fetcher.calls[0]['filter_pattern'] is None
 
 
 async def test_resolve_parquet_path_profile_changes_cache_entry(tmp_path):
@@ -909,6 +958,30 @@ def test_run_cli_export_logs_no_events(tmp_path, capsys):
     captured = capsys.readouterr()
     assert not captured.out
     assert 'No events found' in captured.err
+
+
+def test_run_cli_export_logs_unpushable_filter_notices_local_fallback(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+
+    result = run_cli(
+        [
+            'export',
+            'logs',
+            '/aws/test/group',
+            '--start',
+            '2m',
+            '--filter',
+            'status:>=500',
+            '--config',
+            str(config_path),
+        ],
+        None,
+        fetch_events=_FakeFetcher(_make_events(2)),
+        is_tty=False,
+    )
+
+    assert result == 0
+    assert 'runs locally after downloading the whole window' in capsys.readouterr().err
 
 
 def test_run_cli_export_logs_invalid_window(capsys):
