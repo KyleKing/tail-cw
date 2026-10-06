@@ -4738,37 +4738,27 @@ are searched differently downstream, and a record usually carries both.</p>
 <span class="linenos" data-linenos="501 "></span><span class="sd">    """</span>
 <span class="linenos" data-linenos="502 "></span>    <span class="c1"># Build error filter matching error keywords in message text</span>
 <span class="linenos" data-linenos="503 "></span>    <span class="c1"># This is more reliable than trying to match structured fields which may not exist</span>
-<span class="linenos" data-linenos="504 "></span>    <span class="n">error_filters</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="504 "></span>    <span class="n">filter_node</span> <span class="o">=</span> <span class="n">parse_filter_pattern</span><span class="p">(</span><span class="sa">f</span><span class="s1">'%(?i)(</span><span class="si">{</span><span class="s2">"|"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">ERROR_KEYWORDS</span><span class="p">))</span><span class="si">}</span><span class="s1">)%'</span><span class="p">)</span>
 <span class="linenos" data-linenos="505 "></span>
-<span class="linenos" data-linenos="506 "></span>    <span class="c1"># Match error keywords in message fields using text search</span>
-<span class="linenos" data-linenos="507 "></span>    <span class="k">for</span> <span class="n">keyword</span> <span class="ow">in</span> <span class="n">ERROR_KEYWORDS</span><span class="p">:</span>
-<span class="linenos" data-linenos="508 "></span>        <span class="k">try</span><span class="p">:</span>
-<span class="linenos" data-linenos="509 "></span>            <span class="n">error_filters</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">parse_filter_pattern</span><span class="p">(</span><span class="n">keyword</span><span class="p">))</span>
-<span class="linenos" data-linenos="510 "></span>        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-<span class="linenos" data-linenos="511 "></span>            <span class="k">continue</span>
-<span class="linenos" data-linenos="512 "></span>
-<span class="linenos" data-linenos="513 "></span>    <span class="c1"># Combine all error conditions with OR</span>
-<span class="linenos" data-linenos="514 "></span>    <span class="n">filter_node</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">error_filters</span> <span class="k">else</span> <span class="n">combine_filters</span><span class="p">(</span><span class="n">error_filters</span><span class="p">,</span> <span class="n">operator</span><span class="o">=</span><span class="s1">'OR'</span><span class="p">)</span>
-<span class="linenos" data-linenos="515 "></span>
-<span class="linenos" data-linenos="516 "></span>    <span class="c1"># Query for error events only</span>
-<span class="linenos" data-linenos="517 "></span>    <span class="k">try</span><span class="p">:</span>
-<span class="linenos" data-linenos="518 "></span>        <span class="n">events</span> <span class="o">=</span> <span class="n">query_parquet_file_to_log_events</span><span class="p">(</span><span class="n">parquet_path</span><span class="p">,</span> <span class="n">filter_node</span><span class="p">)</span>
-<span class="linenos" data-linenos="519 "></span>    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-<span class="linenos" data-linenos="520 "></span>        <span class="k">return</span> <span class="p">[]</span>
-<span class="linenos" data-linenos="521 "></span>
-<span class="linenos" data-linenos="522 "></span>    <span class="c1"># Group by trace</span>
-<span class="linenos" data-linenos="523 "></span>    <span class="n">grouped_spans</span> <span class="o">=</span> <span class="n">group_events_by_trace</span><span class="p">(</span><span class="n">events</span><span class="p">,</span> <span class="n">trace_id_fields</span><span class="p">)</span>
-<span class="linenos" data-linenos="524 "></span>
-<span class="linenos" data-linenos="525 "></span>    <span class="c1"># Create trace groups</span>
-<span class="linenos" data-linenos="526 "></span>    <span class="n">trace_groups</span> <span class="o">=</span> <span class="n">create_trace_groups</span><span class="p">(</span><span class="n">grouped_spans</span><span class="p">)</span>
-<span class="linenos" data-linenos="527 "></span>
-<span class="linenos" data-linenos="528 "></span>    <span class="c1"># Filter to only traces with errors (double-check with is_error_event)</span>
-<span class="linenos" data-linenos="529 "></span>    <span class="n">error_traces</span> <span class="o">=</span> <span class="p">[</span><span class="n">tg</span> <span class="k">for</span> <span class="n">tg</span> <span class="ow">in</span> <span class="n">trace_groups</span> <span class="k">if</span> <span class="n">tg</span><span class="o">.</span><span class="n">error_count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
-<span class="linenos" data-linenos="530 "></span>
-<span class="linenos" data-linenos="531 "></span>    <span class="c1"># Sort by error_count descending</span>
-<span class="linenos" data-linenos="532 "></span>    <span class="n">error_traces</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">tg</span><span class="p">:</span> <span class="n">tg</span><span class="o">.</span><span class="n">error_count</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="linenos" data-linenos="533 "></span>
-<span class="linenos" data-linenos="534 "></span>    <span class="k">return</span> <span class="n">error_traces</span>
+<span class="linenos" data-linenos="506 "></span>    <span class="c1"># Query for error events only</span>
+<span class="linenos" data-linenos="507 "></span>    <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="508 "></span>        <span class="n">events</span> <span class="o">=</span> <span class="n">query_parquet_file_to_log_events</span><span class="p">(</span><span class="n">parquet_path</span><span class="p">,</span> <span class="n">filter_node</span><span class="p">)</span>
+<span class="linenos" data-linenos="509 "></span>    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+<span class="linenos" data-linenos="510 "></span>        <span class="k">return</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="511 "></span>
+<span class="linenos" data-linenos="512 "></span>    <span class="c1"># Group by trace</span>
+<span class="linenos" data-linenos="513 "></span>    <span class="n">grouped_spans</span> <span class="o">=</span> <span class="n">group_events_by_trace</span><span class="p">(</span><span class="n">events</span><span class="p">,</span> <span class="n">trace_id_fields</span><span class="p">)</span>
+<span class="linenos" data-linenos="514 "></span>
+<span class="linenos" data-linenos="515 "></span>    <span class="c1"># Create trace groups</span>
+<span class="linenos" data-linenos="516 "></span>    <span class="n">trace_groups</span> <span class="o">=</span> <span class="n">create_trace_groups</span><span class="p">(</span><span class="n">grouped_spans</span><span class="p">)</span>
+<span class="linenos" data-linenos="517 "></span>
+<span class="linenos" data-linenos="518 "></span>    <span class="c1"># Filter to only traces with errors (double-check with is_error_event)</span>
+<span class="linenos" data-linenos="519 "></span>    <span class="n">error_traces</span> <span class="o">=</span> <span class="p">[</span><span class="n">tg</span> <span class="k">for</span> <span class="n">tg</span> <span class="ow">in</span> <span class="n">trace_groups</span> <span class="k">if</span> <span class="n">tg</span><span class="o">.</span><span class="n">error_count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
+<span class="linenos" data-linenos="520 "></span>
+<span class="linenos" data-linenos="521 "></span>    <span class="c1"># Sort by error_count descending</span>
+<span class="linenos" data-linenos="522 "></span>    <span class="n">error_traces</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">tg</span><span class="p">:</span> <span class="n">tg</span><span class="o">.</span><span class="n">error_count</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="linenos" data-linenos="523 "></span>
+<span class="linenos" data-linenos="524 "></span>    <span class="k">return</span> <span class="n">error_traces</span>
 </code></pre></div>
             </details>
     </div>
@@ -4845,24 +4835,24 @@ are searched differently downstream, and a record usually carries both.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/query/trace.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="537 "></span><span class="k">def</span><span class="w"> </span><span class="nf">format_trace_duration</span><span class="p">(</span><span class="n">duration_ms</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># ruff: ignore[redundant-numeric-union]</span>
-<span class="linenos" data-linenos="538 "></span><span class="w">    </span><span class="sd">"""Format duration for display.</span>
-<span class="linenos" data-linenos="539 "></span>
-<span class="linenos" data-linenos="540 "></span><span class="sd">    Args:</span>
-<span class="linenos" data-linenos="541 "></span><span class="sd">        duration_ms: Duration in milliseconds (int or float).</span>
-<span class="linenos" data-linenos="542 "></span>
-<span class="linenos" data-linenos="543 "></span><span class="sd">    Returns:</span>
-<span class="linenos" data-linenos="544 "></span><span class="sd">        Formatted duration (e.g., '1.23s', '456ms', '1m 23s').</span>
-<span class="linenos" data-linenos="545 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="546 "></span>    <span class="n">duration_value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">duration_ms</span><span class="p">)</span>
-<span class="linenos" data-linenos="547 "></span>
-<span class="linenos" data-linenos="548 "></span>    <span class="k">if</span> <span class="n">duration_value</span> <span class="o">&lt;</span> <span class="n">MILLISECONDS_PER_SECOND</span><span class="p">:</span>
-<span class="linenos" data-linenos="549 "></span>        <span class="k">return</span> <span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">duration_value</span><span class="p">)</span><span class="si">}</span><span class="s1">ms'</span>
-<span class="linenos" data-linenos="550 "></span>    <span class="k">if</span> <span class="n">duration_value</span> <span class="o">&lt;</span> <span class="n">MILLISECONDS_PER_MINUTE</span><span class="p">:</span>
-<span class="linenos" data-linenos="551 "></span>        <span class="k">return</span> <span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="n">duration_value</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">MILLISECONDS_PER_SECOND</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">s'</span>
-<span class="linenos" data-linenos="552 "></span>    <span class="n">minutes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">duration_value</span> <span class="o">/</span> <span class="n">MILLISECONDS_PER_MINUTE</span><span class="p">)</span>
-<span class="linenos" data-linenos="553 "></span>    <span class="n">seconds</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="n">duration_value</span> <span class="o">%</span> <span class="n">MILLISECONDS_PER_MINUTE</span><span class="p">)</span> <span class="o">/</span> <span class="n">MILLISECONDS_PER_SECOND</span><span class="p">)</span>
-<span class="linenos" data-linenos="554 "></span>    <span class="k">return</span> <span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="n">minutes</span><span class="si">}</span><span class="s1">m </span><span class="si">{</span><span class="n">seconds</span><span class="si">}</span><span class="s1">s'</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="527 "></span><span class="k">def</span><span class="w"> </span><span class="nf">format_trace_duration</span><span class="p">(</span><span class="n">duration_ms</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># ruff: ignore[redundant-numeric-union]</span>
+<span class="linenos" data-linenos="528 "></span><span class="w">    </span><span class="sd">"""Format duration for display.</span>
+<span class="linenos" data-linenos="529 "></span>
+<span class="linenos" data-linenos="530 "></span><span class="sd">    Args:</span>
+<span class="linenos" data-linenos="531 "></span><span class="sd">        duration_ms: Duration in milliseconds (int or float).</span>
+<span class="linenos" data-linenos="532 "></span>
+<span class="linenos" data-linenos="533 "></span><span class="sd">    Returns:</span>
+<span class="linenos" data-linenos="534 "></span><span class="sd">        Formatted duration (e.g., '1.23s', '456ms', '1m 23s').</span>
+<span class="linenos" data-linenos="535 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="536 "></span>    <span class="n">duration_value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">duration_ms</span><span class="p">)</span>
+<span class="linenos" data-linenos="537 "></span>
+<span class="linenos" data-linenos="538 "></span>    <span class="k">if</span> <span class="n">duration_value</span> <span class="o">&lt;</span> <span class="n">MILLISECONDS_PER_SECOND</span><span class="p">:</span>
+<span class="linenos" data-linenos="539 "></span>        <span class="k">return</span> <span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">duration_value</span><span class="p">)</span><span class="si">}</span><span class="s1">ms'</span>
+<span class="linenos" data-linenos="540 "></span>    <span class="k">if</span> <span class="n">duration_value</span> <span class="o">&lt;</span> <span class="n">MILLISECONDS_PER_MINUTE</span><span class="p">:</span>
+<span class="linenos" data-linenos="541 "></span>        <span class="k">return</span> <span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="n">duration_value</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">MILLISECONDS_PER_SECOND</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">s'</span>
+<span class="linenos" data-linenos="542 "></span>    <span class="n">minutes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">duration_value</span> <span class="o">/</span> <span class="n">MILLISECONDS_PER_MINUTE</span><span class="p">)</span>
+<span class="linenos" data-linenos="543 "></span>    <span class="n">seconds</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="n">duration_value</span> <span class="o">%</span> <span class="n">MILLISECONDS_PER_MINUTE</span><span class="p">)</span> <span class="o">/</span> <span class="n">MILLISECONDS_PER_SECOND</span><span class="p">)</span>
+<span class="linenos" data-linenos="544 "></span>    <span class="k">return</span> <span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="n">minutes</span><span class="si">}</span><span class="s1">m </span><span class="si">{</span><span class="n">seconds</span><span class="si">}</span><span class="s1">s'</span>
 </code></pre></div>
             </details>
     </div>

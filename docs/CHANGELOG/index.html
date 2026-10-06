@@ -3250,6 +3250,9 @@ and every <code>--json</code> flag moved under <code>tail-cw export</code>.</li>
 </ul>
 <h3 id="feat">Feat<a class="headerlink" href="#feat" title="Permanent link">⚓︎</a></h3>
 <ul>
+<li><strong>cli</strong>: accept the 32-digit trace id a log line carries in export xray-trace</li>
+<li><strong>insights</strong>: drop the 7-day window cap and let the scan estimate gate any window</li>
+<li><strong>cpu-budget</strong>: shrink the native budget under load, add a batch nice knob</li>
 <li><strong>charts</strong>: color roles from the active theme with a contrast floor</li>
 <li><strong>tui</strong>: count the payload fields beside the log table</li>
 <li><strong>export</strong>: emit the parsed payload, count by field, and stop a fetch at a limit</li>
@@ -3298,6 +3301,16 @@ and every <code>--json</code> flag moved under <code>tail-cw export</code>.</li>
 </ul>
 <h3 id="fix">Fix<a class="headerlink" href="#fix" title="Permanent link">⚓︎</a></h3>
 <ul>
+<li><strong>query</strong>: match free text case-sensitively, as CloudWatch does</li>
+<li><strong>cli</strong>: exit 130 with a notice when a command is interrupted</li>
+<li><strong>insights</strong>: let a query&rsquo;s own limit command decide its row count</li>
+<li><strong>summary</strong>: Count log groups, not cache segments, in the groups-with-events header</li>
+<li><strong>severity</strong>: Read structlog&rsquo;s padded bracketed level before scanning for keywords</li>
+<li><strong>cli</strong>: Keep &ndash;demo given before the subcommand</li>
+<li><strong>cli</strong>: Keep a &ndash;profile given before the subcommand</li>
+<li><strong>cli</strong>: warn export trace about groups it capped, like summary and insights already do</li>
+<li><strong>cache</strong>: repair a payload shape that fails before sink_parquet, not just at it</li>
+<li><strong>cli</strong>: cap concurrent Parquet writes to the CPU budget, not fetch width</li>
 <li><strong>docs</strong>: drop the commitizen changelog_file override breaking cl.write</li>
 <li><strong>tui</strong>: cancel the pending search debounce timer when the box clears</li>
 <li><strong>tui</strong>: stop forcing the plot dark, let it follow the app theme</li>
@@ -3344,6 +3357,8 @@ and every <code>--json</code> flag moved under <code>tail-cw export</code>.</li>
 </ul>
 <h3 id="perf">Perf<a class="headerlink" href="#perf" title="Permanent link">⚓︎</a></h3>
 <ul>
+<li><strong>cli</strong>: send &ndash;filter to CloudWatch on a cold export when both sides match it the same way</li>
+<li><strong>cache</strong>: switch the NDJSON write stage to msgspec, epoch timestamps</li>
 <li><strong>cache</strong>: splice a JSON payload into the cache line instead of re-encoding it</li>
 <li><strong>fetch</strong>: give segment writes their own thread pool</li>
 <li><strong>fetch</strong>: run a window&rsquo;s cache segments concurrently</li>

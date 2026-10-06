@@ -2300,6 +2300,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#tail_cw.query.expression.pushdown_filter_pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pushdown_filter_pattern
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3318,6 +3329,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#tail_cw.query.expression.pushdown_filter_pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pushdown_filter_pattern
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3783,6 +3805,42 @@ safe translations are the ones CloudWatch can mean exactly:</p>
 <span class="linenos" data-linenos="235 "></span>    <span class="k">if</span> <span class="n">builder</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
 <span class="linenos" data-linenos="236 "></span>        <span class="k">return</span> <span class="n">Portability</span><span class="p">(</span><span class="n">pattern</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s1">'CloudWatch has no </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">node_type</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s1"> over text'</span><span class="p">)</span>
 <span class="linenos" data-linenos="237 "></span>    <span class="k">return</span> <span class="n">builder</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.query.expression.pushdown_filter_pattern" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">pushdown_filter_pattern</span>
+
+
+<a href="#tail_cw.query.expression.pushdown_filter_pattern" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">pushdown_filter_pattern</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Translate a filter for a historical fetch, refusing anything that could drop an event the local filter keeps.</p>
+<p>The cache matches a JSON event&rsquo;s text re-encoded from <code>parsed</code> while CloudWatch matches the
+raw line, and the two can differ on a quote, a backslash, or a non-ASCII character. Regex,
+numeric, existence, and field-regex leaves stay local until each is checked against CloudWatch.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>tail_cw/query/expression.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="359 "></span><span class="k">def</span><span class="w"> </span><span class="nf">pushdown_filter_pattern</span><span class="p">(</span><span class="n">node</span><span class="p">:</span> <span class="n">FilterNode</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Portability</span><span class="p">:</span>
+<span class="linenos" data-linenos="360 "></span><span class="w">    </span><span class="sd">"""Translate a filter for a historical fetch, refusing anything that could drop an event the local filter keeps.</span>
+<span class="linenos" data-linenos="361 "></span>
+<span class="linenos" data-linenos="362 "></span><span class="sd">    The cache matches a JSON event's text re-encoded from ``parsed`` while CloudWatch matches the</span>
+<span class="linenos" data-linenos="363 "></span><span class="sd">    raw line, and the two can differ on a quote, a backslash, or a non-ASCII character. Regex,</span>
+<span class="linenos" data-linenos="364 "></span><span class="sd">    numeric, existence, and field-regex leaves stay local until each is checked against CloudWatch.</span>
+<span class="linenos" data-linenos="365 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="366 "></span>    <span class="n">reason</span> <span class="o">=</span> <span class="n">_pushdown_refusal</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+<span class="linenos" data-linenos="367 "></span>    <span class="k">return</span> <span class="n">Portability</span><span class="p">(</span><span class="n">pattern</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">)</span> <span class="k">if</span> <span class="n">reason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">portable_filter_pattern</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
 </code></pre></div>
             </details>
     </div>

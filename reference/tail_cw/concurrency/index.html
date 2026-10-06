@@ -3803,23 +3803,23 @@ fake need not implement <code>aclose</code>.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="111 "></span><span class="nd">@asynccontextmanager</span>
-<span class="linenos" data-linenos="112 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">closing_stream</span><span class="p">[</span><span class="n">T</span><span class="p">](</span><span class="n">source</span><span class="p">:</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">]]:</span>
-<span class="linenos" data-linenos="113 "></span><span class="w">    </span><span class="sd">"""Close an async source on the way out, when it supports closing.</span>
-<span class="linenos" data-linenos="114 "></span>
-<span class="linenos" data-linenos="115 "></span><span class="sd">    Closing matters for anything backed by a paginator: abandoning the generator</span>
-<span class="linenos" data-linenos="116 "></span><span class="sd">    mid-page leaves the HTTP response open until the interpreter finalizes it.</span>
-<span class="linenos" data-linenos="117 "></span><span class="sd">    Unlike :func:`contextlib.aclosing` this accepts any async iterator, so a test</span>
-<span class="linenos" data-linenos="118 "></span><span class="sd">    fake need not implement ``aclose``.</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="116 "></span><span class="nd">@asynccontextmanager</span>
+<span class="linenos" data-linenos="117 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">closing_stream</span><span class="p">[</span><span class="n">T</span><span class="p">](</span><span class="n">source</span><span class="p">:</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">]]:</span>
+<span class="linenos" data-linenos="118 "></span><span class="w">    </span><span class="sd">"""Close an async source on the way out, when it supports closing.</span>
 <span class="linenos" data-linenos="119 "></span>
-<span class="linenos" data-linenos="120 "></span><span class="sd">    Yields:</span>
-<span class="linenos" data-linenos="121 "></span><span class="sd">        The source, unchanged.</span>
-<span class="linenos" data-linenos="122 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="123 "></span>    <span class="k">try</span><span class="p">:</span>
-<span class="linenos" data-linenos="124 "></span>        <span class="k">yield</span> <span class="n">source</span>
-<span class="linenos" data-linenos="125 "></span>    <span class="k">finally</span><span class="p">:</span>
-<span class="linenos" data-linenos="126 "></span>        <span class="k">if</span> <span class="p">(</span><span class="n">aclose</span> <span class="o">:=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="s1">'aclose'</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos="127 "></span>            <span class="k">await</span> <span class="n">aclose</span><span class="p">()</span>
+<span class="linenos" data-linenos="120 "></span><span class="sd">    Closing matters for anything backed by a paginator: abandoning the generator</span>
+<span class="linenos" data-linenos="121 "></span><span class="sd">    mid-page leaves the HTTP response open until the interpreter finalizes it.</span>
+<span class="linenos" data-linenos="122 "></span><span class="sd">    Unlike :func:`contextlib.aclosing` this accepts any async iterator, so a test</span>
+<span class="linenos" data-linenos="123 "></span><span class="sd">    fake need not implement ``aclose``.</span>
+<span class="linenos" data-linenos="124 "></span>
+<span class="linenos" data-linenos="125 "></span><span class="sd">    Yields:</span>
+<span class="linenos" data-linenos="126 "></span><span class="sd">        The source, unchanged.</span>
+<span class="linenos" data-linenos="127 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="128 "></span>    <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="129 "></span>        <span class="k">yield</span> <span class="n">source</span>
+<span class="linenos" data-linenos="130 "></span>    <span class="k">finally</span><span class="p">:</span>
+<span class="linenos" data-linenos="131 "></span>        <span class="k">if</span> <span class="p">(</span><span class="n">aclose</span> <span class="o">:=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="s1">'aclose'</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="132 "></span>            <span class="k">await</span> <span class="n">aclose</span><span class="p">()</span>
 </code></pre></div>
             </details>
     </div>
@@ -3854,28 +3854,28 @@ the pool slot frees within one batch.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="193 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">consume_in_thread</span><span class="p">[</span><span class="n">T</span><span class="p">,</span> <span class="n">R</span><span class="p">](</span>
-<span class="linenos" data-linenos="194 "></span>    <span class="n">executor</span><span class="p">:</span> <span class="n">ThreadPoolExecutor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="195 "></span>    <span class="n">source</span><span class="p">:</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">],</span>
-<span class="linenos" data-linenos="196 "></span>    <span class="n">consume</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Iterator</span><span class="p">[</span><span class="n">T</span><span class="p">]],</span> <span class="n">R</span><span class="p">],</span>
-<span class="linenos" data-linenos="197 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">R</span><span class="p">:</span>
-<span class="linenos" data-linenos="198 "></span><span class="w">    </span><span class="sd">"""Run ``consume`` in a worker thread, feeding it from an async iterator.</span>
-<span class="linenos" data-linenos="199 "></span>
-<span class="linenos" data-linenos="200 "></span><span class="sd">    Lets blocking code that wants an iterator (``LogCache.write``, which streams</span>
-<span class="linenos" data-linenos="201 "></span><span class="sd">    events into Parquet) read from an async source without first materializing it.</span>
-<span class="linenos" data-linenos="202 "></span><span class="sd">    Batching costs one loop round-trip per :data:`DEFAULT_BRIDGE_BATCH` items.</span>
-<span class="linenos" data-linenos="203 "></span>
-<span class="linenos" data-linenos="204 "></span><span class="sd">    On cancellation the worker raises :class:`BridgeCancelledError` rather than ending</span>
-<span class="linenos" data-linenos="205 "></span><span class="sd">    its iterator, so ``consume`` fails instead of committing a partial result, and</span>
-<span class="linenos" data-linenos="206 "></span><span class="sd">    the pool slot frees within one batch.</span>
-<span class="linenos" data-linenos="207 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="208 "></span>    <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
-<span class="linenos" data-linenos="209 "></span>    <span class="n">bridge</span><span class="p">:</span> <span class="n">_Bridge</span><span class="p">[</span><span class="n">T</span><span class="p">]</span> <span class="o">=</span> <span class="n">_Bridge</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">loop</span><span class="p">)</span>
-<span class="linenos" data-linenos="210 "></span>    <span class="k">try</span><span class="p">:</span>
-<span class="linenos" data-linenos="211 "></span>        <span class="k">return</span> <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">consume</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">bridge</span><span class="p">)))</span>
-<span class="linenos" data-linenos="212 "></span>    <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
-<span class="linenos" data-linenos="213 "></span>        <span class="n">bridge</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
-<span class="linenos" data-linenos="214 "></span>        <span class="k">raise</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="198 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">consume_in_thread</span><span class="p">[</span><span class="n">T</span><span class="p">,</span> <span class="n">R</span><span class="p">](</span>
+<span class="linenos" data-linenos="199 "></span>    <span class="n">executor</span><span class="p">:</span> <span class="n">ThreadPoolExecutor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="200 "></span>    <span class="n">source</span><span class="p">:</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">],</span>
+<span class="linenos" data-linenos="201 "></span>    <span class="n">consume</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Iterator</span><span class="p">[</span><span class="n">T</span><span class="p">]],</span> <span class="n">R</span><span class="p">],</span>
+<span class="linenos" data-linenos="202 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">R</span><span class="p">:</span>
+<span class="linenos" data-linenos="203 "></span><span class="w">    </span><span class="sd">"""Run ``consume`` in a worker thread, feeding it from an async iterator.</span>
+<span class="linenos" data-linenos="204 "></span>
+<span class="linenos" data-linenos="205 "></span><span class="sd">    Lets blocking code that wants an iterator (``LogCache.write``, which streams</span>
+<span class="linenos" data-linenos="206 "></span><span class="sd">    events into Parquet) read from an async source without first materializing it.</span>
+<span class="linenos" data-linenos="207 "></span><span class="sd">    Batching costs one loop round-trip per :data:`DEFAULT_BRIDGE_BATCH` items.</span>
+<span class="linenos" data-linenos="208 "></span>
+<span class="linenos" data-linenos="209 "></span><span class="sd">    On cancellation the worker raises :class:`BridgeCancelledError` rather than ending</span>
+<span class="linenos" data-linenos="210 "></span><span class="sd">    its iterator, so ``consume`` fails instead of committing a partial result, and</span>
+<span class="linenos" data-linenos="211 "></span><span class="sd">    the pool slot frees within one batch.</span>
+<span class="linenos" data-linenos="212 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="213 "></span>    <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
+<span class="linenos" data-linenos="214 "></span>    <span class="n">bridge</span><span class="p">:</span> <span class="n">_Bridge</span><span class="p">[</span><span class="n">T</span><span class="p">]</span> <span class="o">=</span> <span class="n">_Bridge</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">loop</span><span class="p">)</span>
+<span class="linenos" data-linenos="215 "></span>    <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="216 "></span>        <span class="k">return</span> <span class="k">await</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">consume</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">bridge</span><span class="p">)))</span>
+<span class="linenos" data-linenos="217 "></span>    <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
+<span class="linenos" data-linenos="218 "></span>        <span class="n">bridge</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+<span class="linenos" data-linenos="219 "></span>        <span class="k">raise</span>
 </code></pre></div>
             </details>
     </div>
@@ -3898,10 +3898,14 @@ the pool slot frees within one batch.</p>
         <p>Open the pool that Parquet writes for in-flight segment fetches run on.</p>
 <p>Separate from :func:<code>blocking_pool</code> because the two are bounded by different
 things. A query is CPU work inside DuckDB or Polars, so its pool stays narrow.
-A segment writer spends nearly all of its life waiting on the network (99% of a
-cold hour, measured), so a wider pool costs little and buys concurrent round
-trips. Sharing one pool made the two compete: four groups fetching filled it
-and a search waited for the fetch.</p>
+A segment writer spends nearly all of a cold hour waiting on the network (99%,
+measured), so a wider pool costs little and buys concurrent round trips.
+Sharing one pool made the two compete: four groups fetching filled it and a
+search waited for the fetch.</p>
+<p>That 99% figure does not hold for a high-volume segment: the Parquet-write
+tail at the end of a busy hour is the same native compute a query does, so it
+goes through :func:<code>tail_cw.cpu_budget.native_write_gate</code> rather than being
+left to however wide this pool is.</p>
 
 
 <table>
@@ -3936,16 +3940,21 @@ and a search waited for the fetch.</p>
 <span class="linenos" data-linenos="78 "></span>
 <span class="linenos" data-linenos="79 "></span><span class="sd">    Separate from :func:`blocking_pool` because the two are bounded by different</span>
 <span class="linenos" data-linenos="80 "></span><span class="sd">    things. A query is CPU work inside DuckDB or Polars, so its pool stays narrow.</span>
-<span class="linenos" data-linenos="81 "></span><span class="sd">    A segment writer spends nearly all of its life waiting on the network (99% of a</span>
-<span class="linenos" data-linenos="82 "></span><span class="sd">    cold hour, measured), so a wider pool costs little and buys concurrent round</span>
-<span class="linenos" data-linenos="83 "></span><span class="sd">    trips. Sharing one pool made the two compete: four groups fetching filled it</span>
-<span class="linenos" data-linenos="84 "></span><span class="sd">    and a search waited for the fetch.</span>
+<span class="linenos" data-linenos="81 "></span><span class="sd">    A segment writer spends nearly all of a cold hour waiting on the network (99%,</span>
+<span class="linenos" data-linenos="82 "></span><span class="sd">    measured), so a wider pool costs little and buys concurrent round trips.</span>
+<span class="linenos" data-linenos="83 "></span><span class="sd">    Sharing one pool made the two compete: four groups fetching filled it and a</span>
+<span class="linenos" data-linenos="84 "></span><span class="sd">    search waited for the fetch.</span>
 <span class="linenos" data-linenos="85 "></span>
-<span class="linenos" data-linenos="86 "></span><span class="sd">    Yields:</span>
-<span class="linenos" data-linenos="87 "></span><span class="sd">        The pool, shut down when the block exits.</span>
-<span class="linenos" data-linenos="88 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="89 "></span>    <span class="k">with</span> <span class="n">_named_pool</span><span class="p">(</span><span class="s1">'tail-cw-fetch'</span><span class="p">,</span> <span class="n">max_workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
-<span class="linenos" data-linenos="90 "></span>        <span class="k">yield</span> <span class="n">pool</span>
+<span class="linenos" data-linenos="86 "></span><span class="sd">    That 99% figure does not hold for a high-volume segment: the Parquet-write</span>
+<span class="linenos" data-linenos="87 "></span><span class="sd">    tail at the end of a busy hour is the same native compute a query does, so it</span>
+<span class="linenos" data-linenos="88 "></span><span class="sd">    goes through :func:`tail_cw.cpu_budget.native_write_gate` rather than being</span>
+<span class="linenos" data-linenos="89 "></span><span class="sd">    left to however wide this pool is.</span>
+<span class="linenos" data-linenos="90 "></span>
+<span class="linenos" data-linenos="91 "></span><span class="sd">    Yields:</span>
+<span class="linenos" data-linenos="92 "></span><span class="sd">        The pool, shut down when the block exits.</span>
+<span class="linenos" data-linenos="93 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="94 "></span>    <span class="k">with</span> <span class="n">_named_pool</span><span class="p">(</span><span class="s1">'tail-cw-fetch'</span><span class="p">,</span> <span class="n">max_workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
+<span class="linenos" data-linenos="95 "></span>        <span class="k">yield</span> <span class="n">pool</span>
 </code></pre></div>
             </details>
     </div>
@@ -3970,9 +3979,9 @@ and a search waited for the fetch.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="228 "></span><span class="k">def</span><span class="w"> </span><span class="nf">is_engine_panic</span><span class="p">(</span><span class="n">err</span><span class="p">:</span> <span class="ne">BaseException</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="linenos" data-linenos="229 "></span><span class="w">    </span><span class="sd">"""Whether an escaped BaseException is a native engine panic rather than a signal."""</span>
-<span class="linenos" data-linenos="230 "></span>    <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="n">err</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span> <span class="ow">in</span> <span class="n">PANIC_TYPE_NAMES</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="233 "></span><span class="k">def</span><span class="w"> </span><span class="nf">is_engine_panic</span><span class="p">(</span><span class="n">err</span><span class="p">:</span> <span class="ne">BaseException</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="linenos" data-linenos="234 "></span><span class="w">    </span><span class="sd">"""Whether an escaped BaseException is a native engine panic rather than a signal."""</span>
+<span class="linenos" data-linenos="235 "></span>    <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="n">err</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span> <span class="ow">in</span> <span class="n">PANIC_TYPE_NAMES</span>
 </code></pre></div>
             </details>
     </div>
@@ -4003,13 +4012,13 @@ and a search waited for the fetch.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="102 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">run_blocking</span><span class="p">[</span><span class="n">T</span><span class="p">](</span><span class="n">executor</span><span class="p">:</span> <span class="n">ThreadPoolExecutor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">work</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
-<span class="linenos" data-linenos="103 "></span><span class="w">    </span><span class="sd">"""Run a blocking callable on ``executor``, or the default pool when None.</span>
-<span class="linenos" data-linenos="104 "></span>
-<span class="linenos" data-linenos="105 "></span><span class="sd">    The thread runs to completion even if the awaiting task is cancelled. Use</span>
-<span class="linenos" data-linenos="106 "></span><span class="sd">    :func:`consume_in_thread` for work long enough that the leaked slot matters.</span>
-<span class="linenos" data-linenos="107 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="108 "></span>    <span class="k">return</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">work</span><span class="p">)</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="107 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">run_blocking</span><span class="p">[</span><span class="n">T</span><span class="p">](</span><span class="n">executor</span><span class="p">:</span> <span class="n">ThreadPoolExecutor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">work</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+<span class="linenos" data-linenos="108 "></span><span class="w">    </span><span class="sd">"""Run a blocking callable on ``executor``, or the default pool when None.</span>
+<span class="linenos" data-linenos="109 "></span>
+<span class="linenos" data-linenos="110 "></span><span class="sd">    The thread runs to completion even if the awaiting task is cancelled. Use</span>
+<span class="linenos" data-linenos="111 "></span><span class="sd">    :func:`consume_in_thread` for work long enough that the leaked slot matters.</span>
+<span class="linenos" data-linenos="112 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="113 "></span>    <span class="k">return</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="n">executor</span><span class="p">,</span> <span class="n">work</span><span class="p">)</span>
 </code></pre></div>
             </details>
     </div>
@@ -4038,15 +4047,15 @@ and a search waited for the fetch.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/concurrency.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="130 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">take</span><span class="p">[</span><span class="n">T</span><span class="p">](</span><span class="n">source</span><span class="p">:</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">T</span><span class="p">]:</span>
-<span class="linenos" data-linenos="131 "></span><span class="w">    </span><span class="sd">"""Read at most ``limit`` items, then close the source."""</span>
-<span class="linenos" data-linenos="132 "></span>    <span class="k">async</span> <span class="k">with</span> <span class="n">closing_stream</span><span class="p">(</span><span class="n">source</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
-<span class="linenos" data-linenos="133 "></span>        <span class="n">items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">T</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="linenos" data-linenos="134 "></span>        <span class="k">async</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">stream</span><span class="p">:</span>
-<span class="linenos" data-linenos="135 "></span>            <span class="n">items</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
-<span class="linenos" data-linenos="136 "></span>            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">items</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">limit</span><span class="p">:</span>
-<span class="linenos" data-linenos="137 "></span>                <span class="k">break</span>
-<span class="linenos" data-linenos="138 "></span>        <span class="k">return</span> <span class="n">items</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="135 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">take</span><span class="p">[</span><span class="n">T</span><span class="p">](</span><span class="n">source</span><span class="p">:</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">T</span><span class="p">]:</span>
+<span class="linenos" data-linenos="136 "></span><span class="w">    </span><span class="sd">"""Read at most ``limit`` items, then close the source."""</span>
+<span class="linenos" data-linenos="137 "></span>    <span class="k">async</span> <span class="k">with</span> <span class="n">closing_stream</span><span class="p">(</span><span class="n">source</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
+<span class="linenos" data-linenos="138 "></span>        <span class="n">items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">T</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="139 "></span>        <span class="k">async</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">stream</span><span class="p">:</span>
+<span class="linenos" data-linenos="140 "></span>            <span class="n">items</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+<span class="linenos" data-linenos="141 "></span>            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">items</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">limit</span><span class="p">:</span>
+<span class="linenos" data-linenos="142 "></span>                <span class="k">break</span>
+<span class="linenos" data-linenos="143 "></span>        <span class="k">return</span> <span class="n">items</span>
 </code></pre></div>
             </details>
     </div>

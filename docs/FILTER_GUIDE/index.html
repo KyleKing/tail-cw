@@ -3257,6 +3257,10 @@
 <p>One filter language runs over live, historical, and cached events. Most of it is
 CloudWatch&rsquo;s own pattern syntax, so a filter you already know keeps working. The boolean
 operators and the <code>field:value</code> shorthand are additions, and they run locally.</p>
+<p>Text and phrase terms match case-sensitively, the same substring rule CloudWatch&rsquo;s
+<code>FilterLogEvents</code> uses, so a filter returns the same events whether it runs live, from
+cache, or sent to CloudWatch as part of an export.
+For a case-insensitive search, use a regex: <code>%(?i)timeout%</code>.</p>
 <h2 id="terms">Terms<a class="headerlink" href="#terms" title="Permanent link">⚓︎</a></h2>
 <table>
 <thead>
@@ -3272,7 +3276,7 @@ operators and the <code>field:value</code> shorthand are additions, and they run
 </tr>
 <tr>
 <td><code>"connection timeout"</code></td>
-<td>That exact phrase, spaces included.</td>
+<td>That exact phrase, spaces included, case sensitive.</td>
 </tr>
 <tr>
 <td><code>%[Ee]rror%</code></td>
@@ -3341,11 +3345,17 @@ because it is what you type; the long form exists because it is what CloudWatch 
 four words, and making <code>or</code> an operator would quietly change what that search means.</p>
 <p>Parentheses are grouping. To search for a literal parenthesis, quote it: <code>"(retry)"</code>.</p>
 <h2 id="what-can-be-sent-to-cloudwatch-and-what-cannot">What can be sent to CloudWatch, and what cannot<a class="headerlink" href="#what-can-be-sent-to-cloudwatch-and-what-cannot" title="Permanent link">⚓︎</a></h2>
-<p>A historical fetch always retrieves the whole window and filters locally, so every filter
-above works on cached and historical events. The filter is not part of the cache key,
-which is why one cached window serves every filter you ask of it.</p>
-<p>Live tail is different: CloudWatch applies the filter, so the filter has to be something
-CloudWatch can mean exactly. These translate:</p>
+<p>A historical fetch filters locally on every read, so every filter above works on cached
+and historical events.
+On a cold fetch, <code>export logs</code>, <code>export stats</code>, and <code>export summary</code> also send the filter
+to CloudWatch when it is made of text terms, phrases, and <code>field:value</code> or <code>field!=value</code>
+conditions, in the shapes live tail can send below.
+CloudWatch then returns only the matching events instead of the whole window.
+A regex, a numeric comparison, a field-existence check, <code>NOT</code> over a field, or text
+holding a quote, a backslash, or a non-ASCII character runs locally after the whole
+window downloads, and the export says so on stderr.</p>
+<p>Live tail works the same way for what it can send: CloudWatch applies the filter there
+too, so the filter has to be something CloudWatch can mean exactly. These translate:</p>
 <table>
 <thead>
 <tr>

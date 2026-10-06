@@ -3332,77 +3332,80 @@ writes to stdout instead.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/parser.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="410 "></span><span class="k">def</span><span class="w"> </span><span class="nf">build_parser</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">:</span>
-<span class="linenos" data-linenos="411 "></span><span class="w">    </span><span class="sd">"""Build the tail-cw argument parser.</span>
-<span class="linenos" data-linenos="412 "></span>
-<span class="linenos" data-linenos="413 "></span><span class="sd">    Bare ``tail-cw`` opens the interactive shell. ``logs``, ``tail``, and</span>
-<span class="linenos" data-linenos="414 "></span><span class="sd">    ``dash`` open it on a specific view; ``export`` is the only subcommand that</span>
-<span class="linenos" data-linenos="415 "></span><span class="sd">    writes to stdout instead.</span>
-<span class="linenos" data-linenos="416 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="417 "></span>    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
-<span class="linenos" data-linenos="418 "></span>        <span class="n">prog</span><span class="o">=</span><span class="s1">'tail-cw'</span><span class="p">,</span>
-<span class="linenos" data-linenos="419 "></span>        <span class="n">description</span><span class="o">=</span><span class="s1">'Read and explore AWS CloudWatch from the terminal. Run with no arguments to browse log groups.'</span><span class="p">,</span>
-<span class="linenos" data-linenos="420 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="421 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">parser</span><span class="p">)</span>
-<span class="linenos" data-linenos="422 "></span>    <span class="n">_add_demo_flag</span><span class="p">(</span><span class="n">parser</span><span class="p">,</span> <span class="s1">'Browse the offline synthetic groups instead of AWS (no credentials needed)'</span><span class="p">)</span>
-<span class="linenos" data-linenos="423 "></span>    <span class="n">subparsers</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_subparsers</span><span class="p">(</span><span class="n">dest</span><span class="o">=</span><span class="s1">'command'</span><span class="p">)</span>
-<span class="linenos" data-linenos="424 "></span>
-<span class="linenos" data-linenos="425 "></span>    <span class="n">logs</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'logs'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Open the log view on the groups matching a pattern.'</span><span class="p">)</span>
-<span class="linenos" data-linenos="426 "></span>    <span class="n">logs</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="427 "></span>        <span class="s1">'patterns'</span><span class="p">,</span>
-<span class="linenos" data-linenos="428 "></span>        <span class="n">nargs</span><span class="o">=</span><span class="s1">'*'</span><span class="p">,</span>
-<span class="linenos" data-linenos="429 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Log group names or glob patterns (omit to use the browser)'</span><span class="p">,</span>
-<span class="linenos" data-linenos="430 "></span>    <span class="p">)</span><span class="o">.</span><span class="n">completer</span> <span class="o">=</span> <span class="n">log_group_completer</span>  <span class="c1"># type: ignore[attr-defined]</span>
-<span class="linenos" data-linenos="431 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">logs</span><span class="p">)</span>
-<span class="linenos" data-linenos="432 "></span>    <span class="n">_add_window_flags</span><span class="p">(</span><span class="n">logs</span><span class="p">,</span> <span class="n">default_start</span><span class="o">=</span><span class="n">DEFAULT_WINDOW</span><span class="p">)</span>
-<span class="linenos" data-linenos="433 "></span>    <span class="n">logs</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="434 "></span>        <span class="s1">'--demo'</span><span class="p">,</span>
-<span class="linenos" data-linenos="435 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">'demo'</span><span class="p">,</span>
-<span class="linenos" data-linenos="436 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">'store_true'</span><span class="p">,</span>
-<span class="linenos" data-linenos="437 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Use the offline synthetic data instead of AWS (no credentials needed)'</span><span class="p">,</span>
-<span class="linenos" data-linenos="438 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="439 "></span>    <span class="n">logs</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="440 "></span>        <span class="s1">'--no-cache'</span><span class="p">,</span>
-<span class="linenos" data-linenos="441 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">'no_cache'</span><span class="p">,</span>
-<span class="linenos" data-linenos="442 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">'store_true'</span><span class="p">,</span>
-<span class="linenos" data-linenos="443 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Bypass the cache read (results are still written to the cache)'</span><span class="p">,</span>
-<span class="linenos" data-linenos="444 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="445 "></span>
-<span class="linenos" data-linenos="446 "></span>    <span class="n">tail</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'tail'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Open the log view streaming live events.'</span><span class="p">)</span>
-<span class="linenos" data-linenos="447 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="448 "></span>        <span class="s1">'patterns'</span><span class="p">,</span>
-<span class="linenos" data-linenos="449 "></span>        <span class="n">nargs</span><span class="o">=</span><span class="s1">'*'</span><span class="p">,</span>
-<span class="linenos" data-linenos="450 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Log group names or glob patterns (max 10)'</span><span class="p">,</span>
-<span class="linenos" data-linenos="451 "></span>    <span class="p">)</span><span class="o">.</span><span class="n">completer</span> <span class="o">=</span> <span class="n">log_group_completer</span>  <span class="c1"># type: ignore[attr-defined]</span>
-<span class="linenos" data-linenos="452 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span>
-<span class="linenos" data-linenos="453 "></span>    <span class="n">_add_window_flags</span><span class="p">(</span><span class="n">tail</span><span class="p">,</span> <span class="n">default_start</span><span class="o">=</span><span class="n">DEFAULT_WINDOW</span><span class="p">)</span>
-<span class="linenos" data-linenos="454 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-<span class="linenos" data-linenos="455 "></span>        <span class="s1">'--demo'</span><span class="p">,</span>
-<span class="linenos" data-linenos="456 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">'demo'</span><span class="p">,</span>
-<span class="linenos" data-linenos="457 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">'store_true'</span><span class="p">,</span>
-<span class="linenos" data-linenos="458 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Use the offline synthetic data instead of AWS (no credentials needed)'</span><span class="p">,</span>
-<span class="linenos" data-linenos="459 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="460 "></span>
-<span class="linenos" data-linenos="461 "></span>    <span class="n">dash</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'dash'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Open a dashboard, or the dashboard picker when unnamed.'</span><span class="p">)</span>
-<span class="linenos" data-linenos="462 "></span>    <span class="n">dash</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">'name'</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">'?'</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Dashboard name (omit to pick from a list)'</span><span class="p">)</span>
-<span class="linenos" data-linenos="463 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">dash</span><span class="p">)</span>
-<span class="linenos" data-linenos="464 "></span>    <span class="n">_add_window_flags</span><span class="p">(</span><span class="n">dash</span><span class="p">,</span> <span class="n">default_start</span><span class="o">=</span><span class="n">DEFAULT_DASHBOARD_WINDOW</span><span class="p">)</span>
-<span class="linenos" data-linenos="465 "></span>    <span class="n">dash</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="420 "></span><span class="k">def</span><span class="w"> </span><span class="nf">build_parser</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">:</span>
+<span class="linenos" data-linenos="421 "></span><span class="w">    </span><span class="sd">"""Build the tail-cw argument parser.</span>
+<span class="linenos" data-linenos="422 "></span>
+<span class="linenos" data-linenos="423 "></span><span class="sd">    Bare ``tail-cw`` opens the interactive shell. ``logs``, ``tail``, and</span>
+<span class="linenos" data-linenos="424 "></span><span class="sd">    ``dash`` open it on a specific view; ``export`` is the only subcommand that</span>
+<span class="linenos" data-linenos="425 "></span><span class="sd">    writes to stdout instead.</span>
+<span class="linenos" data-linenos="426 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="427 "></span>    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
+<span class="linenos" data-linenos="428 "></span>        <span class="n">prog</span><span class="o">=</span><span class="s1">'tail-cw'</span><span class="p">,</span>
+<span class="linenos" data-linenos="429 "></span>        <span class="n">description</span><span class="o">=</span><span class="s1">'Read and explore AWS CloudWatch from the terminal. Run with no arguments to browse log groups.'</span><span class="p">,</span>
+<span class="linenos" data-linenos="430 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="431 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">parser</span><span class="p">,</span> <span class="n">root</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="linenos" data-linenos="432 "></span>    <span class="n">_add_demo_flag</span><span class="p">(</span><span class="n">parser</span><span class="p">,</span> <span class="s1">'Browse the offline synthetic groups instead of AWS (no credentials needed)'</span><span class="p">,</span> <span class="n">root</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="linenos" data-linenos="433 "></span>    <span class="n">subparsers</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_subparsers</span><span class="p">(</span><span class="n">dest</span><span class="o">=</span><span class="s1">'command'</span><span class="p">)</span>
+<span class="linenos" data-linenos="434 "></span>
+<span class="linenos" data-linenos="435 "></span>    <span class="n">logs</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'logs'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Open the log view on the groups matching a pattern.'</span><span class="p">)</span>
+<span class="linenos" data-linenos="436 "></span>    <span class="n">logs</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="437 "></span>        <span class="s1">'patterns'</span><span class="p">,</span>
+<span class="linenos" data-linenos="438 "></span>        <span class="n">nargs</span><span class="o">=</span><span class="s1">'*'</span><span class="p">,</span>
+<span class="linenos" data-linenos="439 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Log group names or glob patterns (omit to use the browser)'</span><span class="p">,</span>
+<span class="linenos" data-linenos="440 "></span>    <span class="p">)</span><span class="o">.</span><span class="n">completer</span> <span class="o">=</span> <span class="n">log_group_completer</span>  <span class="c1"># type: ignore[attr-defined]</span>
+<span class="linenos" data-linenos="441 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">logs</span><span class="p">)</span>
+<span class="linenos" data-linenos="442 "></span>    <span class="n">_add_window_flags</span><span class="p">(</span><span class="n">logs</span><span class="p">,</span> <span class="n">default_start</span><span class="o">=</span><span class="n">DEFAULT_WINDOW</span><span class="p">)</span>
+<span class="linenos" data-linenos="443 "></span>    <span class="n">logs</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="444 "></span>        <span class="s1">'--demo'</span><span class="p">,</span>
+<span class="linenos" data-linenos="445 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">'demo'</span><span class="p">,</span>
+<span class="linenos" data-linenos="446 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">'store_true'</span><span class="p">,</span>
+<span class="linenos" data-linenos="447 "></span>        <span class="n">default</span><span class="o">=</span><span class="n">argparse</span><span class="o">.</span><span class="n">SUPPRESS</span><span class="p">,</span>
+<span class="linenos" data-linenos="448 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Use the offline synthetic data instead of AWS (no credentials needed)'</span><span class="p">,</span>
+<span class="linenos" data-linenos="449 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="450 "></span>    <span class="n">logs</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="451 "></span>        <span class="s1">'--no-cache'</span><span class="p">,</span>
+<span class="linenos" data-linenos="452 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">'no_cache'</span><span class="p">,</span>
+<span class="linenos" data-linenos="453 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">'store_true'</span><span class="p">,</span>
+<span class="linenos" data-linenos="454 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Bypass the cache read (results are still written to the cache)'</span><span class="p">,</span>
+<span class="linenos" data-linenos="455 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="456 "></span>
+<span class="linenos" data-linenos="457 "></span>    <span class="n">tail</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'tail'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Open the log view streaming live events.'</span><span class="p">)</span>
+<span class="linenos" data-linenos="458 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="459 "></span>        <span class="s1">'patterns'</span><span class="p">,</span>
+<span class="linenos" data-linenos="460 "></span>        <span class="n">nargs</span><span class="o">=</span><span class="s1">'*'</span><span class="p">,</span>
+<span class="linenos" data-linenos="461 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Log group names or glob patterns (max 10)'</span><span class="p">,</span>
+<span class="linenos" data-linenos="462 "></span>    <span class="p">)</span><span class="o">.</span><span class="n">completer</span> <span class="o">=</span> <span class="n">log_group_completer</span>  <span class="c1"># type: ignore[attr-defined]</span>
+<span class="linenos" data-linenos="463 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span>
+<span class="linenos" data-linenos="464 "></span>    <span class="n">_add_window_flags</span><span class="p">(</span><span class="n">tail</span><span class="p">,</span> <span class="n">default_start</span><span class="o">=</span><span class="n">DEFAULT_WINDOW</span><span class="p">)</span>
+<span class="linenos" data-linenos="465 "></span>    <span class="n">tail</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
 <span class="linenos" data-linenos="466 "></span>        <span class="s1">'--demo'</span><span class="p">,</span>
 <span class="linenos" data-linenos="467 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">'demo'</span><span class="p">,</span>
 <span class="linenos" data-linenos="468 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">'store_true'</span><span class="p">,</span>
-<span class="linenos" data-linenos="469 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Open a synthetic dashboard with generated seed data (no AWS calls)'</span><span class="p">,</span>
-<span class="linenos" data-linenos="470 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="471 "></span>
-<span class="linenos" data-linenos="472 "></span>    <span class="n">cache</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'cache'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Inspect the local Parquet cache.'</span><span class="p">)</span>
-<span class="linenos" data-linenos="473 "></span>    <span class="n">cache_sub</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">add_subparsers</span><span class="p">(</span><span class="n">dest</span><span class="o">=</span><span class="s1">'cache_command'</span><span class="p">)</span>
-<span class="linenos" data-linenos="474 "></span>    <span class="n">status</span> <span class="o">=</span> <span class="n">cache_sub</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'status'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Write what the cache holds against its limit, as JSON.'</span><span class="p">)</span>
-<span class="linenos" data-linenos="475 "></span>    <span class="n">status</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">'--config'</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s1">'config_path'</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Config file path override'</span><span class="p">)</span>
-<span class="linenos" data-linenos="476 "></span>
-<span class="linenos" data-linenos="477 "></span>    <span class="n">export</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'export'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Write CloudWatch data to stdout as NDJSON or JSON.'</span><span class="p">)</span>
-<span class="linenos" data-linenos="478 "></span>    <span class="n">_add_export_parsers</span><span class="p">(</span><span class="n">export</span><span class="p">)</span>
-<span class="linenos" data-linenos="479 "></span>
-<span class="linenos" data-linenos="480 "></span>    <span class="k">return</span> <span class="n">parser</span>
+<span class="linenos" data-linenos="469 "></span>        <span class="n">default</span><span class="o">=</span><span class="n">argparse</span><span class="o">.</span><span class="n">SUPPRESS</span><span class="p">,</span>
+<span class="linenos" data-linenos="470 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Use the offline synthetic data instead of AWS (no credentials needed)'</span><span class="p">,</span>
+<span class="linenos" data-linenos="471 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="472 "></span>
+<span class="linenos" data-linenos="473 "></span>    <span class="n">dash</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'dash'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Open a dashboard, or the dashboard picker when unnamed.'</span><span class="p">)</span>
+<span class="linenos" data-linenos="474 "></span>    <span class="n">dash</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">'name'</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">'?'</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Dashboard name (omit to pick from a list)'</span><span class="p">)</span>
+<span class="linenos" data-linenos="475 "></span>    <span class="n">_add_aws_flags</span><span class="p">(</span><span class="n">dash</span><span class="p">)</span>
+<span class="linenos" data-linenos="476 "></span>    <span class="n">_add_window_flags</span><span class="p">(</span><span class="n">dash</span><span class="p">,</span> <span class="n">default_start</span><span class="o">=</span><span class="n">DEFAULT_DASHBOARD_WINDOW</span><span class="p">)</span>
+<span class="linenos" data-linenos="477 "></span>    <span class="n">dash</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+<span class="linenos" data-linenos="478 "></span>        <span class="s1">'--demo'</span><span class="p">,</span>
+<span class="linenos" data-linenos="479 "></span>        <span class="n">dest</span><span class="o">=</span><span class="s1">'demo'</span><span class="p">,</span>
+<span class="linenos" data-linenos="480 "></span>        <span class="n">action</span><span class="o">=</span><span class="s1">'store_true'</span><span class="p">,</span>
+<span class="linenos" data-linenos="481 "></span>        <span class="n">default</span><span class="o">=</span><span class="n">argparse</span><span class="o">.</span><span class="n">SUPPRESS</span><span class="p">,</span>
+<span class="linenos" data-linenos="482 "></span>        <span class="n">help</span><span class="o">=</span><span class="s1">'Open a synthetic dashboard with generated seed data (no AWS calls)'</span><span class="p">,</span>
+<span class="linenos" data-linenos="483 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="484 "></span>
+<span class="linenos" data-linenos="485 "></span>    <span class="n">cache</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'cache'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Inspect the local Parquet cache.'</span><span class="p">)</span>
+<span class="linenos" data-linenos="486 "></span>    <span class="n">cache_sub</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">add_subparsers</span><span class="p">(</span><span class="n">dest</span><span class="o">=</span><span class="s1">'cache_command'</span><span class="p">)</span>
+<span class="linenos" data-linenos="487 "></span>    <span class="n">status</span> <span class="o">=</span> <span class="n">cache_sub</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'status'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Write what the cache holds against its limit, as JSON.'</span><span class="p">)</span>
+<span class="linenos" data-linenos="488 "></span>    <span class="n">status</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">'--config'</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s1">'config_path'</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Config file path override'</span><span class="p">)</span>
+<span class="linenos" data-linenos="489 "></span>
+<span class="linenos" data-linenos="490 "></span>    <span class="n">export</span> <span class="o">=</span> <span class="n">subparsers</span><span class="o">.</span><span class="n">add_parser</span><span class="p">(</span><span class="s1">'export'</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">'Write CloudWatch data to stdout as NDJSON or JSON.'</span><span class="p">)</span>
+<span class="linenos" data-linenos="491 "></span>    <span class="n">_add_export_parsers</span><span class="p">(</span><span class="n">export</span><span class="p">)</span>
+<span class="linenos" data-linenos="492 "></span>
+<span class="linenos" data-linenos="493 "></span>    <span class="k">return</span> <span class="n">parser</span>
 </code></pre></div>
             </details>
     </div>

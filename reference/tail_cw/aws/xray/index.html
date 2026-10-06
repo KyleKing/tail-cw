@@ -2022,6 +2022,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#tail_cw.aws.xray.xray_form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        xray_form
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3706,6 +3717,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#tail_cw.aws.xray.xray_form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        xray_form
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -4910,12 +4932,9 @@ request.</p>
 <span class="linenos" data-linenos="195 "></span><span class="sd">    request.</span>
 <span class="linenos" data-linenos="196 "></span><span class="sd">    """</span>
 <span class="linenos" data-linenos="197 "></span>    <span class="n">cleaned</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
-<span class="linenos" data-linenos="198 "></span>    <span class="k">if</span> <span class="n">TRACE_ID_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">cleaned</span><span class="p">):</span>
-<span class="linenos" data-linenos="199 "></span>        <span class="k">return</span> <span class="n">cleaned</span>
-<span class="linenos" data-linenos="200 "></span>    <span class="k">if</span> <span class="ow">not</span> <span class="n">W3C_TRACE_ID_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">cleaned</span><span class="p">):</span>
-<span class="linenos" data-linenos="201 "></span>        <span class="k">return</span> <span class="kc">None</span>
-<span class="linenos" data-linenos="202 "></span>    <span class="n">dashed</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">'1-</span><span class="si">{</span><span class="n">cleaned</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s1">-</span><span class="si">{</span><span class="n">cleaned</span><span class="p">[</span><span class="mi">8</span><span class="p">:]</span><span class="si">}</span><span class="s1">'</span>
-<span class="linenos" data-linenos="203 "></span>    <span class="k">return</span> <span class="n">dashed</span> <span class="k">if</span> <span class="n">_epoch_is_plausible</span><span class="p">(</span><span class="n">cleaned</span><span class="p">[:</span><span class="mi">8</span><span class="p">],</span> <span class="n">now</span><span class="o">=</span><span class="n">now</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="198 "></span>    <span class="k">if</span> <span class="n">W3C_TRACE_ID_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">cleaned</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_epoch_is_plausible</span><span class="p">(</span><span class="n">cleaned</span><span class="p">[:</span><span class="mi">8</span><span class="p">],</span> <span class="n">now</span><span class="o">=</span><span class="n">now</span><span class="p">):</span>
+<span class="linenos" data-linenos="199 "></span>        <span class="k">return</span> <span class="kc">None</span>
+<span class="linenos" data-linenos="200 "></span>    <span class="k">return</span> <span class="n">xray_form</span><span class="p">(</span><span class="n">cleaned</span><span class="p">)</span>
 </code></pre></div>
             </details>
     </div>
@@ -4947,29 +4966,29 @@ level, so it binds to the loop that is running.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/aws/xray.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="476 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">batch_get_traces</span><span class="p">(</span>
-<span class="linenos" data-linenos="477 "></span>    <span class="n">client</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-<span class="linenos" data-linenos="478 "></span>    <span class="n">trace_ids</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-<span class="linenos" data-linenos="479 "></span>    <span class="o">*</span><span class="p">,</span>
-<span class="linenos" data-linenos="480 "></span>    <span class="n">concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DEFAULT_TRACE_CONCURRENCY</span><span class="p">,</span>
-<span class="linenos" data-linenos="481 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">XRayTrace</span><span class="p">]:</span>
-<span class="linenos" data-linenos="482 "></span><span class="w">    </span><span class="sd">"""Fetch full segment documents for every id, five per request.</span>
-<span class="linenos" data-linenos="483 "></span>
-<span class="linenos" data-linenos="484 "></span><span class="sd">    Requests overlap because each one is a serial round trip and a window worth of</span>
-<span class="linenos" data-linenos="485 "></span><span class="sd">    traces is hundreds of ids. The semaphore is built here rather than held at module</span>
-<span class="linenos" data-linenos="486 "></span><span class="sd">    level, so it binds to the loop that is running.</span>
-<span class="linenos" data-linenos="487 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="488 "></span>    <span class="k">if</span> <span class="ow">not</span> <span class="n">trace_ids</span><span class="p">:</span>
-<span class="linenos" data-linenos="489 "></span>        <span class="k">return</span> <span class="p">[]</span>
-<span class="linenos" data-linenos="490 "></span>    <span class="n">limiter</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">concurrency</span><span class="p">))</span>
-<span class="linenos" data-linenos="491 "></span>
-<span class="linenos" data-linenos="492 "></span>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">fetch</span><span class="p">(</span><span class="n">chunk</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">XRayTrace</span><span class="p">]:</span>
-<span class="linenos" data-linenos="493 "></span>        <span class="k">async</span> <span class="k">with</span> <span class="n">limiter</span><span class="p">:</span>
-<span class="linenos" data-linenos="494 "></span>            <span class="k">return</span> <span class="k">await</span> <span class="n">_traces_for_chunk</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">chunk</span><span class="p">)</span>
-<span class="linenos" data-linenos="495 "></span>
-<span class="linenos" data-linenos="496 "></span>    <span class="k">async</span> <span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TaskGroup</span><span class="p">()</span> <span class="k">as</span> <span class="n">group</span><span class="p">:</span>
-<span class="linenos" data-linenos="497 "></span>        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span><span class="n">group</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">fetch</span><span class="p">(</span><span class="n">chunk</span><span class="p">))</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">batched</span><span class="p">(</span><span class="n">trace_ids</span><span class="p">,</span> <span class="n">TRACE_IDS_PER_REQUEST</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)]</span>
-<span class="linenos" data-linenos="498 "></span>    <span class="k">return</span> <span class="p">[</span><span class="n">trace</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span> <span class="k">for</span> <span class="n">trace</span> <span class="ow">in</span> <span class="n">task</span><span class="o">.</span><span class="n">result</span><span class="p">()]</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="486 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">batch_get_traces</span><span class="p">(</span>
+<span class="linenos" data-linenos="487 "></span>    <span class="n">client</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="linenos" data-linenos="488 "></span>    <span class="n">trace_ids</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+<span class="linenos" data-linenos="489 "></span>    <span class="o">*</span><span class="p">,</span>
+<span class="linenos" data-linenos="490 "></span>    <span class="n">concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DEFAULT_TRACE_CONCURRENCY</span><span class="p">,</span>
+<span class="linenos" data-linenos="491 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">XRayTrace</span><span class="p">]:</span>
+<span class="linenos" data-linenos="492 "></span><span class="w">    </span><span class="sd">"""Fetch full segment documents for every id, five per request.</span>
+<span class="linenos" data-linenos="493 "></span>
+<span class="linenos" data-linenos="494 "></span><span class="sd">    Requests overlap because each one is a serial round trip and a window worth of</span>
+<span class="linenos" data-linenos="495 "></span><span class="sd">    traces is hundreds of ids. The semaphore is built here rather than held at module</span>
+<span class="linenos" data-linenos="496 "></span><span class="sd">    level, so it binds to the loop that is running.</span>
+<span class="linenos" data-linenos="497 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="498 "></span>    <span class="k">if</span> <span class="ow">not</span> <span class="n">trace_ids</span><span class="p">:</span>
+<span class="linenos" data-linenos="499 "></span>        <span class="k">return</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="500 "></span>    <span class="n">limiter</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">concurrency</span><span class="p">))</span>
+<span class="linenos" data-linenos="501 "></span>
+<span class="linenos" data-linenos="502 "></span>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">fetch</span><span class="p">(</span><span class="n">chunk</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">XRayTrace</span><span class="p">]:</span>
+<span class="linenos" data-linenos="503 "></span>        <span class="k">async</span> <span class="k">with</span> <span class="n">limiter</span><span class="p">:</span>
+<span class="linenos" data-linenos="504 "></span>            <span class="k">return</span> <span class="k">await</span> <span class="n">_traces_for_chunk</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">chunk</span><span class="p">)</span>
+<span class="linenos" data-linenos="505 "></span>
+<span class="linenos" data-linenos="506 "></span>    <span class="k">async</span> <span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TaskGroup</span><span class="p">()</span> <span class="k">as</span> <span class="n">group</span><span class="p">:</span>
+<span class="linenos" data-linenos="507 "></span>        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span><span class="n">group</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">fetch</span><span class="p">(</span><span class="n">chunk</span><span class="p">))</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">batched</span><span class="p">(</span><span class="n">trace_ids</span><span class="p">,</span> <span class="n">TRACE_IDS_PER_REQUEST</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)]</span>
+<span class="linenos" data-linenos="508 "></span>    <span class="k">return</span> <span class="p">[</span><span class="n">trace</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span> <span class="k">for</span> <span class="n">trace</span> <span class="ow">in</span> <span class="n">task</span><span class="o">.</span><span class="n">result</span><span class="p">()]</span>
 </code></pre></div>
             </details>
     </div>
@@ -5026,40 +5045,40 @@ be one per query.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/aws/xray.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="316 "></span><span class="k">def</span><span class="w"> </span><span class="nf">flatten_segment</span><span class="p">(</span>
-<span class="linenos" data-linenos="317 "></span>    <span class="n">document</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
-<span class="linenos" data-linenos="318 "></span>    <span class="o">*</span><span class="p">,</span>
-<span class="linenos" data-linenos="319 "></span>    <span class="n">trace_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-<span class="linenos" data-linenos="320 "></span>    <span class="n">parent_span_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="321 "></span>    <span class="n">inherited_service</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="322 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">XRaySpan</span><span class="p">]:</span>
-<span class="linenos" data-linenos="323 "></span><span class="w">    </span><span class="sd">"""Walk one segment document and its nested subsegments, parents before children.</span>
-<span class="linenos" data-linenos="324 "></span>
-<span class="linenos" data-linenos="325 "></span><span class="sd">    A subsegment names no service of its own, so it inherits the enclosing segment's.</span>
-<span class="linenos" data-linenos="326 "></span><span class="sd">    Without that, every SQL call would read as its own service and the swimlanes would</span>
-<span class="linenos" data-linenos="327 "></span><span class="sd">    be one per query.</span>
-<span class="linenos" data-linenos="328 "></span>
-<span class="linenos" data-linenos="329 "></span><span class="sd">    Yields:</span>
-<span class="linenos" data-linenos="330 "></span><span class="sd">        XRaySpan records, each parent before its children.</span>
-<span class="linenos" data-linenos="331 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="332 "></span>    <span class="n">service_name</span> <span class="o">=</span> <span class="n">_resolve_service</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="n">inherited_service</span><span class="p">)</span>
-<span class="linenos" data-linenos="333 "></span>    <span class="n">span</span> <span class="o">=</span> <span class="n">_to_span</span><span class="p">(</span>
-<span class="linenos" data-linenos="334 "></span>        <span class="n">document</span><span class="p">,</span>
-<span class="linenos" data-linenos="335 "></span>        <span class="n">trace_id</span><span class="o">=</span><span class="n">trace_id</span><span class="p">,</span>
-<span class="linenos" data-linenos="336 "></span>        <span class="n">parent_span_id</span><span class="o">=</span><span class="n">parent_span_id</span> <span class="ow">or</span> <span class="n">document</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'parent_id'</span><span class="p">),</span>
-<span class="linenos" data-linenos="337 "></span>        <span class="n">service_name</span><span class="o">=</span><span class="n">service_name</span><span class="p">,</span>
-<span class="linenos" data-linenos="338 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="339 "></span>    <span class="k">if</span> <span class="n">span</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos="340 "></span>        <span class="k">return</span>
-<span class="linenos" data-linenos="341 "></span>    <span class="k">yield</span> <span class="n">span</span>
-<span class="linenos" data-linenos="342 "></span>    <span class="n">children</span> <span class="o">=</span> <span class="n">document</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'subsegments'</span><span class="p">)</span>
-<span class="linenos" data-linenos="343 "></span>    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">children</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
-<span class="linenos" data-linenos="344 "></span>        <span class="k">return</span>
-<span class="linenos" data-linenos="345 "></span>    <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">children</span><span class="p">:</span>
-<span class="linenos" data-linenos="346 "></span>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
-<span class="linenos" data-linenos="347 "></span>            <span class="k">yield from</span> <span class="n">flatten_segment</span><span class="p">(</span>
-<span class="linenos" data-linenos="348 "></span>                <span class="n">child</span><span class="p">,</span> <span class="n">trace_id</span><span class="o">=</span><span class="n">trace_id</span><span class="p">,</span> <span class="n">parent_span_id</span><span class="o">=</span><span class="n">span</span><span class="o">.</span><span class="n">span_id</span><span class="p">,</span> <span class="n">inherited_service</span><span class="o">=</span><span class="n">service_name</span>
-<span class="linenos" data-linenos="349 "></span>            <span class="p">)</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="326 "></span><span class="k">def</span><span class="w"> </span><span class="nf">flatten_segment</span><span class="p">(</span>
+<span class="linenos" data-linenos="327 "></span>    <span class="n">document</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<span class="linenos" data-linenos="328 "></span>    <span class="o">*</span><span class="p">,</span>
+<span class="linenos" data-linenos="329 "></span>    <span class="n">trace_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="linenos" data-linenos="330 "></span>    <span class="n">parent_span_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="331 "></span>    <span class="n">inherited_service</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="332 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">XRaySpan</span><span class="p">]:</span>
+<span class="linenos" data-linenos="333 "></span><span class="w">    </span><span class="sd">"""Walk one segment document and its nested subsegments, parents before children.</span>
+<span class="linenos" data-linenos="334 "></span>
+<span class="linenos" data-linenos="335 "></span><span class="sd">    A subsegment names no service of its own, so it inherits the enclosing segment's.</span>
+<span class="linenos" data-linenos="336 "></span><span class="sd">    Without that, every SQL call would read as its own service and the swimlanes would</span>
+<span class="linenos" data-linenos="337 "></span><span class="sd">    be one per query.</span>
+<span class="linenos" data-linenos="338 "></span>
+<span class="linenos" data-linenos="339 "></span><span class="sd">    Yields:</span>
+<span class="linenos" data-linenos="340 "></span><span class="sd">        XRaySpan records, each parent before its children.</span>
+<span class="linenos" data-linenos="341 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="342 "></span>    <span class="n">service_name</span> <span class="o">=</span> <span class="n">_resolve_service</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="n">inherited_service</span><span class="p">)</span>
+<span class="linenos" data-linenos="343 "></span>    <span class="n">span</span> <span class="o">=</span> <span class="n">_to_span</span><span class="p">(</span>
+<span class="linenos" data-linenos="344 "></span>        <span class="n">document</span><span class="p">,</span>
+<span class="linenos" data-linenos="345 "></span>        <span class="n">trace_id</span><span class="o">=</span><span class="n">trace_id</span><span class="p">,</span>
+<span class="linenos" data-linenos="346 "></span>        <span class="n">parent_span_id</span><span class="o">=</span><span class="n">parent_span_id</span> <span class="ow">or</span> <span class="n">document</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'parent_id'</span><span class="p">),</span>
+<span class="linenos" data-linenos="347 "></span>        <span class="n">service_name</span><span class="o">=</span><span class="n">service_name</span><span class="p">,</span>
+<span class="linenos" data-linenos="348 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="349 "></span>    <span class="k">if</span> <span class="n">span</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="350 "></span>        <span class="k">return</span>
+<span class="linenos" data-linenos="351 "></span>    <span class="k">yield</span> <span class="n">span</span>
+<span class="linenos" data-linenos="352 "></span>    <span class="n">children</span> <span class="o">=</span> <span class="n">document</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'subsegments'</span><span class="p">)</span>
+<span class="linenos" data-linenos="353 "></span>    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">children</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+<span class="linenos" data-linenos="354 "></span>        <span class="k">return</span>
+<span class="linenos" data-linenos="355 "></span>    <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">children</span><span class="p">:</span>
+<span class="linenos" data-linenos="356 "></span>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+<span class="linenos" data-linenos="357 "></span>            <span class="k">yield from</span> <span class="n">flatten_segment</span><span class="p">(</span>
+<span class="linenos" data-linenos="358 "></span>                <span class="n">child</span><span class="p">,</span> <span class="n">trace_id</span><span class="o">=</span><span class="n">trace_id</span><span class="p">,</span> <span class="n">parent_span_id</span><span class="o">=</span><span class="n">span</span><span class="o">.</span><span class="n">span_id</span><span class="p">,</span> <span class="n">inherited_service</span><span class="o">=</span><span class="n">service_name</span>
+<span class="linenos" data-linenos="359 "></span>            <span class="p">)</span>
 </code></pre></div>
             </details>
     </div>
@@ -5117,29 +5136,29 @@ be one per query.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/aws/xray.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="443 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_trace_summaries</span><span class="p">(</span>
-<span class="linenos" data-linenos="444 "></span>    <span class="n">client</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-<span class="linenos" data-linenos="445 "></span>    <span class="o">*</span><span class="p">,</span>
-<span class="linenos" data-linenos="446 "></span>    <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
-<span class="linenos" data-linenos="447 "></span>    <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
-<span class="linenos" data-linenos="448 "></span>    <span class="n">filter_expression</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="449 "></span>    <span class="n">sampling</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<span class="linenos" data-linenos="450 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">XRayTraceSummary</span><span class="p">]:</span>
-<span class="linenos" data-linenos="451 "></span><span class="w">    </span><span class="sd">"""Flatten :func:`iter_trace_summary_pages` for a caller that does not track cost.</span>
-<span class="linenos" data-linenos="452 "></span>
-<span class="linenos" data-linenos="453 "></span><span class="sd">    Yields:</span>
-<span class="linenos" data-linenos="454 "></span><span class="sd">        XRayTraceSummary records in the order the API returns them.</span>
-<span class="linenos" data-linenos="455 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="456 "></span>    <span class="n">pages</span> <span class="o">=</span> <span class="n">iter_trace_summary_pages</span><span class="p">(</span>
-<span class="linenos" data-linenos="457 "></span>        <span class="n">client</span><span class="p">,</span>
-<span class="linenos" data-linenos="458 "></span>        <span class="n">start_time</span><span class="o">=</span><span class="n">start_time</span><span class="p">,</span>
-<span class="linenos" data-linenos="459 "></span>        <span class="n">end_time</span><span class="o">=</span><span class="n">end_time</span><span class="p">,</span>
-<span class="linenos" data-linenos="460 "></span>        <span class="n">filter_expression</span><span class="o">=</span><span class="n">filter_expression</span><span class="p">,</span>
-<span class="linenos" data-linenos="461 "></span>        <span class="n">sampling</span><span class="o">=</span><span class="n">sampling</span><span class="p">,</span>
-<span class="linenos" data-linenos="462 "></span>    <span class="p">)</span>
-<span class="linenos" data-linenos="463 "></span>    <span class="k">async</span> <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">pages</span><span class="p">:</span>
-<span class="linenos" data-linenos="464 "></span>        <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="n">page</span><span class="o">.</span><span class="n">summaries</span><span class="p">:</span>
-<span class="linenos" data-linenos="465 "></span>            <span class="k">yield</span> <span class="n">summary</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="453 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_trace_summaries</span><span class="p">(</span>
+<span class="linenos" data-linenos="454 "></span>    <span class="n">client</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="linenos" data-linenos="455 "></span>    <span class="o">*</span><span class="p">,</span>
+<span class="linenos" data-linenos="456 "></span>    <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
+<span class="linenos" data-linenos="457 "></span>    <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
+<span class="linenos" data-linenos="458 "></span>    <span class="n">filter_expression</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="459 "></span>    <span class="n">sampling</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="linenos" data-linenos="460 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">XRayTraceSummary</span><span class="p">]:</span>
+<span class="linenos" data-linenos="461 "></span><span class="w">    </span><span class="sd">"""Flatten :func:`iter_trace_summary_pages` for a caller that does not track cost.</span>
+<span class="linenos" data-linenos="462 "></span>
+<span class="linenos" data-linenos="463 "></span><span class="sd">    Yields:</span>
+<span class="linenos" data-linenos="464 "></span><span class="sd">        XRayTraceSummary records in the order the API returns them.</span>
+<span class="linenos" data-linenos="465 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="466 "></span>    <span class="n">pages</span> <span class="o">=</span> <span class="n">iter_trace_summary_pages</span><span class="p">(</span>
+<span class="linenos" data-linenos="467 "></span>        <span class="n">client</span><span class="p">,</span>
+<span class="linenos" data-linenos="468 "></span>        <span class="n">start_time</span><span class="o">=</span><span class="n">start_time</span><span class="p">,</span>
+<span class="linenos" data-linenos="469 "></span>        <span class="n">end_time</span><span class="o">=</span><span class="n">end_time</span><span class="p">,</span>
+<span class="linenos" data-linenos="470 "></span>        <span class="n">filter_expression</span><span class="o">=</span><span class="n">filter_expression</span><span class="p">,</span>
+<span class="linenos" data-linenos="471 "></span>        <span class="n">sampling</span><span class="o">=</span><span class="n">sampling</span><span class="p">,</span>
+<span class="linenos" data-linenos="472 "></span>    <span class="p">)</span>
+<span class="linenos" data-linenos="473 "></span>    <span class="k">async</span> <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">pages</span><span class="p">:</span>
+<span class="linenos" data-linenos="474 "></span>        <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="n">page</span><span class="o">.</span><span class="n">summaries</span><span class="p">:</span>
+<span class="linenos" data-linenos="475 "></span>            <span class="k">yield</span> <span class="n">summary</span>
 </code></pre></div>
             </details>
     </div>
@@ -5301,40 +5320,40 @@ wire, but not what the query is billed for.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/aws/xray.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="407 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">iter_trace_summary_pages</span><span class="p">(</span>
-<span class="linenos" data-linenos="408 "></span>    <span class="n">client</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-<span class="linenos" data-linenos="409 "></span>    <span class="o">*</span><span class="p">,</span>
-<span class="linenos" data-linenos="410 "></span>    <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
-<span class="linenos" data-linenos="411 "></span>    <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
-<span class="linenos" data-linenos="412 "></span>    <span class="n">filter_expression</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="linenos" data-linenos="413 "></span>    <span class="n">sampling</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<span class="linenos" data-linenos="414 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">TraceSummaryPage</span><span class="p">]:</span>
-<span class="linenos" data-linenos="415 "></span><span class="w">    </span><span class="sd">"""Stream trace summaries a page at a time, newest page first as X-Ray returns them.</span>
-<span class="linenos" data-linenos="416 "></span>
-<span class="linenos" data-linenos="417 "></span><span class="sd">    Pages rather than records, because the cost of the query is reported per page and a</span>
-<span class="linenos" data-linenos="418 "></span><span class="sd">    caller that walks away early needs to know what it already spent.</span>
-<span class="linenos" data-linenos="419 "></span>
-<span class="linenos" data-linenos="420 "></span><span class="sd">    Args:</span>
-<span class="linenos" data-linenos="421 "></span><span class="sd">        client: An open X-Ray client, from :meth:`ClientPool.client`.</span>
-<span class="linenos" data-linenos="422 "></span><span class="sd">        start_time: Window start.</span>
-<span class="linenos" data-linenos="423 "></span><span class="sd">        end_time: Window end.</span>
-<span class="linenos" data-linenos="424 "></span><span class="sd">        filter_expression: An X-Ray filter expression, such as ``service("api")`` or</span>
-<span class="linenos" data-linenos="425 "></span><span class="sd">            ``responsetime &gt; 3``. Server-side, so it narrows what comes back over the</span>
-<span class="linenos" data-linenos="426 "></span><span class="sd">            wire, but not what the query is billed for.</span>
-<span class="linenos" data-linenos="427 "></span><span class="sd">        sampling: Ask X-Ray for a representative sample instead of every trace.</span>
-<span class="linenos" data-linenos="428 "></span>
-<span class="linenos" data-linenos="429 "></span><span class="sd">    Yields:</span>
-<span class="linenos" data-linenos="430 "></span><span class="sd">        TraceSummaryPage records in the order the API returns them.</span>
-<span class="linenos" data-linenos="431 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="432 "></span>    <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'StartTime'</span><span class="p">:</span> <span class="n">start_time</span><span class="p">,</span> <span class="s1">'EndTime'</span><span class="p">:</span> <span class="n">end_time</span><span class="p">,</span> <span class="s1">'Sampling'</span><span class="p">:</span> <span class="n">sampling</span><span class="p">}</span>
-<span class="linenos" data-linenos="433 "></span>    <span class="k">if</span> <span class="n">filter_expression</span><span class="p">:</span>
-<span class="linenos" data-linenos="434 "></span>        <span class="n">kwargs</span><span class="p">[</span><span class="s1">'FilterExpression'</span><span class="p">]</span> <span class="o">=</span> <span class="n">filter_expression</span>
-<span class="linenos" data-linenos="435 "></span>    <span class="n">paginator</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_paginator</span><span class="p">(</span><span class="s1">'get_trace_summaries'</span><span class="p">)</span>
-<span class="linenos" data-linenos="436 "></span>    <span class="k">async</span> <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">paginator</span><span class="o">.</span><span class="n">paginate</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="linenos" data-linenos="437 "></span>        <span class="k">yield</span> <span class="n">TraceSummaryPage</span><span class="p">(</span>
-<span class="linenos" data-linenos="438 "></span>            <span class="n">summaries</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">_to_summary</span><span class="p">(</span><span class="n">summary</span><span class="p">)</span> <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="n">page</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'TraceSummaries'</span><span class="p">,</span> <span class="p">[])),</span>
-<span class="linenos" data-linenos="439 "></span>            <span class="n">traces_processed</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">page</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'TracesProcessedCount'</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
-<span class="linenos" data-linenos="440 "></span>        <span class="p">)</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="417 "></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">iter_trace_summary_pages</span><span class="p">(</span>
+<span class="linenos" data-linenos="418 "></span>    <span class="n">client</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="linenos" data-linenos="419 "></span>    <span class="o">*</span><span class="p">,</span>
+<span class="linenos" data-linenos="420 "></span>    <span class="n">start_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
+<span class="linenos" data-linenos="421 "></span>    <span class="n">end_time</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span>
+<span class="linenos" data-linenos="422 "></span>    <span class="n">filter_expression</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="linenos" data-linenos="423 "></span>    <span class="n">sampling</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="linenos" data-linenos="424 "></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">TraceSummaryPage</span><span class="p">]:</span>
+<span class="linenos" data-linenos="425 "></span><span class="w">    </span><span class="sd">"""Stream trace summaries a page at a time, newest page first as X-Ray returns them.</span>
+<span class="linenos" data-linenos="426 "></span>
+<span class="linenos" data-linenos="427 "></span><span class="sd">    Pages rather than records, because the cost of the query is reported per page and a</span>
+<span class="linenos" data-linenos="428 "></span><span class="sd">    caller that walks away early needs to know what it already spent.</span>
+<span class="linenos" data-linenos="429 "></span>
+<span class="linenos" data-linenos="430 "></span><span class="sd">    Args:</span>
+<span class="linenos" data-linenos="431 "></span><span class="sd">        client: An open X-Ray client, from :meth:`ClientPool.client`.</span>
+<span class="linenos" data-linenos="432 "></span><span class="sd">        start_time: Window start.</span>
+<span class="linenos" data-linenos="433 "></span><span class="sd">        end_time: Window end.</span>
+<span class="linenos" data-linenos="434 "></span><span class="sd">        filter_expression: An X-Ray filter expression, such as ``service("api")`` or</span>
+<span class="linenos" data-linenos="435 "></span><span class="sd">            ``responsetime &gt; 3``. Server-side, so it narrows what comes back over the</span>
+<span class="linenos" data-linenos="436 "></span><span class="sd">            wire, but not what the query is billed for.</span>
+<span class="linenos" data-linenos="437 "></span><span class="sd">        sampling: Ask X-Ray for a representative sample instead of every trace.</span>
+<span class="linenos" data-linenos="438 "></span>
+<span class="linenos" data-linenos="439 "></span><span class="sd">    Yields:</span>
+<span class="linenos" data-linenos="440 "></span><span class="sd">        TraceSummaryPage records in the order the API returns them.</span>
+<span class="linenos" data-linenos="441 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="442 "></span>    <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'StartTime'</span><span class="p">:</span> <span class="n">start_time</span><span class="p">,</span> <span class="s1">'EndTime'</span><span class="p">:</span> <span class="n">end_time</span><span class="p">,</span> <span class="s1">'Sampling'</span><span class="p">:</span> <span class="n">sampling</span><span class="p">}</span>
+<span class="linenos" data-linenos="443 "></span>    <span class="k">if</span> <span class="n">filter_expression</span><span class="p">:</span>
+<span class="linenos" data-linenos="444 "></span>        <span class="n">kwargs</span><span class="p">[</span><span class="s1">'FilterExpression'</span><span class="p">]</span> <span class="o">=</span> <span class="n">filter_expression</span>
+<span class="linenos" data-linenos="445 "></span>    <span class="n">paginator</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_paginator</span><span class="p">(</span><span class="s1">'get_trace_summaries'</span><span class="p">)</span>
+<span class="linenos" data-linenos="446 "></span>    <span class="k">async</span> <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">paginator</span><span class="o">.</span><span class="n">paginate</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="linenos" data-linenos="447 "></span>        <span class="k">yield</span> <span class="n">TraceSummaryPage</span><span class="p">(</span>
+<span class="linenos" data-linenos="448 "></span>            <span class="n">summaries</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">_to_summary</span><span class="p">(</span><span class="n">summary</span><span class="p">)</span> <span class="k">for</span> <span class="n">summary</span> <span class="ow">in</span> <span class="n">page</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'TraceSummaries'</span><span class="p">,</span> <span class="p">[])),</span>
+<span class="linenos" data-linenos="449 "></span>            <span class="n">traces_processed</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">page</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'TracesProcessedCount'</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+<span class="linenos" data-linenos="450 "></span>        <span class="p">)</span>
 </code></pre></div>
             </details>
     </div>
@@ -5359,27 +5378,27 @@ wire, but not what the query is billed for.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/aws/xray.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="352 "></span><span class="k">def</span><span class="w"> </span><span class="nf">parse_trace</span><span class="p">(</span><span class="n">payload</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">XRayTrace</span><span class="p">:</span>
-<span class="linenos" data-linenos="353 "></span><span class="w">    </span><span class="sd">"""Build a trace from one ``BatchGetTraces`` entry, decoding each segment document."""</span>
-<span class="linenos" data-linenos="354 "></span>    <span class="n">trace_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'Id'</span><span class="p">,</span> <span class="s1">''</span><span class="p">))</span>
-<span class="linenos" data-linenos="355 "></span>    <span class="n">spans</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">XRaySpan</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="linenos" data-linenos="356 "></span>    <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'Segments'</span><span class="p">,</span> <span class="p">[]):</span>
-<span class="linenos" data-linenos="357 "></span>        <span class="n">document</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'Document'</span><span class="p">)</span>
-<span class="linenos" data-linenos="358 "></span>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-<span class="linenos" data-linenos="359 "></span>            <span class="k">continue</span>
-<span class="linenos" data-linenos="360 "></span>        <span class="k">try</span><span class="p">:</span>
-<span class="linenos" data-linenos="361 "></span>            <span class="n">decoded</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
-<span class="linenos" data-linenos="362 "></span>        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-<span class="linenos" data-linenos="363 "></span>            <span class="k">continue</span>
-<span class="linenos" data-linenos="364 "></span>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">decoded</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
-<span class="linenos" data-linenos="365 "></span>            <span class="n">spans</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">flatten_segment</span><span class="p">(</span><span class="n">decoded</span><span class="p">,</span> <span class="n">trace_id</span><span class="o">=</span><span class="n">trace_id</span><span class="p">))</span>
-<span class="linenos" data-linenos="366 "></span>    <span class="n">spans</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">span</span><span class="p">:</span> <span class="n">span</span><span class="o">.</span><span class="n">start_time</span><span class="p">)</span>
-<span class="linenos" data-linenos="367 "></span>    <span class="k">return</span> <span class="n">XRayTrace</span><span class="p">(</span>
-<span class="linenos" data-linenos="368 "></span>        <span class="n">trace_id</span><span class="o">=</span><span class="n">trace_id</span><span class="p">,</span>
-<span class="linenos" data-linenos="369 "></span>        <span class="n">duration_seconds</span><span class="o">=</span><span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'Duration'</span><span class="p">),</span>
-<span class="linenos" data-linenos="370 "></span>        <span class="n">limit_exceeded</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'LimitExceeded'</span><span class="p">)),</span>
-<span class="linenos" data-linenos="371 "></span>        <span class="n">spans</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">spans</span><span class="p">),</span>
-<span class="linenos" data-linenos="372 "></span>    <span class="p">)</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="362 "></span><span class="k">def</span><span class="w"> </span><span class="nf">parse_trace</span><span class="p">(</span><span class="n">payload</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">XRayTrace</span><span class="p">:</span>
+<span class="linenos" data-linenos="363 "></span><span class="w">    </span><span class="sd">"""Build a trace from one ``BatchGetTraces`` entry, decoding each segment document."""</span>
+<span class="linenos" data-linenos="364 "></span>    <span class="n">trace_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'Id'</span><span class="p">,</span> <span class="s1">''</span><span class="p">))</span>
+<span class="linenos" data-linenos="365 "></span>    <span class="n">spans</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">XRaySpan</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos" data-linenos="366 "></span>    <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'Segments'</span><span class="p">,</span> <span class="p">[]):</span>
+<span class="linenos" data-linenos="367 "></span>        <span class="n">document</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'Document'</span><span class="p">)</span>
+<span class="linenos" data-linenos="368 "></span>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+<span class="linenos" data-linenos="369 "></span>            <span class="k">continue</span>
+<span class="linenos" data-linenos="370 "></span>        <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="371 "></span>            <span class="n">decoded</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+<span class="linenos" data-linenos="372 "></span>        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+<span class="linenos" data-linenos="373 "></span>            <span class="k">continue</span>
+<span class="linenos" data-linenos="374 "></span>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">decoded</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+<span class="linenos" data-linenos="375 "></span>            <span class="n">spans</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">flatten_segment</span><span class="p">(</span><span class="n">decoded</span><span class="p">,</span> <span class="n">trace_id</span><span class="o">=</span><span class="n">trace_id</span><span class="p">))</span>
+<span class="linenos" data-linenos="376 "></span>    <span class="n">spans</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">span</span><span class="p">:</span> <span class="n">span</span><span class="o">.</span><span class="n">start_time</span><span class="p">)</span>
+<span class="linenos" data-linenos="377 "></span>    <span class="k">return</span> <span class="n">XRayTrace</span><span class="p">(</span>
+<span class="linenos" data-linenos="378 "></span>        <span class="n">trace_id</span><span class="o">=</span><span class="n">trace_id</span><span class="p">,</span>
+<span class="linenos" data-linenos="379 "></span>        <span class="n">duration_seconds</span><span class="o">=</span><span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'Duration'</span><span class="p">),</span>
+<span class="linenos" data-linenos="380 "></span>        <span class="n">limit_exceeded</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'LimitExceeded'</span><span class="p">)),</span>
+<span class="linenos" data-linenos="381 "></span>        <span class="n">spans</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">spans</span><span class="p">),</span>
+<span class="linenos" data-linenos="382 "></span>    <span class="p">)</span>
 </code></pre></div>
             </details>
     </div>
@@ -5404,9 +5423,45 @@ wire, but not what the query is billed for.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/aws/xray.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="211 "></span><span class="k">def</span><span class="w"> </span><span class="nf">scan_cost_usd</span><span class="p">(</span><span class="n">traces_processed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="linenos" data-linenos="212 "></span><span class="w">    </span><span class="sd">"""What a scan of this many traces costs, ignoring the monthly free million."""</span>
-<span class="linenos" data-linenos="213 "></span>    <span class="k">return</span> <span class="n">traces_processed</span> <span class="o">/</span> <span class="n">_TRACES_PER_MILLION</span> <span class="o">*</span> <span class="n">COST_PER_MILLION_TRACES</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="221 "></span><span class="k">def</span><span class="w"> </span><span class="nf">scan_cost_usd</span><span class="p">(</span><span class="n">traces_processed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="linenos" data-linenos="222 "></span><span class="w">    </span><span class="sd">"""What a scan of this many traces costs, ignoring the monthly free million."""</span>
+<span class="linenos" data-linenos="223 "></span>    <span class="k">return</span> <span class="n">traces_processed</span> <span class="o">/</span> <span class="n">_TRACES_PER_MILLION</span> <span class="o">*</span> <span class="n">COST_PER_MILLION_TRACES</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.aws.xray.xray_form" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">xray_form</span>
+
+
+<a href="#tail_cw.aws.xray.xray_form" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">xray_form</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Write a trace id the way X-Ray answers to it, or return None when <code>value</code> is not one.</p>
+<p>The leading digits go unchecked: X-Ray also stores ids an OTel exporter generated at random.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>tail_cw/aws/xray.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="203 "></span><span class="k">def</span><span class="w"> </span><span class="nf">xray_form</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="204 "></span><span class="w">    </span><span class="sd">"""Write a trace id the way X-Ray answers to it, or return None when ``value`` is not one.</span>
+<span class="linenos" data-linenos="205 "></span>
+<span class="linenos" data-linenos="206 "></span><span class="sd">    The leading digits go unchecked: X-Ray also stores ids an OTel exporter generated at random.</span>
+<span class="linenos" data-linenos="207 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="208 "></span>    <span class="n">cleaned</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+<span class="linenos" data-linenos="209 "></span>    <span class="k">if</span> <span class="n">TRACE_ID_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">cleaned</span><span class="p">):</span>
+<span class="linenos" data-linenos="210 "></span>        <span class="k">return</span> <span class="n">cleaned</span>
+<span class="linenos" data-linenos="211 "></span>    <span class="k">if</span> <span class="n">W3C_TRACE_ID_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">cleaned</span><span class="p">):</span>
+<span class="linenos" data-linenos="212 "></span>        <span class="k">return</span> <span class="sa">f</span><span class="s1">'1-</span><span class="si">{</span><span class="n">cleaned</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s1">-</span><span class="si">{</span><span class="n">cleaned</span><span class="p">[</span><span class="mi">8</span><span class="p">:]</span><span class="si">}</span><span class="s1">'</span>
+<span class="linenos" data-linenos="213 "></span>    <span class="k">return</span> <span class="kc">None</span>
 </code></pre></div>
             </details>
     </div>

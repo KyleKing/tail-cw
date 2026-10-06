@@ -1177,6 +1177,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cpu_budget.DEFAULT_NICE_INCREMENT" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DEFAULT_NICE_INCREMENT
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1214,6 +1231,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tail_cw.cpu_budget.current_load" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        current_load
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tail_cw.cpu_budget.duckdb_threads" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1225,10 +1253,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tail_cw.cpu_budget.lower_priority_for_batch_work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lower_priority_for_batch_work
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tail_cw.cpu_budget.max_threads" class="md-nav__link">
     <span class="md-ellipsis">
       
         max_threads
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cpu_budget.native_write_gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        native_write_gate
       
     </span>
   </a>
@@ -3178,6 +3228,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cpu_budget.DEFAULT_NICE_INCREMENT" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DEFAULT_NICE_INCREMENT
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3215,6 +3282,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tail_cw.cpu_budget.current_load" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        current_load
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tail_cw.cpu_budget.duckdb_threads" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3226,10 +3304,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tail_cw.cpu_budget.lower_priority_for_batch_work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lower_priority_for_batch_work
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tail_cw.cpu_budget.max_threads" class="md-nav__link">
     <span class="md-ellipsis">
       
         max_threads
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tail_cw.cpu_budget.native_write_gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        native_write_gate
       
     </span>
   </a>
@@ -3275,10 +3375,17 @@
 runs several of their calls at once, so the default is heavy oversubscription: a multi-group
 fetch was measured at 906% CPU (7.6 of 12 cores) writing Parquet. Nothing about that is
 faster for the user, and it makes the machine unusable while it runs.</p>
-<p>The budget is a share of the CPU count, applied to both engines. <code>POLARS_MAX_THREADS</code> is
-read by Polars when it is imported and cannot be changed afterwards, so
+<p>The budget is a share of the CPU count, applied to both engines, further reduced when the
+machine already carries load from something else (a fetch started while Docker or another
+process is busy should not add its whole share on top). <code>POLARS_MAX_THREADS</code> is read by
+Polars when it is imported and cannot be changed afterwards, so
 :func:<code>apply_native_thread_limits</code> has to run before anything imports Polars, which is why
 <code>tail_cw/__init__.py</code> calls it first.</p>
+<p>Writing a segment to Parquet does the same native JSON-encode-and-compress work a query
+does, so :func:<code>native_write_gate</code> hands out a semaphore sized off the same budget. It is
+separate from the fetch pool&rsquo;s width: a fetch stays wide because most of a segment&rsquo;s life is
+spent waiting on the network, but the compute at the end of it competes for the same cores a
+query would and gets the same cap.</p>
 
 
 
@@ -3296,6 +3403,32 @@ read by Polars when it is imported and cannot be changed afterwards, so
 
 
 <h2 id="tail_cw.cpu_budget-attributes">Attributes<a href="#tail_cw.cpu_budget-attributes" class="headerlink" title="Permanent link">⚓︎</a></h2>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="tail_cw.cpu_budget.DEFAULT_NICE_INCREMENT" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">DEFAULT_NICE_INCREMENT</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#tail_cw.cpu_budget.DEFAULT_NICE_INCREMENT" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">DEFAULT_NICE_INCREMENT</span> <span class="o">=</span> <span class="mi">10</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>How much batch work (<code>export</code>) lowers its own scheduling priority by, so an interactive
+foreground process is favored by the OS scheduler once the machine is actually contended.
+Raising niceness never fails for a process&rsquo;s own priority, unlike lowering it.</p>
+
+    </div>
+
+</div>
 
 
 <h2 id="tail_cw.cpu_budget-functions">Functions:<a href="#tail_cw.cpu_budget-functions" class="headerlink" title="Permanent link">⚓︎</a></h2>
@@ -3320,13 +3453,13 @@ shell still wins.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/cpu_budget.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="59 "></span><span class="k">def</span><span class="w"> </span><span class="nf">apply_native_thread_limits</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos="60 "></span><span class="w">    </span><span class="sd">"""Publish the budget to engines that read it from the environment at import time.</span>
-<span class="linenos" data-linenos="61 "></span>
-<span class="linenos" data-linenos="62 "></span><span class="sd">    An existing ``POLARS_MAX_THREADS`` is left alone, so an explicit setting from the caller's</span>
-<span class="linenos" data-linenos="63 "></span><span class="sd">    shell still wins.</span>
-<span class="linenos" data-linenos="64 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="65 "></span>    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">POLARS_THREADS_ENV</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">max_threads</span><span class="p">()))</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="100 "></span><span class="k">def</span><span class="w"> </span><span class="nf">apply_native_thread_limits</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="101 "></span><span class="w">    </span><span class="sd">"""Publish the budget to engines that read it from the environment at import time.</span>
+<span class="linenos" data-linenos="102 "></span>
+<span class="linenos" data-linenos="103 "></span><span class="sd">    An existing ``POLARS_MAX_THREADS`` is left alone, so an explicit setting from the caller's</span>
+<span class="linenos" data-linenos="104 "></span><span class="sd">    shell still wins.</span>
+<span class="linenos" data-linenos="105 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="106 "></span>    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">POLARS_THREADS_ENV</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">max_threads</span><span class="p">()))</span>
 </code></pre></div>
             </details>
     </div>
@@ -3351,12 +3484,45 @@ shell still wins.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/cpu_budget.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="26 "></span><span class="k">def</span><span class="w"> </span><span class="nf">cpu_count</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="linenos" data-linenos="27 "></span><span class="w">    </span><span class="sd">"""Return usable CPUs, honoring a cgroup or affinity limit where the OS reports one."""</span>
-<span class="linenos" data-linenos="28 "></span>    <span class="n">affinity</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">os</span><span class="p">,</span> <span class="s1">'sched_getaffinity'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="linenos" data-linenos="29 "></span>    <span class="k">if</span> <span class="n">affinity</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos="30 "></span>        <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">affinity</span><span class="p">(</span><span class="mi">0</span><span class="p">)))</span>
-<span class="linenos" data-linenos="31 "></span>    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">)</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="42 "></span><span class="k">def</span><span class="w"> </span><span class="nf">cpu_count</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="linenos" data-linenos="43 "></span><span class="w">    </span><span class="sd">"""Return usable CPUs, honoring a cgroup or affinity limit where the OS reports one."""</span>
+<span class="linenos" data-linenos="44 "></span>    <span class="n">affinity</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">os</span><span class="p">,</span> <span class="s1">'sched_getaffinity'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="linenos" data-linenos="45 "></span>    <span class="k">if</span> <span class="n">affinity</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="46 "></span>        <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">affinity</span><span class="p">(</span><span class="mi">0</span><span class="p">)))</span>
+<span class="linenos" data-linenos="47 "></span>    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">)</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.cpu_budget.current_load" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">current_load</span>
+
+
+<a href="#tail_cw.cpu_budget.current_load" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">current_load</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the 1-minute load average, or 0.0 where the platform has none (Windows).</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>tail_cw/cpu_budget.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="50 "></span><span class="k">def</span><span class="w"> </span><span class="nf">current_load</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="linenos" data-linenos="51 "></span><span class="w">    </span><span class="sd">"""Return the 1-minute load average, or 0.0 where the platform has none (Windows)."""</span>
+<span class="linenos" data-linenos="52 "></span>    <span class="n">getloadavg</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">os</span><span class="p">,</span> <span class="s1">'getloadavg'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="linenos" data-linenos="53 "></span>    <span class="k">if</span> <span class="n">getloadavg</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="54 "></span>        <span class="k">return</span> <span class="mf">0.0</span>
+<span class="linenos" data-linenos="55 "></span>    <span class="k">try</span><span class="p">:</span>
+<span class="linenos" data-linenos="56 "></span>        <span class="k">return</span> <span class="n">getloadavg</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+<span class="linenos" data-linenos="57 "></span>    <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+<span class="linenos" data-linenos="58 "></span>        <span class="k">return</span> <span class="mf">0.0</span>
 </code></pre></div>
             </details>
     </div>
@@ -3384,14 +3550,58 @@ no such division: its pool is process-wide.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/cpu_budget.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="49 "></span><span class="k">def</span><span class="w"> </span><span class="nf">duckdb_threads</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="linenos" data-linenos="50 "></span><span class="w">    </span><span class="sd">"""Return the per-connection thread count.</span>
-<span class="linenos" data-linenos="51 "></span>
-<span class="linenos" data-linenos="52 "></span><span class="sd">    DuckDB sizes its pool per connection and the blocking pool can hold several queries at</span>
-<span class="linenos" data-linenos="53 "></span><span class="sd">    once, so the budget is divided by the pool width to keep the total inside it. Polars needs</span>
-<span class="linenos" data-linenos="54 "></span><span class="sd">    no such division: its pool is process-wide.</span>
-<span class="linenos" data-linenos="55 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="56 "></span>    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_threads</span><span class="p">()</span> <span class="o">//</span> <span class="n">DEFAULT_BLOCKING_WORKERS</span><span class="p">)</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="79 "></span><span class="k">def</span><span class="w"> </span><span class="nf">duckdb_threads</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="linenos" data-linenos="80 "></span><span class="w">    </span><span class="sd">"""Return the per-connection thread count.</span>
+<span class="linenos" data-linenos="81 "></span>
+<span class="linenos" data-linenos="82 "></span><span class="sd">    DuckDB sizes its pool per connection and the blocking pool can hold several queries at</span>
+<span class="linenos" data-linenos="83 "></span><span class="sd">    once, so the budget is divided by the pool width to keep the total inside it. Polars needs</span>
+<span class="linenos" data-linenos="84 "></span><span class="sd">    no such division: its pool is process-wide.</span>
+<span class="linenos" data-linenos="85 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="86 "></span>    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_threads</span><span class="p">()</span> <span class="o">//</span> <span class="n">DEFAULT_BLOCKING_WORKERS</span><span class="p">)</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.cpu_budget.lower_priority_for_batch_work" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">lower_priority_for_batch_work</span>
+
+
+<a href="#tail_cw.cpu_budget.lower_priority_for_batch_work" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">lower_priority_for_batch_work</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Raise this process&rsquo;s niceness so it yields to interactive work under contention.</p>
+<p>Only meaningful for a one-shot batch command (<code>export</code>): a long-lived interactive
+session (the TUI) stays at normal priority because a user is actively waiting on it.
+A no-op wherever <code>os.nice</code> is unavailable (Windows) or refused, since a batch export
+must not fail over a scheduling nicety.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>tail_cw/cpu_budget.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="109 "></span><span class="k">def</span><span class="w"> </span><span class="nf">lower_priority_for_batch_work</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="110 "></span><span class="w">    </span><span class="sd">"""Raise this process's niceness so it yields to interactive work under contention.</span>
+<span class="linenos" data-linenos="111 "></span>
+<span class="linenos" data-linenos="112 "></span><span class="sd">    Only meaningful for a one-shot batch command (``export``): a long-lived interactive</span>
+<span class="linenos" data-linenos="113 "></span><span class="sd">    session (the TUI) stays at normal priority because a user is actively waiting on it.</span>
+<span class="linenos" data-linenos="114 "></span><span class="sd">    A no-op wherever ``os.nice`` is unavailable (Windows) or refused, since a batch export</span>
+<span class="linenos" data-linenos="115 "></span><span class="sd">    must not fail over a scheduling nicety.</span>
+<span class="linenos" data-linenos="116 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="117 "></span>    <span class="n">nice</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">os</span><span class="p">,</span> <span class="s1">'nice'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="linenos" data-linenos="118 "></span>    <span class="k">if</span> <span class="n">nice</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="119 "></span>        <span class="k">return</span>
+<span class="linenos" data-linenos="120 "></span>    <span class="n">increment</span> <span class="o">=</span> <span class="n">_positive_int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">NICE_INCREMENT_ENV</span><span class="p">))</span>
+<span class="linenos" data-linenos="121 "></span>    <span class="k">if</span> <span class="n">increment</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="122 "></span>        <span class="n">increment</span> <span class="o">=</span> <span class="n">DEFAULT_NICE_INCREMENT</span>
+<span class="linenos" data-linenos="123 "></span>    <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">OSError</span><span class="p">):</span>
+<span class="linenos" data-linenos="124 "></span>        <span class="n">nice</span><span class="p">(</span><span class="n">increment</span><span class="p">)</span>
 </code></pre></div>
             </details>
     </div>
@@ -3412,27 +3622,68 @@ no such division: its pool is process-wide.</p>
     <div class="doc doc-contents ">
 
         <p>Return the total native threads tail-cw may run.</p>
-<p><code>TAIL_CW_MAX_THREADS</code> overrides the budget outright. Otherwise it is
-<code>TAIL_CW_CPU_FRACTION</code> (default 0.4) of the CPU count, never below one. An unparseable
-or non-positive value in either falls back to the default rather than failing a command
-over a environment typo.</p>
+<p><code>TAIL_CW_MAX_THREADS</code> overrides the budget outright. Otherwise it is the lesser of
+<code>TAIL_CW_CPU_FRACTION</code> (default 0.4) of the CPU count and the headroom the machine
+currently has (CPU count minus the 1-minute load average), never below one. An
+unparseable or non-positive value in either env var falls back to the default rather
+than failing a command over a environment typo.</p>
 
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>tail_cw/cpu_budget.py</code></summary>
-              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="34 "></span><span class="k">def</span><span class="w"> </span><span class="nf">max_threads</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="linenos" data-linenos="35 "></span><span class="w">    </span><span class="sd">"""Return the total native threads tail-cw may run.</span>
-<span class="linenos" data-linenos="36 "></span>
-<span class="linenos" data-linenos="37 "></span><span class="sd">    ``TAIL_CW_MAX_THREADS`` overrides the budget outright. Otherwise it is</span>
-<span class="linenos" data-linenos="38 "></span><span class="sd">    ``TAIL_CW_CPU_FRACTION`` (default 0.4) of the CPU count, never below one. An unparseable</span>
-<span class="linenos" data-linenos="39 "></span><span class="sd">    or non-positive value in either falls back to the default rather than failing a command</span>
-<span class="linenos" data-linenos="40 "></span><span class="sd">    over a environment typo.</span>
-<span class="linenos" data-linenos="41 "></span><span class="sd">    """</span>
-<span class="linenos" data-linenos="42 "></span>    <span class="n">override</span> <span class="o">=</span> <span class="n">_positive_int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">MAX_THREADS_ENV</span><span class="p">))</span>
-<span class="linenos" data-linenos="43 "></span>    <span class="k">if</span> <span class="n">override</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<span class="linenos" data-linenos="44 "></span>        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="n">override</span><span class="p">,</span> <span class="n">cpu_count</span><span class="p">())</span>
-<span class="linenos" data-linenos="45 "></span>    <span class="n">fraction</span> <span class="o">=</span> <span class="n">_positive_float</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">CPU_FRACTION_ENV</span><span class="p">))</span> <span class="ow">or</span> <span class="n">DEFAULT_CPU_FRACTION</span>
-<span class="linenos" data-linenos="46 "></span>    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">cpu_count</span><span class="p">()</span> <span class="o">*</span> <span class="nb">min</span><span class="p">(</span><span class="n">fraction</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)))</span>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="61 "></span><span class="k">def</span><span class="w"> </span><span class="nf">max_threads</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="linenos" data-linenos="62 "></span><span class="w">    </span><span class="sd">"""Return the total native threads tail-cw may run.</span>
+<span class="linenos" data-linenos="63 "></span>
+<span class="linenos" data-linenos="64 "></span><span class="sd">    ``TAIL_CW_MAX_THREADS`` overrides the budget outright. Otherwise it is the lesser of</span>
+<span class="linenos" data-linenos="65 "></span><span class="sd">    ``TAIL_CW_CPU_FRACTION`` (default 0.4) of the CPU count and the headroom the machine</span>
+<span class="linenos" data-linenos="66 "></span><span class="sd">    currently has (CPU count minus the 1-minute load average), never below one. An</span>
+<span class="linenos" data-linenos="67 "></span><span class="sd">    unparseable or non-positive value in either env var falls back to the default rather</span>
+<span class="linenos" data-linenos="68 "></span><span class="sd">    than failing a command over a environment typo.</span>
+<span class="linenos" data-linenos="69 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="70 "></span>    <span class="n">override</span> <span class="o">=</span> <span class="n">_positive_int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">MAX_THREADS_ENV</span><span class="p">))</span>
+<span class="linenos" data-linenos="71 "></span>    <span class="k">if</span> <span class="n">override</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<span class="linenos" data-linenos="72 "></span>        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="n">override</span><span class="p">,</span> <span class="n">cpu_count</span><span class="p">())</span>
+<span class="linenos" data-linenos="73 "></span>    <span class="n">fraction</span> <span class="o">=</span> <span class="n">_positive_float</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">CPU_FRACTION_ENV</span><span class="p">))</span> <span class="ow">or</span> <span class="n">DEFAULT_CPU_FRACTION</span>
+<span class="linenos" data-linenos="74 "></span>    <span class="n">budget</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">cpu_count</span><span class="p">()</span> <span class="o">*</span> <span class="nb">min</span><span class="p">(</span><span class="n">fraction</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)))</span>
+<span class="linenos" data-linenos="75 "></span>    <span class="n">headroom</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">cpu_count</span><span class="p">()</span> <span class="o">-</span> <span class="n">current_load</span><span class="p">()))</span>
+<span class="linenos" data-linenos="76 "></span>    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">budget</span><span class="p">,</span> <span class="n">headroom</span><span class="p">))</span>
+</code></pre></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tail_cw.cpu_budget.native_write_gate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">native_write_gate</span>
+
+
+<a href="#tail_cw.cpu_budget.native_write_gate" class="headerlink" title="Permanent link">⚓︎</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">native_write_gate</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a fresh semaphore bounding concurrent CPU-bound Parquet writes.</p>
+<p>Sized off :func:<code>max_threads</code>, the same budget the query engines get. Built by the
+caller once per command (mirroring how a segment-fetch limiter is built), not cached
+here, so a long-running TUI session can pick up a lower budget on its next command
+rather than being stuck with the load reading from when it started.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>tail_cw/cpu_budget.py</code></summary>
+              <div class="highlight"><pre><span></span><code><span class="linenos" data-linenos="89 "></span><span class="k">def</span><span class="w"> </span><span class="nf">native_write_gate</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">threading</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">:</span>
+<span class="linenos" data-linenos="90 "></span><span class="w">    </span><span class="sd">"""Return a fresh semaphore bounding concurrent CPU-bound Parquet writes.</span>
+<span class="linenos" data-linenos="91 "></span>
+<span class="linenos" data-linenos="92 "></span><span class="sd">    Sized off :func:`max_threads`, the same budget the query engines get. Built by the</span>
+<span class="linenos" data-linenos="93 "></span><span class="sd">    caller once per command (mirroring how a segment-fetch limiter is built), not cached</span>
+<span class="linenos" data-linenos="94 "></span><span class="sd">    here, so a long-running TUI session can pick up a lower budget on its next command</span>
+<span class="linenos" data-linenos="95 "></span><span class="sd">    rather than being stuck with the load reading from when it started.</span>
+<span class="linenos" data-linenos="96 "></span><span class="sd">    """</span>
+<span class="linenos" data-linenos="97 "></span>    <span class="k">return</span> <span class="n">threading</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="n">max_threads</span><span class="p">())</span>
 </code></pre></div>
             </details>
     </div>
