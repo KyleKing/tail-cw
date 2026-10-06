@@ -13,7 +13,7 @@ import argparse
 from pathlib import Path
 
 from tail_cw.aws.alarms import ALARM_STATES
-from tail_cw.aws.insights import MAX_INSIGHTS_LOG_GROUPS, QueryLanguage
+from tail_cw.aws.insights import DEFAULT_LIMIT, MAX_INSIGHTS_LOG_GROUPS, QueryLanguage
 from tail_cw.completion import log_group_completer
 from tail_cw.query.fuzzy import DEFAULT_SIMILARITY
 from tail_cw.query.rollup import DEFAULT_PATTERN_LIMIT, Granularity
@@ -22,7 +22,6 @@ from tail_cw.query.severity import Severity
 DEFAULT_WINDOW = '1h'
 DEFAULT_DASHBOARD_WINDOW = '3h'
 DEFAULT_SUMMARY_MAX_GROUPS = 25
-INSIGHTS_DEFAULT_LIMIT = 1000
 XRAY_DEFAULT_LIMIT = 1000
 """A three-hour production window held 442,828 traces, so an uncapped sweep is not a default."""
 DEFAULT_HISTORY_WINDOW = '7d'
@@ -310,8 +309,11 @@ def _configure_insights(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--limit',
         type=int,
-        default=INSIGHTS_DEFAULT_LIMIT,
-        help=f'Maximum rows returned (default: {INSIGHTS_DEFAULT_LIMIT})',
+        default=None,
+        help=(
+            f"Maximum rows returned (default: the query's own limit command, else {DEFAULT_LIMIT}; "
+            'overrides a limit inside --query when given)'
+        ),
     )
     parser.add_argument(
         '--format',

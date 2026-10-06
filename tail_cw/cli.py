@@ -1597,7 +1597,7 @@ def _report_insights_cost(result: InsightsResult, *, group_count: int) -> None:
     """Write what the query scanned to stderr, because Insights bills on it."""
     gigabytes = result.bytes_scanned / 1_000_000_000
     # A self-selecting query passes no group list, so counting it would report zero.
-    source = f'{group_count} groups' if group_count else 'the groups the query named'
+    source = f'{group_count} group{"s" if group_count != 1 else ""}' if group_count else 'the groups the query named'
     sys.stderr.write(
         f'{len(result.rows)} rows from {source}; '
         f'{result.records_matched:,} of {result.records_scanned:,} records matched, '

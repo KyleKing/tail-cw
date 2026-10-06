@@ -79,6 +79,17 @@ _NARROWING_PATTERNS = {
     for language, commands in _NARROWING_COMMANDS.items()
 }
 
+_ROW_LIMIT_PATTERNS = {
+    'CWLI': re.compile(r'\|\s*limit\s+\d', re.IGNORECASE),
+    'PPL': re.compile(r'\|\s*head\b', re.IGNORECASE),
+    'SQL': re.compile(r'\blimit\s+\d', re.IGNORECASE),
+}
+"""The command that caps rows, per language, anchored to its position so ``like /rate limit/`` is not one."""
+
+
+def _has_own_row_limit(query: str, language: QueryLanguage) -> bool:
+    return bool(_ROW_LIMIT_PATTERNS[language.value].search(query))
+
 
 def validate_insights_request(
     query: str,
@@ -351,7 +362,7 @@ async def run_insights_query(
     query: str,
     start_time: datetime,
     end_time: datetime,
-    limit: int = DEFAULT_LIMIT,
+    limit: int | None = None,
     poll_seconds: float = DEFAULT_POLL_SECONDS,
     language: QueryLanguage = QueryLanguage.CWLI,
 ) -> InsightsResult:
@@ -366,7 +377,9 @@ async def run_insights_query(
         query: The query text, in ``language``.
         start_time: Window start.
         end_time: Window end.
-        limit: Maximum rows returned.
+        limit: Maximum rows returned. StartQuery's own ``limit`` parameter overrides a
+            row-limit command inside ``query``, so ``None`` omits it when ``query`` carries
+            one and falls back to :data:`DEFAULT_LIMIT` when it does not.
         poll_seconds: How often to ask whether the query finished.
         language: Which Insights language ``query`` is written in.
 
@@ -390,8 +403,11 @@ async def run_insights_query(
         'startTime': int(start_time.timestamp()),
         'endTime': int(end_time.timestamp()),
         'queryString': query,
-        'limit': limit,
     }
+    if limit is not None:
+        kwargs['limit'] = limit
+    elif not _has_own_row_limit(query, language):
+        kwargs['limit'] = DEFAULT_LIMIT
     if language is not QueryLanguage.CWLI:
         kwargs['queryLanguage'] = language.value
     if not selects_own:

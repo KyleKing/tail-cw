@@ -8,6 +8,7 @@ import pytest
 
 from tail_cw.aws.insights import (
     ASSUMED_RETENTION_DAYS,
+    DEFAULT_LIMIT,
     EVENT_OVERHEAD_BYTES,
     MAX_INSIGHTS_LOG_GROUPS,
     SAMPLE_SLICE,
@@ -313,6 +314,38 @@ async def test_a_sql_query_sends_the_language_and_no_groups():
 
     assert client.started['queryLanguage'] == 'SQL'
     assert 'logGroupNames' not in client.started, 'AWS rejects being told the groups twice'
+
+
+@pytest.mark.parametrize(
+    ('language', 'query', 'limit', 'expected'),
+    [
+        (QueryLanguage.CWLI, 'filter x | limit 5', None, None),
+        (QueryLanguage.CWLI, 'filter x', None, DEFAULT_LIMIT),
+        (QueryLanguage.CWLI, 'filter @message like /rate limit 5/', None, DEFAULT_LIMIT),
+        (QueryLanguage.CWLI, 'filter x | limit 5', 7, 7),
+        (QueryLanguage.PPL, 'source=g | where x | head 5', None, None),
+        (QueryLanguage.SQL, 'SELECT * FROM `g` WHERE x LIMIT 5', None, None),
+    ],
+)
+async def test_the_api_limit_is_sent_only_when_asked_for_or_the_query_has_none(language, query, limit, expected):
+    """StartQuery's own limit overrides a limit inside the query, so it is only sent when needed."""
+    client = _FakeInsightsClient(['Complete'])
+
+    await run_insights_query(
+        client,
+        log_groups=[] if names_its_own_groups(query, language) else ['/g'],
+        query=query,
+        start_time=START,
+        end_time=END,
+        poll_seconds=_NO_POLL_DELAY,
+        limit=limit,
+        language=language,
+    )
+
+    if expected is None:
+        assert 'limit' not in client.started
+    else:
+        assert client.started['limit'] == expected
 
 
 async def test_naming_the_groups_twice_is_refused_before_it_bills():
