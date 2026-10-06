@@ -2,25 +2,26 @@
 
 Written 2026-07-05 from a code capability review and a survey of the CloudWatch tooling
 landscape.
-Pruned four times since, most recently on 2026-08-31, each time by moving what shipped
+Pruned five times since, most recently on 2026-10-05, each time by moving what shipped
 into the ADR that records the decision and deleting the planning detail.
 The numbers behind a shipped decision live in its ADR; this file holds what is next.
 
 ## Delivered
 
-| Milestone                      | Outcome                                                                                                                                                                                                | Record                                                                                                                                        |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0 wire the drivetrain         | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                                                                                                   | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
-| M1 live tail                   | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached                                                                            | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
-| M2 navigation-first discovery  | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets                                                                                     | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
-| M3 investigation tools         | X-Ray reader, the `:xray` waterfall, the `p` and `x` correlation pivots, the `h` histogram                                                                                                             | [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md), [0013](../docs/docs/adr/0013-read-x-ray-directly-for-spans.md)        |
-| M4 dashboards and metrics      | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs                                                                         | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
-| M5 async AWS I/O               | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests                                                                          | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
-| M6 aggregation surface         | `export summary` with fuzzy-merged rollups, `export insights` in CWLI, SQL, and PPL, `export alarms --history`, `export metrics`, CPU budget                                                           | [the evaluation](evaluation-2026-08-21-vs-aws-cli.md)                                                                                         |
-| M7 cache v2 and one front door | segmented cache windows, a schema at 25 bytes per event, rollup/alarms/Insights in the TUI behind a cost gate, one shared history, `cache status`                                                      | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
-| M8 the queue's last five       | Insights scan estimate and a confirmation ceiling, `export trace` as OTLP, a 0.07s CLI start, a log table budgeted by width, `export dimensions`                                                       | [0008](../docs/docs/adr/0008-single-interactive-tui.md), [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)               |
-| M9 the filter surface          | `AND`, `OR`, `NOT`, and parentheses, named filters, a parse error that names its fix, and a translator that refuses what CloudWatch would answer wrongly                                               | [the filter guide](../docs/docs/FILTER_GUIDE.md)                                                                                              |
-| M10 what a week of use showed  | `export logs --parsed` and `--limit`, `export stats --by`, globs and `--demo` across export, `[aws].profile` and per-preset profiles, the field panel, repaired payload dtypes, and the terminal fixes | [the review](review-2026-08-31.md)                                                                                                            |
+| Milestone                       | Outcome                                                                                                                                                                                                         | Record                                                                                                                                        |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 wire the drivetrain          | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                                                                                                            | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
+| M1 live tail                    | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached                                                                                     | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
+| M2 navigation-first discovery   | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets                                                                                              | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
+| M3 investigation tools          | X-Ray reader, the `:xray` waterfall, the `p` and `x` correlation pivots, the `h` histogram                                                                                                                      | [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md), [0013](../docs/docs/adr/0013-read-x-ray-directly-for-spans.md)        |
+| M4 dashboards and metrics       | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs                                                                                  | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
+| M5 async AWS I/O                | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests                                                                                   | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
+| M6 aggregation surface          | `export summary` with fuzzy-merged rollups, `export insights` in CWLI, SQL, and PPL, `export alarms --history`, `export metrics`, CPU budget                                                                    | [the evaluation](evaluation-2026-08-21-vs-aws-cli.md)                                                                                         |
+| M7 cache v2 and one front door  | segmented cache windows, a schema at 25 bytes per event, rollup/alarms/Insights in the TUI behind a cost gate, one shared history, `cache status`                                                               | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
+| M8 the queue's last five        | Insights scan estimate and a confirmation ceiling, `export trace` as OTLP, a 0.07s CLI start, a log table budgeted by width, `export dimensions`                                                                | [0008](../docs/docs/adr/0008-single-interactive-tui.md), [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)               |
+| M9 the filter surface           | `AND`, `OR`, `NOT`, and parentheses, named filters, a parse error that names its fix, and a translator that refuses what CloudWatch would answer wrongly                                                        | [the filter guide](../docs/docs/FILTER_GUIDE.md)                                                                                              |
+| M10 what a week of use showed   | `export logs --parsed` and `--limit`, `export stats --by`, globs and `--demo` across export, `[aws].profile` and per-preset profiles, the field panel, repaired payload dtypes, and the terminal fixes          | [the review](review-2026-08-31.md)                                                                                                            |
+| M11 what a prod incident showed | `--filter` sent to CloudWatch on export, case-sensitive text everywhere, Insights with no window cap and with the query's own `limit`, `export xray-trace` reading a logged id, and an interrupt that exits 130 | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
 
 Two deviations from the original plans are worth carrying forward, because they change
 what a reader should expect to find.
@@ -35,83 +36,59 @@ gives you.
 
 Ordered by value against effort.
 
-**`export logs`/`export summary` with a keyword `--filter` stall on a busy group, where
-Insights answers in seconds.** Investigating a recurring OOM against
-`irm-prod-ecs-hatchet-workers` (9GB, continuous high-volume writers),
-`export logs 'irm-prod-ecs-hatchet-workers' --start 2h --filter 'soffice OR OOM OR ...'`
-and `export summary ... --start 6h` both exceeded a 150s/120s timeout with no output.
-The equivalent
-`aws logs start-query` (Logs Insights) with a `like` filter over the same ~3h window
-returned in about 8 seconds.
-`FilterLogEvents` (what `fetch_log_events` in
-`tail_cw/aws/client.py` calls, even with a server-side pattern from
-`server_side_pattern`) scans a busy group's streams at a rate Insights doesn't share,
-and
-segment-level concurrency (`_resolve_into_cache`) doesn't change that per-call scan
-cost.
-In the spirit of "prefer sending query power to Logs Insights over reimplementing it,"
-either route a keyword `--filter` on a group above some size/volume threshold through
-Insights transparently, or print an early stderr hint (group size from
-`DescribeLogGroups`
-is already fetched by `export groups`) suggesting `export insights` before the command
-sits silent.
-Not attempted as an in-passing fix: picking the threshold and deciding
-whether to auto-switch or just hint needs its own design pass, not a rewrite mid-task.
-The 2026-09-16 SKILL.md update carries a hand-written version of this warning for now
-(`## Free is not the same as fast`), which is a stopgap: it only reaches an agent that
-reads the skill before running the command, not one that pastes a command from memory or
-a human at the prompt.
+**A cold export ignores Ctrl+C and says nothing while it works.**
+Measured 2026-10-05, before filters reached CloudWatch:
+`export logs irm-prod-ecs-hatchet-workers --start 30h --no-cache --filter '"Perplexity quota exhausted"'`
+wrote two 18 MB segments in 26 minutes, peaked at 6 GB RSS and 300-400% CPU, and was
+still running seven minutes after SIGINT.
+SIGTERM stopped it with exit 143 and zero bytes on stdout and stderr.
+That is the exact output the
+[DEV-10748](https://linear.app/coverbasedev/issue/DEV-10748/perplexity-api-has-returned-401-insufficient-quota-on-every-call-since)
+investigation saw behind `2>&1 | tail -100`, where the exit code was `tail`'s.
+Cancelling stops the fetch within one batch, but a Parquet write already running on a
+worker thread finishes first
+([ADR 0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)),
+and a whole-window segment of a busy group is a long write.
+A filter CloudWatch can match keeps the common case short, so this affects an
+unfiltered fetch of a busy group, or one whose filter has to run locally.
+Two separable pieces: a stderr line when a long fetch starts, so a killed run leaves
+evidence, and cancellation that reaches the write tail or caps what one segment buffers.
 
-Design options to revisit, none implemented:
+**Push regex and numeric filters down once they are proven equal.**
+`pushdown_filter_pattern` sends text, phrases, and field `=` and `!=`, each checked live
+against CloudWatch first
+([ADR 0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)).
+A `%regex%`, a numeric comparison, field existence, and a field regex still download the
+whole window.
+Each needs the same live check before it moves: a regex can span JSON keys, whose order
+the cache does not keep, and `status:>=500` is unverified against a number logged as a
+string.
 
-- **A. Warn, don't switch.** Before the first `FilterLogEvents` call, check the target
-    group's `stored_bytes` (already fetched by `export groups`, cheap) and print a stderr
-    hint — "`<group>` is N GB; a keyword filter here can take minutes.
-    Consider `export insights` instead." — when size crosses a configurable threshold (say
-    2GB) and the
-    window exceeds ~30min.
-    Cheapest to build, changes no behavior, and a wrong threshold
-    only costs an extra line of stderr rather than a silently wrong answer.
-    Downside: an
-    agent or script running unattended never reads stderr hints, so it still eats the
-    timeout it would have hit anyway; the hint only helps an interactive session.
-- **B. Auto-route through Insights above the threshold.** Same trigger as A, but
-    transparently issue an Insights query (`fields @timestamp, @message | filter ...`)
-    built from the parsed filter tree, in place of `FilterLogEvents`, and warn on stderr
-    that it did so (Insights bills per GB scanned, so this crosses from the free surface
-    into the billed one without the caller asking — the existing `--yes`/confirm-above-gb
-    gate on `export insights` would need to apply here too).
-    Requires translating the
-    full filter grammar (`AND`/`OR`/`NOT`, parens, field comparisons) to an Insights
-    `filter` clause, not just the CloudWatch `FilterPattern` subset `server_side_pattern`
-    already handles — the two pattern languages diverge on regex and field-path syntax,
-    so this is real translation work, not just a call swap.
-    Gets the speed win without a
-    second command, at the cost of surprising a caller who expected `export logs` to stay
-    free.
-- **C. Split the FilterLogEvents call across log streams concurrently**, the way segment
-    resolution already splits across time (`_resolve_into_cache`).
-    `filter_log_events`
-    today issues one paginated call across the whole group; CloudWatch's per-call scan
-    rate is roughly fixed regardless of stream count, so fanning out N concurrent calls
-    (one per stream, or per shard of streams) could multiply effective throughput up to
-    the account's `FilterLogEvents` TPS quota.
-    Unverified: needs a benchmark against a
-    group like `irm-prod-ecs-hatchet-workers` to know whether streams-in-parallel actually
-    beats Insights, or just gets closer while adding a lot of concurrency-control
-    complexity (rate limiting, partial-failure handling, interleaving order) for a smaller
-    win than A or B.
-- **D. Do nothing beyond the SKILL.md warning.** Insights already exists and answers
-    this need; the gap is discoverability, not capability, and the design principle
-    ("prefer sending query power to Logs Insights over reimplementing it") already points
-    an agent at `export insights` if it reads far enough.
-    Lowest effort, but relies on
-    every future reader noticing before they burn a timeout, which is the failure mode
-    that motivated this entry.
+**The scan estimate is the only cost gate on a wide Insights window.**
+`[insights].confirm_above_gb` decides on the estimate alone, whatever the window.
+It samples three five-minute slices however wide the window is, so over 30 days they sit
+ten days apart and a burst between them reads low.
+On 2026-09-30 it read high instead: 0.715 GB estimated against 0.014 GB scanned for a
+30h query over two groups.
+Measure the estimate against `bytesScanned` over a few real wide queries before trusting
+it at 30 days.
 
-No recommendation yet — A is the safe next step if anything ships, since it changes
-no existing behavior and is cheap to revert; B is the one worth prototyping if agents
-keep hitting the timeout after A ships.
+**The `x` pivot refuses worker trace ids that X-Ray holds.**
+`as_xray_trace_id`, behind the TUI's `x` pivot, refuses a 32-digit id whose leading
+digits are not a recent epoch, on the theory that only X-Ray generates ids worth a
+request.
+That theory is wrong.
+On 2026-10-06 an `irm-prod-ecs-hatchet-workers` line logged `trace_id`
+`0e7ba36f55329f51255ad76f9759416b`, whose leading digits decode to 1977, and
+`export xray-trace` returned it as three spans from `irm-workers` and
+`hatchet.run_workflows`.
+So every worker log line carries an id X-Ray can answer, and the pivot refuses all of
+them.
+The fix is to drop the epoch check and leave `xray_form` as the one conversion, then
+correct the trace-id bullet in `AGENTS.local.md` that says the leading eight digits are
+the epoch.
+It does not unblock the API-to-worker join under "Blocked application-side", because the
+two sides still share no id.
 
 **A trailer record would survive `2>/dev/null`, at the cost of a documented contract.**
 Every export now writes `Wrote N events` to stderr, which is the cheap half of this and
@@ -208,7 +185,7 @@ it
 does not reach the API.
 
 Two more application-side gaps, measured 2026-08-22 and written up in
-`irm-0-null/docs/investigations/`.
+`ai-output/archive/tail-cw-investigations/`.
 The account runs one X-Ray sampling rule, the AWS default, so `irm-api` is recorded at
 14.5% while Hatchet's exporter ignores the rule and supplies 99% of the traces.
 And `irm-api` emits no database spans, so a 59-second request arrives as five spans with
