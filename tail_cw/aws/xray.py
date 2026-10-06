@@ -195,12 +195,22 @@ def as_xray_trace_id(value: str, *, now: datetime) -> str | None:
     request.
     """
     cleaned = value.strip().lower()
+    if W3C_TRACE_ID_PATTERN.match(cleaned) and not _epoch_is_plausible(cleaned[:8], now=now):
+        return None
+    return xray_form(cleaned)
+
+
+def xray_form(value: str) -> str | None:
+    """Write a trace id the way X-Ray answers to it, or return None when ``value`` is not one.
+
+    The leading digits go unchecked: X-Ray also stores ids an OTel exporter generated at random.
+    """
+    cleaned = value.strip().lower()
     if TRACE_ID_PATTERN.match(cleaned):
         return cleaned
-    if not W3C_TRACE_ID_PATTERN.match(cleaned):
-        return None
-    dashed = f'1-{cleaned[:8]}-{cleaned[8:]}'
-    return dashed if _epoch_is_plausible(cleaned[:8], now=now) else None
+    if W3C_TRACE_ID_PATTERN.match(cleaned):
+        return f'1-{cleaned[:8]}-{cleaned[8:]}'
+    return None
 
 
 def _epoch_is_plausible(hex_epoch: str, *, now: datetime) -> bool:

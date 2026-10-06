@@ -279,7 +279,11 @@ def _configure_xray(parser: argparse.ArgumentParser) -> None:
 
 
 def _configure_xray_trace(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument('trace_ids', nargs='+', help='One or more X-Ray trace ids (1-<hex>-<hex>)')
+    parser.add_argument(
+        'trace_ids',
+        nargs='+',
+        help='Trace ids, in X-Ray form (1-<8 hex>-<24 hex>) or as the 32 hex digits a log line carries',
+    )
     _add_aws_flags(parser)
 
 

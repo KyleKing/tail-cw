@@ -56,7 +56,13 @@ from tail_cw.aws.metrics import (
     fetch_metric_data,
     list_metric_definitions,
 )
-from tail_cw.aws.xray import XRayTraceSummary, batch_get_traces, iter_trace_summary_pages, scan_cost_usd
+from tail_cw.aws.xray import (
+    XRayTraceSummary,
+    batch_get_traces,
+    iter_trace_summary_pages,
+    scan_cost_usd,
+    xray_form,
+)
 from tail_cw.cache.records import readable_message, without_nulls
 from tail_cw.cache.storage import CacheStatus, LogCache, PayloadRepair, generate_cache_key, parquet_row_count
 from tail_cw.cache.window import Segment, plan_segments
@@ -1465,11 +1471,16 @@ def _report_xray_cost(processed: int, *, written: int) -> None:
 
 async def _export_xray_trace(pool: ClientProvider, args: argparse.Namespace) -> int:
     """Write full segment documents for named traces as one OTLP document."""
+    trace_ids = {given: xray_form(given) for given in args.trace_ids}
+    if unreadable := [given for given, trace_id in trace_ids.items() if trace_id is None]:
+        sys.stderr.write(f'Not a trace id: {", ".join(unreadable)}\n')
+        return 2
     xray = await pool.client('xray')
-    traces = await batch_get_traces(xray, args.trace_ids)
+    traces = await batch_get_traces(xray, [trace_id for trace_id in trace_ids.values() if trace_id is not None])
     found = {trace.trace_id for trace in traces}
-    for missing in (trace_id for trace_id in args.trace_ids if trace_id not in found):
-        sys.stderr.write(f'X-Ray has no segments for {missing}\n')
+    for given, trace_id in trace_ids.items():
+        if trace_id not in found:
+            sys.stderr.write(f'X-Ray has no segments for {given}\n')
     if not traces:
         return 1
     for trace in traces:

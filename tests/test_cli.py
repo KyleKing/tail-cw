@@ -1698,17 +1698,31 @@ def test_run_cli_export_xray_says_so_when_the_window_is_empty(tmp_path, capsys, 
 
 
 def test_run_cli_export_xray_trace_names_the_ids_xray_has_no_segments_for(tmp_path, capsys, monkeypatch):
+    """A log line carries the 32 bare digits, and X-Ray answers only to the dashed form.
+
+    The leading digits are 1977 as an epoch, as in an id an OTel exporter generated at random.
+    """
+    logged = '0e0654f3' + 'a' * 24
+    found = XRayTrace(trace_id=f'1-0e0654f3-{"a" * 24}', duration_seconds=0.25, limit_exceeded=False, spans=())
     monkeypatch.setattr('tail_cw.cli.client_pool', _fake_client_pool)
-    found = XRayTrace(trace_id='1-aaaa-1', duration_seconds=0.25, limit_exceeded=False, spans=())
     monkeypatch.setattr('tail_cw.cli.batch_get_traces', _async_value_factory([found]))
-    argv = ['export', 'xray-trace', '1-aaaa-1', '1-bbbb-2', '--config', str(_write_config_file(tmp_path))]
+    missing = f'1-0e0654f3-{"b" * 24}'
+    argv = ['export', 'xray-trace', logged, missing, '--config', str(_write_config_file(tmp_path))]
 
     result = run_cli(argv, None, is_tty=False)
 
     captured = capsys.readouterr()
     assert result == 0
-    assert 'no segments for 1-bbbb-2' in captured.err
+    assert f'no segments for {missing}' in captured.err
+    assert logged not in captured.err
     assert json.loads(captured.out) == {'resourceSpans': []}
+
+
+def test_run_cli_export_xray_trace_refuses_an_id_that_is_not_one(tmp_path, capsys):
+    argv = ['export', 'xray-trace', 'not-a-trace', '--config', str(_write_config_file(tmp_path))]
+
+    assert run_cli(argv, None, is_tty=False) == 2
+    assert 'not-a-trace' in capsys.readouterr().err
 
 
 def test_run_cli_cache_status_reports_the_size_against_the_limit(tmp_path, capsys):
