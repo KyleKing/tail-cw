@@ -15,6 +15,9 @@ from tail_cw.completion import install as install_completion
 from tail_cw.concurrency import is_engine_panic
 from tail_cw.parser import build_parser
 
+INTERRUPTED_EXIT = 130
+"""The shell's code for a process stopped by SIGINT, so a cut-off export never reads as complete."""
+
 
 def _write_utf8(stream: object) -> None:
     """Make a text stream emit UTF-8 whatever the console code page says.
@@ -43,7 +46,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return run(args, parser)
     except KeyboardInterrupt:
-        return 0
+        sys.stderr.write('Interrupted before finishing\n')
+        return INTERRUPTED_EXIT
     except Exception as err:
         sys.stderr.write(f'Error: {_readable(err)}\n')
         return 1

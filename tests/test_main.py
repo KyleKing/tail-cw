@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tail_cw.__main__ import main
+from tail_cw.__main__ import INTERRUPTED_EXIT, main
 from tail_cw.aws.dashboards import Dashboard
 from tail_cw.aws.events import LogEvent
 from tail_cw.cli import FetchRequest, Session, ShellSeed
@@ -89,11 +89,12 @@ def test_the_entry_point_does_not_load_the_heavy_stack():
     assert loaded.stdout.strip() == '[]'
 
 
-def test_main_handles_keyboard_interrupt():
+def test_main_reports_a_keyboard_interrupt_as_a_failure(capsys):
     with patch('tail_cw.services.run', side_effect=KeyboardInterrupt()):
         result = main(['logs', '/g'])
 
-    assert result == 0
+    assert result == INTERRUPTED_EXIT
+    assert 'Interrupted' in capsys.readouterr().err
 
 
 def test_main_handles_generic_exception(capsys):
