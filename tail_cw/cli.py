@@ -1300,7 +1300,7 @@ async def _export_insights(pool: ClientProvider, args: argparse.Namespace, now: 
     names = resolved
 
     try:
-        validate_insights_request(args.query, start_time, end_time, language.value)
+        validate_insights_request(args.query, language.value)
         result = await run_insights_query(
             logs,
             log_groups=names,

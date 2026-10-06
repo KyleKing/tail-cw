@@ -198,7 +198,7 @@ async def _load_insights(screen: ReportScreen) -> str:
     groups = session.selected_groups
     if not groups:
         return 'Select log groups first: Insights needs to know what to read.\n'
-    validate_insights_request(query, session.start, session.end)
+    validate_insights_request(query)
     estimate = await _estimate_scan(screen, groups)
     ceiling = screen.shell.config_data.insights.confirm_above_gb
     if estimate is not None and estimate.gigabytes > ceiling and not screen.confirmed:

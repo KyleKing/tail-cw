@@ -124,27 +124,6 @@ async def test_run_insights_query_rejects_more_groups_than_insights_accepts():
     assert client.started == {}
 
 
-@pytest.mark.parametrize(
-    ('query', 'days', 'expected'),
-    [
-        ('filter @message like /boom/', 1, None),
-        ('pattern @message', 7, None),
-        ('fields @message', 1, 'narrow with filter'),
-        ('filter @message like /boom/', 30, 'capped at 7 days'),
-        ('stats count(*) by bin(1h)', 1, 'narrow with filter'),
-    ],
-)
-def test_validate_insights_request(query, days, expected):
-    end = datetime(2026, 8, 21, tzinfo=UTC)
-    start = end - timedelta(days=days)
-
-    if expected is None:
-        validate_insights_request(query, start, end)
-        return
-    with pytest.raises(ValueError, match=expected):
-        validate_insights_request(query, start, end)
-
-
 def _group(
     name: str = '/g',
     *,
@@ -384,6 +363,8 @@ async def test_naming_them_nowhere_is_refused_too():
     [
         ('CWLI', 'filter @message like /x/', True),
         ('CWLI', 'fields @message', False),
+        ('CWLI', 'pattern @message', True),
+        ('CWLI', 'stats count(*) by bin(1h)', False),
         ('SQL', 'SELECT level, count(*) FROM `g` GROUP BY level', True),
         ('SQL', 'SELECT level, count(*) FROM `g` group  by level', True),
         ('SQL', 'SELECT * FROM `g`', False),
@@ -393,9 +374,8 @@ async def test_naming_them_nowhere_is_refused_too():
 )
 def test_narrowing_is_checked_in_the_language_the_query_is_written_in(language, query, *, accepted):
     """The CWLI words alone rejected a GROUP BY that narrows perfectly well."""
-    window = (START, START + timedelta(minutes=5))
     if accepted:
-        validate_insights_request(query, *window, language)
+        validate_insights_request(query, language)
         return
     with pytest.raises(ValueError, match='must narrow with'):
-        validate_insights_request(query, *window, language)
+        validate_insights_request(query, language)

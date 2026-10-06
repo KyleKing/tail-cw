@@ -81,8 +81,8 @@ and [AGENTS.md](AGENTS.md) for where to start.
     `a` ranks alarms by how often they changed state, and `:insights <query>` runs a Logs
     Insights query.
     Insights is typed rather than bound to a key, so no single keypress can bill; both
-    surfaces cap the window at 7 days and refuse a query that does not narrow with `filter`,
-    `pattern`, or `dedup`
+    surfaces price the window before running and refuse a query that does not narrow with
+    `filter`, `pattern`, or `dedup`
 - `:history` browses what those three recorded, CLI runs included, so an Insights query
     you paid for once is there to read rather than to run again
 - Dashboard import by name via `GetDashboard`, or from a local JSON file in the same

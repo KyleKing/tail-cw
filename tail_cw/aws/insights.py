@@ -22,12 +22,6 @@ from tail_cw.aws.log_groups import LogGroupInfo
 DEFAULT_LIMIT = 1000
 DEFAULT_POLL_SECONDS = 0.5
 MAX_INSIGHTS_LOG_GROUPS = 50
-MAX_INSIGHTS_WINDOW = timedelta(days=7)
-"""Widest window a query may cover.
-
-Insights bills on the bytes it reads inside the window, so the window is the one
-input that decides the bill before the query runs.
-"""
 
 DOLLARS_PER_GB = 0.005
 """What Insights bills per gigabyte scanned in us-east-1 as of mid-2026."""
@@ -91,35 +85,21 @@ def _has_own_row_limit(query: str, language: QueryLanguage) -> bool:
     return bool(_ROW_LIMIT_PATTERNS[language.value].search(query))
 
 
-def validate_insights_request(
-    query: str,
-    start_time: datetime,
-    end_time: datetime,
-    language: str = 'CWLI',
-) -> None:
-    """Check a query before it is allowed to bill.
+def validate_insights_request(query: str, language: str = 'CWLI') -> None:
+    """Refuse a query that does not narrow, before it is allowed to bill.
 
-    Two guards, and they do different jobs. The window cap bounds the bill,
-    because bytes scanned follow the window. Requiring a narrowing command does
-    not reduce bytes scanned at all; it stops a bare ``fields @message`` from
-    being run by accident and returning a wall of events that a cached
-    ``FilterLogEvents`` window would have answered for free.
+    Requiring a narrowing command does not reduce bytes scanned at all; it stops a
+    bare ``fields @message`` from being run by accident and returning a wall of events
+    that a cached ``FilterLogEvents`` window would have answered for free. The bill
+    follows the window, which :func:`estimate_scan` prices before the query runs.
 
     The narrowing check is per language, because each says the same thing its own way:
     ``filter`` in CWLI, ``where`` in PPL and SQL. Checking for the CWLI words alone
     rejected a ``GROUP BY`` that narrows perfectly well.
 
     Raises:
-        ValueError: The window is wider than :data:`MAX_INSIGHTS_WINDOW`, or the
-            query has no narrowing command in ``language``.
+        ValueError: The query has no narrowing command in ``language``.
     """
-    window = end_time - start_time
-    if window > MAX_INSIGHTS_WINDOW:
-        msg = (
-            f'Insights window is capped at {MAX_INSIGHTS_WINDOW.days} days to bound what it bills, '
-            f'and this one covers {window.days} days'
-        )
-        raise ValueError(msg)
     if not _NARROWING_PATTERNS[language].search(query):
         wanted = ', '.join(_NARROWING_COMMANDS[language])
         msg = f'A {language} query must narrow with {wanted} rather than reading the whole window'

@@ -176,10 +176,13 @@ returns, so the three views cost one screen rather than three.
 typing `:insights <query>`, which is the point: the query text is the confirmation, so
 no single keypress starts a billed query.
 
-Both surfaces share the same two guards, in `validate_insights_request`.
-The window cap bounds the bill, because Insights bills on the bytes it reads inside the
-window.
-Requiring a narrowing command does not reduce bytes scanned at all; it stops a bare
+Both surfaces share the same guards.
+The scan estimate and the `[insights].confirm_above_gb` ceiling bound the bill, because
+Insights bills on the bytes it reads inside the window and the estimate prices that
+window, whatever its length.
+AWS sets no window limit of its own, only a 60-minute query timeout.
+`validate_insights_request` requires a narrowing command, which does not reduce bytes
+scanned at all; it stops a bare
 `fields @message` from being run by accident and returning a wall of events a cached
 window would have answered for free.
 Saying that plainly matters more than the guard: a filter that looks like a cost control
