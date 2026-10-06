@@ -15,7 +15,7 @@ from typing import Any, TypedDict
 
 from tail_cw.aws.events import LogEvent
 from tail_cw.query.engine import query_parquet_file_to_log_events
-from tail_cw.query.parser import combine_filters, parse_filter_pattern
+from tail_cw.query.parser import parse_filter_pattern
 from tail_cw.query.severity import (
     ERROR_KEYWORDS,
     Severity,
@@ -501,17 +501,7 @@ def find_traces_with_errors(
     """
     # Build error filter matching error keywords in message text
     # This is more reliable than trying to match structured fields which may not exist
-    error_filters = []
-
-    # Match error keywords in message fields using text search
-    for keyword in ERROR_KEYWORDS:
-        try:
-            error_filters.append(parse_filter_pattern(keyword))
-        except ValueError:
-            continue
-
-    # Combine all error conditions with OR
-    filter_node = None if not error_filters else combine_filters(error_filters, operator='OR')
+    filter_node = parse_filter_pattern(f'%(?i)({"|".join(sorted(ERROR_KEYWORDS))})%')
 
     # Query for error events only
     try:

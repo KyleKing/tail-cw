@@ -377,7 +377,7 @@ def build_duckdb_where_clause(node: FilterNode) -> str:
 
 def _duckdb_clause_text_search(node: FilterNode) -> str:
     value_escaped = _escape_sql_string(node.value or '')
-    return f"LOWER({SEARCH_TEXT}) LIKE LOWER('%{value_escaped}%')"
+    return f"contains({SEARCH_TEXT}, '{value_escaped}')"
 
 
 def _duckdb_clause_exact_phrase(node: FilterNode) -> str:
@@ -577,8 +577,7 @@ def _build_polars_filter_expr(node: FilterNode) -> pl.Expr:
 
 
 def _polars_expr_text_search(node: FilterNode) -> pl.Expr:
-    value = (node.value or '').lower()
-    return pl.col(SEARCH_TEXT).str.to_lowercase().str.contains(value, literal=True)
+    return pl.col(SEARCH_TEXT).str.contains(node.value or '', literal=True)
 
 
 def _polars_expr_exact_phrase(node: FilterNode) -> pl.Expr:

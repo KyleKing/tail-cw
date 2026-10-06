@@ -4,12 +4,17 @@ One filter language runs over live, historical, and cached events. Most of it is
 CloudWatch's own pattern syntax, so a filter you already know keeps working. The boolean
 operators and the `field:value` shorthand are additions, and they run locally.
 
+Text and phrase terms match case-sensitively, the same substring rule CloudWatch's
+`FilterLogEvents` uses, so a filter returns the same events whether it runs live or from
+cache.
+For a case-insensitive search, use a regex: `%(?i)timeout%`.
+
 ## Terms
 
 | Filter                     | Matches                                                |
 | -------------------------- | ------------------------------------------------------ |
 | `ERROR`                    | Any event whose text contains `ERROR`. Case sensitive. |
-| `"connection timeout"`      | That exact phrase, spaces included.                    |
+| `"connection timeout"`      | That exact phrase, spaces included, case sensitive.    |
 | `%[Ee]rror%`                | A regex. The delimiter is `%`, not `/`.                |
 | `level:error`               | A record field equal to a value.                       |
 | `status:>=500`              | A numeric comparison on a field.                       |

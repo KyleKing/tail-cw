@@ -850,6 +850,24 @@ def test_text_search_ignores_fields_the_event_never_carried(fix_test_cache, back
     assert 'Boom' in matched[0]['message']
 
 
+@pytest.mark.parametrize('backend', [QueryBackend.DUCKDB, QueryBackend.POLARS])
+@pytest.mark.parametrize(
+    ('messages', 'pattern', 'expected'),
+    [
+        (['this line has info only', 'THIS LINE HAS INFO ONLY'], 'INFO', 'THIS LINE HAS INFO ONLY'),
+        (['rate at 50%_capacity', 'rate at 50Xcapacity'], '50%_capacity', 'rate at 50%_capacity'),
+    ],
+    ids=['case-sensitive like CloudWatch', 'percent and underscore are literal'],
+)
+def test_text_search_matches_a_literal_substring(fix_test_cache, backend, messages, pattern, expected):
+    parquet_path = fix_test_cache / 'text_search.parquet'
+    write_log_events_to_parquet([make_event(message) for message in messages], parquet_path)
+
+    matched = list(query_parquet_file(parquet_path, parse_filter_pattern(pattern), backend=backend))
+
+    assert [row['message'] for row in matched] == [expected]
+
+
 def test_a_native_engine_panic_becomes_an_exception_callers_can_catch(tmp_path, monkeypatch):
     """DuckDB and Polars raise from Rust outside the Exception hierarchy."""
     path = tmp_path / 'events.parquet'

@@ -1087,5 +1087,4 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         return nodes[0] if len(nodes) == 1 else combine_filters(nodes)
 
     def _filter_events_in_memory(self, query: str) -> list[LogEvent]:
-        query_lower = query.lower()
-        return [event for event in self._all_events if query_lower in event.message.lower()]
+        return [event for event in self._all_events if query in event.message]
