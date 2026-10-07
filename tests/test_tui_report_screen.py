@@ -46,6 +46,9 @@ def _alarm(name: str, state: str = 'ALARM') -> AlarmSummary:
         datapoints_to_alarm=1,
         evaluation_periods=1,
         actions_enabled=True,
+        missing_data_treatment='missing',
+        missing_data_treatment_is_default=True,
+        evaluate_low_sample_count_percentile=None,
     )
 
 

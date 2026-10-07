@@ -25,3 +25,12 @@ def test_a_summary_survives_the_fields_the_api_omits() -> None:
     assert summary.state_updated is None
     assert summary.dimensions == ()
     assert summary.actions_enabled is False
+    assert summary.missing_data_treatment == 'missing'
+    assert summary.missing_data_treatment_is_default is True
+
+
+def test_an_explicit_missing_data_treatment_is_not_marked_default() -> None:
+    summary = _to_alarm_summary({'AlarmName': 'api-latency', 'TreatMissingData': 'breaching'})
+
+    assert summary.missing_data_treatment == 'breaching'
+    assert summary.missing_data_treatment_is_default is False

@@ -1612,6 +1612,9 @@ def _make_alarm(name: str = 'svc-high-memory', state: str = 'ALARM') -> AlarmSum
         datapoints_to_alarm=2,
         evaluation_periods=3,
         actions_enabled=True,
+        missing_data_treatment='breaching',
+        missing_data_treatment_is_default=False,
+        evaluate_low_sample_count_percentile=None,
     )
 
 
@@ -1636,6 +1639,8 @@ def test_run_cli_export_alarms_includes_transition_counts(tmp_path, capsys, monk
     assert record['name'] == 'svc-high-memory'
     assert record['dimensions'] == {'ClusterName': 'c1', 'ServiceName': 's1'}
     assert record['threshold'] == pytest.approx(85.0)
+    assert record['missing_data_treatment'] == 'breaching'
+    assert record['missing_data_treatment_is_default'] is False
     assert record['transitions'] == 2
     assert [item['summary'] for item in record['history']] == ['OK to ALARM', 'ALARM to OK']
 

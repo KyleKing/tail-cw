@@ -16,6 +16,7 @@ from tail_cw.aws.events import to_utc, to_utc_or_none
 
 STATE_TRANSITION = 'StateUpdate'
 ALARM_STATES = ('OK', 'ALARM', 'INSUFFICIENT_DATA')
+DEFAULT_MISSING_DATA_TREATMENT = 'missing'
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,11 @@ class AlarmSummary:
         datapoints_to_alarm: Datapoints that must breach, defaulting to the evaluation count.
         evaluation_periods: Periods considered when evaluating.
         actions_enabled: Whether the alarm's actions fire.
+        missing_data_treatment: How the alarm evaluates a missing datapoint.
+        missing_data_treatment_is_default: True when the API response omitted
+            ``TreatMissingData`` and :data:`DEFAULT_MISSING_DATA_TREATMENT` was filled in.
+        evaluate_low_sample_count_percentile: Set only for an alarm on an extended statistic
+            over a low sample count.
     """
 
     name: str
@@ -55,6 +61,9 @@ class AlarmSummary:
     datapoints_to_alarm: int | None
     evaluation_periods: int | None
     actions_enabled: bool
+    missing_data_treatment: str
+    missing_data_treatment_is_default: bool
+    evaluate_low_sample_count_percentile: str | None
 
 
 @dataclass(frozen=True)
@@ -84,6 +93,9 @@ def _to_alarm_summary(alarm: dict[str, Any]) -> AlarmSummary:
         datapoints_to_alarm=alarm.get('DatapointsToAlarm'),
         evaluation_periods=alarm.get('EvaluationPeriods'),
         actions_enabled=bool(alarm.get('ActionsEnabled')),
+        missing_data_treatment=alarm.get('TreatMissingData', DEFAULT_MISSING_DATA_TREATMENT),
+        missing_data_treatment_is_default='TreatMissingData' not in alarm,
+        evaluate_low_sample_count_percentile=alarm.get('EvaluateLowSampleCountPercentile'),
     )
 
 

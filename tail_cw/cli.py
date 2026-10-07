@@ -1682,6 +1682,9 @@ def _alarm_to_record(alarm: AlarmSummary) -> dict[str, object]:
         'datapoints_to_alarm': alarm.datapoints_to_alarm,
         'evaluation_periods': alarm.evaluation_periods,
         'actions_enabled': alarm.actions_enabled,
+        'missing_data_treatment': alarm.missing_data_treatment,
+        'missing_data_treatment_is_default': alarm.missing_data_treatment_is_default,
+        'evaluate_low_sample_count_percentile': alarm.evaluate_low_sample_count_percentile,
     }
 
 
