@@ -5,11 +5,13 @@ import asyncio
 import contextlib
 import io
 import json
+import signal
 from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -27,6 +29,8 @@ from tail_cw.cli import (
     ShellSeed,
     StreamCount,
     TailRequest,
+    _exit_immediately_on_interrupt,
+    _hard_interrupt_on_signal,
     expand_filter,
     expand_presets,
     iter_tail_events,
@@ -41,6 +45,7 @@ from tail_cw.cli import (
     stream_ndjson,
     write_ndjson,
 )
+from tail_cw.concurrency import INTERRUPTED_EXIT
 from tail_cw.config import AwsConfig, CacheConfig, TailCWConfig
 from tail_cw.parser import build_parser
 from tail_cw.recents import Recents
@@ -573,6 +578,46 @@ async def test_resolve_parquet_path_fetches_on_miss(tmp_path):
 
     assert [path.exists() for path in paths] == [True]
     assert len(fetcher.calls) == 1
+
+
+async def test_resolve_parquet_path_announces_a_cold_fetch_before_writing(tmp_path, capsys):
+    """A killed run should leave evidence on stderr before the long write, not just after."""
+    request = _make_request()
+
+    await resolve_parquet_path(_CLIENT, request, _make_config(tmp_path), fetch_events=_FakeFetcher(_make_events()))
+
+    assert f'Fetching {request.log_group}' in capsys.readouterr().err
+
+
+async def test_resolve_parquet_path_cache_hit_announces_nothing(tmp_path, capsys):
+    config = _make_config(tmp_path)
+    request = _make_request()
+    await resolve_parquet_path(_CLIENT, request, config, fetch_events=_FakeFetcher(_make_events()))
+    capsys.readouterr()
+
+    await resolve_parquet_path(_CLIENT, request, config, fetch_events=_FakeFetcher(_make_events()))
+
+    assert 'Fetching' not in capsys.readouterr().err
+
+
+def test_hard_interrupt_handler_exits_without_waiting_for_the_write(capsys):
+    with patch('tail_cw.cli.os._exit') as exit_mock:
+        _hard_interrupt_on_signal(signal.SIGINT, None)
+
+    assert 'Interrupted' in capsys.readouterr().err
+    exit_mock.assert_called_once_with(INTERRUPTED_EXIT)
+
+
+def test_exit_immediately_on_interrupt_installs_and_restores_handlers():
+    previous_int = signal.getsignal(signal.SIGINT)
+    previous_term = signal.getsignal(signal.SIGTERM)
+
+    with _exit_immediately_on_interrupt():
+        assert signal.getsignal(signal.SIGINT) is _hard_interrupt_on_signal
+        assert signal.getsignal(signal.SIGTERM) is _hard_interrupt_on_signal
+
+    assert signal.getsignal(signal.SIGINT) == previous_int
+    assert signal.getsignal(signal.SIGTERM) == previous_term
 
 
 async def test_resolve_parquet_path_uses_cache_on_hit(tmp_path):

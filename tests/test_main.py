@@ -15,10 +15,11 @@ from unittest.mock import patch
 
 import pytest
 
-from tail_cw.__main__ import INTERRUPTED_EXIT, main
+from tail_cw.__main__ import main
 from tail_cw.aws.dashboards import Dashboard
 from tail_cw.aws.events import LogEvent
 from tail_cw.cli import FetchRequest, Session, ShellSeed
+from tail_cw.concurrency import INTERRUPTED_EXIT
 from tail_cw.config import TailCWConfig
 from tail_cw.demo import DEMO_LOG_GROUP, DEMO_TRACE_ID
 from tail_cw.query.patterns import field_roster

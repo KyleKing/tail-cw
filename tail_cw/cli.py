@@ -11,17 +11,20 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
+import signal
 import sys
 import threading
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from itertools import chain
 from pathlib import Path
+from types import FrameType
 from typing import Any, Literal
 
 from beartype.typing import Protocol
@@ -66,7 +69,7 @@ from tail_cw.aws.xray import (
 from tail_cw.cache.records import readable_message, without_nulls
 from tail_cw.cache.storage import CacheStatus, LogCache, PayloadRepair, generate_cache_key, parquet_row_count
 from tail_cw.cache.window import Segment, plan_segments
-from tail_cw.concurrency import closing_stream, consume_in_thread, fetch_pool, run_blocking
+from tail_cw.concurrency import INTERRUPTED_EXIT, closing_stream, consume_in_thread, fetch_pool, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
 from tail_cw.cpu_budget import lower_priority_for_batch_work, native_write_gate
 from tail_cw.demo import DEMO_LOG_GROUP, demo_dashboard, demo_resolve_logs
@@ -381,6 +384,8 @@ async def _resolve_segment(
     first_event = await anext(events, None)
     if first_event is None:
         return None
+    # Printed before the write starts, so a run killed mid-write still leaves evidence.
+    _stderr_notice(f'Fetching {request.log_group} {_window_label(segment.start, segment.end)}...')
 
     def write(remaining: Iterator[LogEvent]) -> Path | None:
         # The fetch pool is wide because most of a segment's life is network wait, but the
@@ -1895,6 +1900,29 @@ async def _dispatch_export(
     return await handlers[args.export_command]()
 
 
+def _hard_interrupt_on_signal(signum: int, frame: FrameType | None) -> None:  # noqa: ARG001
+    """Exit immediately instead of waiting on an in-flight segment write.
+
+    A busy segment's Parquet conversion runs on a worker thread to completion once
+    started (ADR 0011), and ``ThreadPoolExecutor.shutdown`` as well as Python's own
+    ``atexit`` hook otherwise block the whole process on that thread finishing.
+    """
+    sys.stderr.write('Interrupted before finishing\n')
+    sys.stderr.flush()
+    os._exit(INTERRUPTED_EXIT)
+
+
+@contextmanager
+def _exit_immediately_on_interrupt() -> Iterator[None]:
+    """Install :func:`_hard_interrupt_on_signal` for SIGINT/SIGTERM, restoring on exit."""
+    previous = {sig: signal.signal(sig, _hard_interrupt_on_signal) for sig in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        yield
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+
+
 async def _run_export_command(
     args: argparse.Namespace,
     now: datetime,
@@ -1916,7 +1944,7 @@ async def _run_export_command(
     # A batch export has no one waiting on its next keystroke, unlike the TUI, so it
     # yields to interactive work under contention instead of competing for the CPU evenly.
     lower_priority_for_batch_work()
-    with fetch_pool() as executor:
+    with _exit_immediately_on_interrupt(), fetch_pool() as executor:
         async with client_pool(profile_name=args.profile, region_name=args.region) as pool:
             return await _dispatch_export(
                 pool,

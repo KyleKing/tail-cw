@@ -41,6 +41,10 @@ DEFAULT_FETCH_WORKERS = 8
 DEFAULT_BRIDGE_BATCH = 1000
 """Items pulled per loop round-trip, and so the granularity of cancellation."""
 
+INTERRUPTED_EXIT = 130
+"""Exit code for a process stopped by a signal, shared by __main__ and cli so neither
+hardcodes the other's convention."""
+
 
 class BridgeCancelledError(Exception):
     """Raised inside a worker thread when the awaiting task was cancelled.
