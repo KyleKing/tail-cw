@@ -54,14 +54,18 @@ class CacheConfig:
         cache_dir: Directory used for cached Parquet files. When ``None``,
             :func:`get_default_cache_dir` is used at runtime.
         size_limit_mb: Maximum cache size in megabytes before eviction happens.
-        default_ttl_seconds: Default Time-To-Live applied to cache entries.
-            ``None`` disables expiration.
+        default_ttl_seconds: Default Time-To-Live applied to settled cache
+            entries, counted from each entry's last read. ``None`` disables
+            expiration.
+        min_free_mb: Free megabytes the cache's volume must keep. Below this
+            floor the tool stops persisting and answers in sparse mode.
         eviction_policy: Name of the eviction policy supplied to DiskCache.
     """
 
     cache_dir: Path | None = None
     size_limit_mb: int = 1000
     default_ttl_seconds: int | None = None
+    min_free_mb: int = 5120
     eviction_policy: str = 'least-recently-stored'
 
 
@@ -424,7 +428,8 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             '[cache]\n'
             '# cache_dir = "/path/to/cache"\n'
             'size_limit_mb = 1000\n'
-            'default_ttl_seconds = 3600  # 1 hour\n'
+            'default_ttl_seconds = 3600  # 1 hour after the last read\n'
+            'min_free_mb = 5120  # stop persisting when the volume has less free\n'
             'eviction_policy = "least-recently-stored"\n\n'
             '[fetch]\n'
             '# Segment fetches in flight at once, across every log group.\n'

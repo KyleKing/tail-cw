@@ -239,7 +239,13 @@ async def test_segment_writes_stay_inside_the_cpu_budget(tmp_path: Path, monkeyp
     lock = threading.Lock()
     barrier = threading.Barrier(budget, timeout=_BARRIER_TIMEOUT)
 
-    def fake_write(log_events: object, output_path: Path, progress_callback: object = None) -> dict[str, object]:
+    def fake_write(
+        log_events: object,
+        output_path: Path,
+        progress_callback: object = None,
+        *,
+        staging_dir: Path | None = None,
+    ) -> dict[str, object]:
         nonlocal active, peak
         list(log_events)  # type: ignore[call-overload]
         with lock:

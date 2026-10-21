@@ -1,7 +1,8 @@
 """Cache storage module for CloudWatch Logs events.
 
 Provides efficient caching of log events using Parquet files with ZSTD compression.
-Supports TTL expiration and FIFO eviction policies via DiskCache metadata management.
+Supports TTL expiration and last-read eviction policies via DiskCache metadata
+management, and a sparse mode that answers a query without persisting.
 """
 
 from __future__ import annotations
@@ -9,6 +10,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import shutil
+import statistics
 import tempfile
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
@@ -53,6 +56,24 @@ _TOP_GROUPS = 5
 
 _READS_WINDOW = timedelta(days=7)
 """Reporting window for the hit and miss counts in ``cache status``."""
+
+STAGING_DIRNAME = 'staging'
+"""Directory inside the cache for in-flight NDJSON and sparse Parquet files.
+
+Living inside the cache means staging bytes count against the same size limit
+the persisted files do, and a full system temp directory cannot take a fetch
+down with it.
+"""
+
+_STALE_STAGING = timedelta(hours=1)
+"""A staging file older than this belongs to a dead command, so the next one sweeps it."""
+
+_RECENTLY_READ = timedelta(hours=24)
+"""Eviction protects entries read back inside this window, per the degrade ladder."""
+
+
+class DiskBudgetExceededError(Exception):
+    """A fetch cannot fit inside the disk budget at any rung of the ladder."""
 
 
 # Precompiled regex for detecting ISO8601/RFC3339 timestamps at start of message
@@ -207,6 +228,12 @@ def _metadata_group(metadata_value: Any) -> str | None:
     return str(tail[0]) if tail and tail[0] is not None else None
 
 
+def _birth(path: Path) -> datetime:
+    """When a file was stored, from birthtime where the filesystem records it."""
+    stat = path.stat()
+    return datetime.fromtimestamp(getattr(stat, 'st_birthtime', stat.st_ctime), tz=UTC)
+
+
 _encode = json.JSONEncoder(separators=(',', ':')).encode
 """Encode one value as compact JSON for the payload-repair pass, which runs once per failed
 write rather than once per event, so the stdlib encoder's cost there does not matter."""
@@ -347,6 +374,8 @@ def write_log_events_to_parquet(
     log_events: Iterable[LogEvent],
     output_path: Path,
     progress_callback: ProgressCallback | None = None,
+    *,
+    staging_dir: Path | None = None,
 ) -> WriteStats:
     """Convert LogEvent instances to a compressed Parquet file.
 
@@ -365,6 +394,9 @@ def write_log_events_to_parquet(
         output_path: Path where the Parquet file will be written.
         progress_callback: Optional callable invoked during conversion with
             ``(current, total, status_message)``.
+        staging_dir: Directory for the intermediate NDJSON file. The cache passes
+            its own staging directory so the file counts against the cache's
+            budget; ``None`` uses the system temp directory.
 
     Returns:
         Counts of what was written, plus the payload keys the repair pass
@@ -377,7 +409,9 @@ def write_log_events_to_parquet(
     """
     temp_file = None
     try:
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+        if staging_dir is not None:
+            staging_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', dir=staging_dir, delete=False) as f:
             temp_file = Path(f.name)
 
         total_events, jsonl_events = _log_events_to_ndjson_file(
@@ -728,6 +762,24 @@ class CacheStatus:
 
 
 @dataclass(frozen=True)
+class _LiveEntry:
+    """A ``cache:v2`` key whose Parquet file is on disk.
+
+    Attributes:
+        path: The Parquet file.
+        size: Its stored byte count.
+        group: The log group recorded at write time, when it was.
+        expires: True when the entry carries its own TTL, which marks it as a
+            transient segment rather than a settled one.
+    """
+
+    path: Path
+    size: int
+    group: str | None
+    expires: bool
+
+
+@dataclass(frozen=True)
 class _EntryScan:
     """One pass over the metadata store, shared by ``status`` and the sweeps.
 
@@ -735,14 +787,17 @@ class _EntryScan:
         entries: Metadata rows seen, whatever they point at.
         referenced: Parquet paths any entry names.
         stale: Entries whose file is gone.
-        live: ``cache:v2`` keys with a file on disk, to the file's stored size.
+        live: ``cache:v2`` keys with a file on disk.
+        path_to_keys: Index from a live Parquet path back to its key, so an
+            eviction never walks every key to find one file's owner.
         group_bytes: Log group to the bytes it holds, for entries that carry one.
     """
 
     entries: int
     referenced: frozenset[Path]
     stale: int
-    live: dict[str, int]
+    live: dict[str, _LiveEntry]
+    path_to_keys: dict[Path, str]
     group_bytes: dict[str | None, int]
 
 
@@ -793,24 +848,36 @@ class LogCache:
         size_limit_mb: int = 1000,
         default_ttl_seconds: TtlSeconds | None = None,
         eviction_policy: str = 'least-recently-stored',
+        *,
+        min_free_mb: int = 0,
+        sparse_only: bool = False,
     ) -> None:
         """Initialize LogCache with specified configuration.
 
         Args:
             cache_dir: Directory for cache storage. Created if it doesn't exist.
             size_limit_mb: Maximum cache size in MB. Default 1000 (1GB).
-            default_ttl_seconds: Default TTL for cache entries in seconds.
-                None means no expiration. Default None.
+            default_ttl_seconds: TTL for settled cache entries, counted from the
+                entry's last read rather than its write, so a segment read every
+                day does not expire under itself. None means no expiration.
             eviction_policy: DiskCache eviction policy. Default 'least-recently-stored'
                 for FIFO behavior. See DiskCache docs for other options.
+            min_free_mb: Stop persisting when free space on the cache's volume
+                drops below this many MB; the command is answered in sparse mode
+                instead. 0 disables the floor.
+            sparse_only: Fetch and answer without persisting anything, as if
+                every write had already stepped down the degrade ladder.
 
         Raises:
             OSError: If cache directory cannot be created.
         """
         self._cache_dir = cache_dir
         self._parquet_dir = cache_dir / 'parquet'
-        self._default_ttl = default_ttl_seconds
+        self._read_ttl = default_ttl_seconds
         self._size_limit_bytes = size_limit_mb * 1024 * 1024
+        self._min_free_bytes = min_free_mb * 1024 * 1024
+        self._sparse_only = sparse_only
+        self.sparse: list[Path] = []
         self._inflight: set[Path] = set()
         self._inflight_lock = Lock()
 
@@ -883,55 +950,231 @@ class LogCache:
         return cleaned_count
 
     def _enforce_parquet_size_limit(self) -> int:
-        """Enforce Parquet directory size limit via FIFO eviction.
+        """Enforce the size limit by evicting least-recently-read settled entries.
 
-        Computes total size of Parquet files and deletes oldest files
-        (by creation time) until under the size limit. Also removes
-        corresponding metadata entries.
+        Staging files count against the limit too, since they live inside the
+        cache; only persisted entries are evicted to make room.
 
         Returns:
-            Number of files evicted.
+            Number of entries evicted.
         """
+        return self._evict_for(0)
+
+    def _evict_for(self, needed_bytes: int, *, now: datetime | None = None) -> int:
+        """Evict settled entries least-recently-read first until ``needed_bytes`` fits.
+
+        Anything read inside ``_RECENTLY_READ``, anything with its own TTL, and
+        anything inflight is skipped, per the degrade ladder.
+
+        Returns:
+            Number of entries evicted.
+        """
+        moment = now or datetime.now(UTC)
+        used = self._size_on_disk()
+        if used + needed_bytes <= self._size_limit_bytes:
+            return 0
+        scan = self._scan_entries()
+        last_read = _reads.last_reads(self._cache_dir)
+        candidates: list[tuple[datetime, str, _LiveEntry]] = []
+        for key, entry in scan.live.items():
+            if entry.expires:
+                continue
+            read = last_read.get(key)
+            if read is not None and moment - read < _RECENTLY_READ:
+                continue
+            try:
+                candidates.append((read or _birth(entry.path), key, entry))
+            except OSError:
+                continue
+        candidates.sort(key=itemgetter(0))
+
         # Held for the whole pass for the same reason as the orphan sweep: a
         # concurrent writer must not have its file evicted between the scan and
         # the delete.
-        evicted_count = 0
+        evicted = 0
         with self._inflight_lock:
             inflight = set(self._inflight)
-
-            parquet_files = []
-            total_size = 0
-            for parquet_file in self._parquet_dir.glob('*.parquet'):
-                stat = parquet_file.stat()
-                size = stat.st_size
-                # Use birthtime if available, otherwise ctime
-                ctime = getattr(stat, 'st_birthtime', stat.st_ctime)
-                parquet_files.append((parquet_file, size, ctime))
-                total_size += size
-
-            if total_size <= self._size_limit_bytes:
-                return 0
-
-            # Oldest first, for FIFO eviction
-            parquet_files.sort(key=itemgetter(2))
-
-            for parquet_file, size, _ctime in parquet_files:
-                if total_size <= self._size_limit_bytes:
+            for _activity, key, entry in candidates:
+                if used + needed_bytes <= self._size_limit_bytes:
                     break
-                if parquet_file in inflight:
+                if entry.path in inflight:
                     continue
+                for owner in scan.path_to_keys.get(entry.path, (key,)):
+                    self._metadata.delete(owner)
+                entry.path.unlink(missing_ok=True)
+                used -= entry.size
+                evicted += 1
+        return evicted
 
-                # Find and delete corresponding metadata entries
-                for cache_key in list(self._metadata.iterkeys()):  # type: ignore[attr-defined]
-                    metadata_value = self._metadata.get(cache_key)
-                    if metadata_value is not None and Path(_metadata_path(metadata_value)) == parquet_file:
-                        self._metadata.delete(cache_key)
+    def prepare_write(self, log_group: str | None, *, max_added: int | None, added: int) -> tuple[bool, str | None]:
+        """Decide persist vs sparse for one segment, stepping down the ladder.
 
-                parquet_file.unlink()
-                total_size -= size
-                evicted_count += 1
+        The ladder is: fit, then evict the least-recently-read, then answer from
+        a temp file, then refuse. ``added`` is how many bytes this command has
+        written so far against ``max_added`` (``--max-disk``); both are ignored
+        when ``max_added`` is None.
 
-        return evicted_count
+        Returns:
+            ``(persist, notice)``: persist False means write sparse instead, and
+            the notice names the ladder step that ran.
+
+        Raises:
+            DiskBudgetExceededError: When not even a sparse file fits the budget.
+        """
+        if self._sparse_only:
+            return False, None
+        estimate = self._estimate_segment_bytes(log_group)
+        if max_added is not None and added + estimate > max_added:
+            if estimate > max_added:
+                msg = (
+                    f'A ~{estimate / 1_048_576:.0f} MB segment cannot fit --max-disk '
+                    f'{max_added / 1_048_576:.0f} MB; raise --max-disk or narrow the window'
+                )
+                raise DiskBudgetExceededError(msg)
+            return False, 'cache: sparse (--max-disk reached), not persisting'
+        free = self._free_bytes()
+        if free - estimate <= self._min_free_bytes:
+            if free - estimate <= self._min_free_bytes // 10:
+                msg = (
+                    f'A ~{estimate / 1_048_576:.0f} MB segment cannot fit {free / 1_073_741_824:.1f} GB '
+                    'free without exhausting the volume; free space or narrow the window'
+                )
+                raise DiskBudgetExceededError(msg)
+            return False, (
+                f'cache: sparse (free disk {free / 1_073_741_824:.1f} GB is under the '
+                f'{self._min_free_bytes / 1_073_741_824:g} GB floor), not persisting'
+            )
+        if estimate and self._would_exceed_limit(estimate):
+            self._evict_for(estimate)
+            if self._would_exceed_limit(estimate):
+                return False, 'cache: sparse (cap held by recently read entries), not persisting'
+        return True, None
+
+    def _would_exceed_limit(self, incoming_bytes: int) -> bool:
+        return self._size_on_disk() + incoming_bytes > self._size_limit_bytes
+
+    def _free_bytes(self) -> int:
+        return shutil.disk_usage(self._cache_dir).free
+
+    @property
+    def sparse_only(self) -> bool:
+        """True when this cache was opened to fetch and answer without persisting."""
+        return self._sparse_only
+
+    def _size_on_disk(self) -> int:
+        total = 0
+        for directory in (self._parquet_dir, self._cache_dir / STAGING_DIRNAME):
+            if directory.is_dir():
+                total += sum(child.stat().st_size for child in directory.iterdir() if child.is_file())
+        return total
+
+    def _staging_dir(self) -> Path:
+        path = self._cache_dir / STAGING_DIRNAME
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _estimate_segment_bytes(self, log_group: str | None) -> int:
+        """Predict a segment's Parquet size from what the group has written before.
+
+        Falls back to the median across every group, then to 0 when there is no
+        history at all; a missed guess is caught by the post-write enforce pass,
+        so underestimating only means the ladder steps down one segment later.
+        """
+        sizes = []
+        group_sizes = []
+        for entry in self._scan_entries().live.values():
+            if entry.size == 0:
+                continue
+            sizes.append(entry.size)
+            if entry.group == log_group:
+                group_sizes.append(entry.size)
+        pool = group_sizes or sizes
+        return int(statistics.median(pool)) if pool else 0
+
+    def write_sparse(self, log_events: Iterable[LogEvent], *, log_group: str | None = None) -> Path:
+        """Write events to a Parquet file inside staging, persisting nothing.
+
+        The file answers the current command and is deleted at its end; it gets
+        no metadata entry, so nothing points a later read at it. Its size still
+        counts against the size limit while it lives, and it is recorded as
+        fetched bytes like a persisted write.
+        """
+        with tempfile.NamedTemporaryFile(suffix='.parquet', dir=self._staging_dir(), delete=False) as handle:
+            path = Path(handle.name)
+        stats = write_log_events_to_parquet(log_events, path, staging_dir=self._staging_dir())
+        self.sparse.append(path)
+        _reads.record(
+            self._cache_dir,
+            op='write',
+            key=f'sparse:{path.name}',
+            log_group=log_group,
+            bytes_served=stats['file_size_bytes'],
+        )
+        return path
+
+    def maintain(self, *, now: datetime | None = None) -> int:
+        """Run the once-per-command sweeps: expiry, orphans, read TTL, stale staging.
+
+        Performed per command rather than per segment write, which is what keeps
+        the file-system calls bounded on a wide fetch.
+
+        Returns:
+            Number of orphaned Parquet files cleaned up.
+        """
+        moment = now or datetime.now(UTC)
+        self._metadata.expire()
+        self._metadata.cull()
+        cleaned = self._cleanup_orphaned_files()
+        self._expire_read_ttl(moment)
+        self._enforce_parquet_size_limit()
+        self._sweep_staging(moment)
+        _reads.compact(self._cache_dir)
+        return cleaned
+
+    def _expire_read_ttl(self, now: datetime) -> int:
+        """Evict settled entries last read longer ago than the configured TTL."""
+        if self._read_ttl is None:
+            return 0
+        cutoff = now - timedelta(seconds=float(self._read_ttl))
+        scan = self._scan_entries()
+        last_read = _reads.last_reads(self._cache_dir)
+        evicted = 0
+        for key, entry in scan.live.items():
+            if entry.expires:
+                continue
+            try:
+                activity = last_read.get(key) or _birth(entry.path)
+            except OSError:
+                continue
+            if activity < cutoff:
+                self._metadata.delete(key)
+                entry.path.unlink(missing_ok=True)
+                evicted += 1
+        return evicted
+
+    def _sweep_staging(self, now: datetime) -> int:
+        """Delete staging files old enough that their writer must be gone."""
+        staging = self._cache_dir / STAGING_DIRNAME
+        if not staging.is_dir():
+            return 0
+        swept = 0
+        for child in staging.iterdir():
+            if not child.is_file() or child in self.sparse:
+                continue
+            try:
+                age = now.timestamp() - child.stat().st_mtime
+            except OSError:
+                continue
+            if age > _STALE_STAGING.total_seconds():
+                child.unlink(missing_ok=True)
+                swept += 1
+        return swept
+
+    def drop_sparse(self) -> None:
+        """Delete every sparse file this cache wrote, when the command is done with them."""
+        for path in self.sparse:
+            path.unlink(missing_ok=True)
+        self.sparse.clear()
 
     def status(self) -> CacheStatus:
         """Report what is on disk against the limit, without changing anything.
@@ -958,7 +1201,7 @@ class LogCache:
         if (self._cache_dir / _reads.READS_FILENAME).exists():
             read_stats = _reads.summarize(
                 self._cache_dir,
-                scan.live,
+                {key: entry.size for key, entry in scan.live.items()},
                 since=datetime.now(UTC) - _READS_WINDOW,
             )
 
@@ -972,7 +1215,7 @@ class LogCache:
             entries=scan.entries,
             stale_entries=scan.stale,
             orphan_files=orphans,
-            default_ttl_seconds=self._default_ttl,
+            default_ttl_seconds=self._read_ttl,
             top_groups=top_groups,
             reads=read_stats,
         )
@@ -980,12 +1223,13 @@ class LogCache:
     def _scan_entries(self) -> _EntryScan:
         """Walk the metadata once, returning everything a sweep or report needs."""
         referenced: set[Path] = set()
+        path_to_keys: dict[Path, str] = {}
         stale = 0
         entries = 0
-        live: dict[str, int] = {}
+        live: dict[str, _LiveEntry] = {}
         group_bytes: dict[str | None, int] = {}
         for cache_key in list(self._metadata.iterkeys()):  # type: ignore[attr-defined]
-            metadata_value = self._metadata.get(cache_key)
+            metadata_value, expire_time = self._metadata.get(cache_key, expire_time=True)  # type: ignore[call-overload]
             if metadata_value is None:
                 continue
             entries += 1
@@ -997,14 +1241,16 @@ class LogCache:
             if not (isinstance(cache_key, str) and cache_key.startswith(f'{CACHE_KEY_PREFIX}:')):
                 continue
             size = _metadata_size(metadata_value)
-            live[cache_key] = size
             group = _metadata_group(metadata_value)
+            live[cache_key] = _LiveEntry(path=path, size=size, group=group, expires=expire_time is not None)
+            path_to_keys[path] = cache_key
             group_bytes[group] = group_bytes.get(group, 0) + size
         return _EntryScan(
             entries=entries,
             referenced=frozenset(referenced),
             stale=stale,
             live=live,
+            path_to_keys=path_to_keys,
             group_bytes=group_bytes,
         )
 
@@ -1022,9 +1268,9 @@ class LogCache:
         Args:
             log_events: Iterator of log events to cache.
             cache_key: Cache key to store under. Use generate_cache_key() to create.
-            ttl_seconds: TTL for this entry in seconds; fractions are allowed. If None,
-                uses default_ttl_seconds.
-                Pass None explicitly to override default and use no expiration.
+            ttl_seconds: Write-time TTL for this entry in seconds; fractions are
+                allowed. Settled segments pass None and are reclaimed by the
+                configured read TTL instead, which counts from the last read.
             progress_callback: Optional callable notified of progress updates.
             log_group: The group the events came from, stored with the entry so a
                 key that is only a hash still has a group to report against.
@@ -1049,15 +1295,17 @@ class LogCache:
                 log_events,
                 parquet_path,
                 progress_callback=progress_callback,
+                staging_dir=self._staging_dir(),
             )
 
-            # Store metadata in DiskCache with file size for efficient size tracking
-            ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
+            # Store metadata in DiskCache with file size for efficient size tracking.
+            # Only an explicit TTL becomes a write-time expire: the configured TTL
+            # counts from the last read instead, applied by _expire_read_ttl.
             metadata_value = (str(parquet_path), stats['file_size_bytes'], log_group)
             self._metadata.set(
                 cache_key,
                 metadata_value,
-                expire=ttl,
+                expire=ttl_seconds,
             )
             _reads.record(
                 self._cache_dir,
@@ -1146,7 +1394,7 @@ class LogCache:
             ttl_seconds: TTL for this entry in seconds. If None, uses
                 default_ttl_seconds.
         """
-        ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
+        ttl = ttl_seconds if ttl_seconds is not None else self._read_ttl
         self._metadata.set(cache_key, payload, expire=ttl)
 
     def exists(self, cache_key: str) -> bool:
@@ -1158,9 +1406,15 @@ class LogCache:
         Returns:
             True if key exists and is valid, False otherwise.
         """
-        return self.get_parquet_path(cache_key) is not None
+        return self.get_parquet_path(cache_key, record=False) is not None
 
-    def get_parquet_path(self, cache_key: str, *, log_group: str | None = None) -> Path | None:
+    def get_parquet_path(
+        self,
+        cache_key: str,
+        *,
+        log_group: str | None = None,
+        record: bool = True,
+    ) -> Path | None:
         """Return the Parquet file path for a cache key.
 
         Args:
@@ -1168,6 +1422,9 @@ class LogCache:
             log_group: The group being read, for the read log's per-group
                 accounting. Unneeded when the entry is already written, since the
                 hit then reports the group the metadata carries.
+            record: Whether the lookup counts as a read. False for the
+                post-write path lookup, which would otherwise mark every write
+                as immediately re-read.
 
         Returns:
             Path to the cached Parquet file, or None when the key is missing,
@@ -1177,7 +1434,8 @@ class LogCache:
         metadata_value = self._metadata.get(cache_key)
 
         if metadata_value is None:
-            _reads.record(self._cache_dir, op='miss', key=cache_key, log_group=log_group)
+            if record:
+                _reads.record(self._cache_dir, op='miss', key=cache_key, log_group=log_group)
             return None
 
         parquet_path_str = _metadata_path(metadata_value)
@@ -1186,16 +1444,18 @@ class LogCache:
         if not parquet_path.exists():
             # Clean up stale metadata
             self._metadata.delete(cache_key)
-            _reads.record(self._cache_dir, op='miss', key=cache_key, log_group=log_group)
+            if record:
+                _reads.record(self._cache_dir, op='miss', key=cache_key, log_group=log_group)
             return None
 
-        _reads.record(
-            self._cache_dir,
-            op='hit',
-            key=cache_key,
-            log_group=_metadata_group(metadata_value) or log_group,
-            bytes_served=_metadata_size(metadata_value),
-        )
+        if record:
+            _reads.record(
+                self._cache_dir,
+                op='hit',
+                key=cache_key,
+                log_group=_metadata_group(metadata_value) or log_group,
+                bytes_served=_metadata_size(metadata_value),
+            )
         return parquet_path
 
     def evict_expired(self) -> int:
@@ -1211,19 +1471,7 @@ class LogCache:
             >>> cache.evict_expired()
             3  # Cleaned up 3 orphaned files
         """
-        # Trigger DiskCache expiration to remove TTL-expired entries
-        self._metadata.expire()
-
-        # Trigger cull to apply DiskCache eviction policy
-        self._metadata.cull()
-
-        # Clean up orphaned Parquet files after metadata changes
-        cleaned_count = self._cleanup_orphaned_files()
-
-        # Enforce Parquet directory size limit
-        self._enforce_parquet_size_limit()
-
-        return cleaned_count
+        return self.maintain()
 
     def clear(self) -> None:
         """Clear all cache entries and delete all Parquet files.

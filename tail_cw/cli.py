@@ -72,7 +72,14 @@ from tail_cw.aws.xray import (
     xray_form,
 )
 from tail_cw.cache.records import readable_message, without_nulls
-from tail_cw.cache.storage import CacheStatus, LogCache, PayloadRepair, generate_cache_key, parquet_row_count
+from tail_cw.cache.storage import (
+    CacheStatus,
+    DiskBudgetExceededError,
+    LogCache,
+    PayloadRepair,
+    generate_cache_key,
+    parquet_row_count,
+)
 from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import INTERRUPTED_EXIT, closing_stream, consume_in_thread, fetch_pool, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
@@ -98,6 +105,9 @@ StreamEvents = Callable[..., AsyncIterator[LogEvent]]
 ShellView = Literal['groups', 'logs', 'tail', 'dashboards', 'dashboard']
 
 _DURATION_RE = re.compile(r'(\d+)([dhm])')
+
+_BUDGET_EXIT = 3
+"""Exit for a command the disk budget refused, so a script can tell it from a crash."""
 
 
 class SupportsWriteStr(Protocol):
@@ -196,6 +206,8 @@ class Session:
     selected_groups: list[str] = field(default_factory=list)
     dashboard_names: list[str] = field(default_factory=list)
     group_names: list[str] = field(default_factory=list)
+    cache_ttl: str | None = None
+    max_disk_mb: int | None = None
 
     def window_label(self) -> str:
         """Render the window as a compact status-line fragment."""
@@ -336,14 +348,102 @@ def _historical_fetch_pattern(filter_node: FilterNode | None, text: str, *, demo
     return portable.pattern
 
 
-def open_log_cache(config: TailCWConfig) -> LogCache:
+def open_log_cache(config: TailCWConfig, *, ttl_arg: str | None = None) -> LogCache:
     """Open the configured log cache. Close it, or use it as a context manager."""
+    ttl = resolve_cache_ttl(ttl_arg, config)
     return LogCache(
         request_cache_dir(config),
         size_limit_mb=config.cache.size_limit_mb,
-        default_ttl_seconds=config.cache.default_ttl_seconds,
+        default_ttl_seconds=ttl if ttl != 0 else None,
         eviction_policy=config.cache.eviction_policy,
+        min_free_mb=config.cache.min_free_mb,
+        sparse_only=ttl == 0,
     )
+
+
+_CACHE_TTL_ENV = 'TAIL_CW_CACHE_TTL'
+
+
+def parse_cache_ttl(text: str) -> float | None:
+    """Parse a cache TTL spelling into seconds.
+
+    ``never``/``-1`` means entries do not expire (None); ``0`` means fetch and
+    answer without persisting; a duration like ``7d`` expires settled segments
+    that long after they were last read.
+
+    Raises:
+        ValueError: If the value is not a duration, ``never``, ``-1``, or ``0``.
+    """
+    normalized = text.strip().lower()
+    if normalized in {'never', '-1'}:
+        return None
+    if normalized == '0':
+        return 0.0
+    match = _DURATION_RE.fullmatch(normalized)
+    if match is None:
+        msg = f'Invalid --cache-ttl {text!r}: a duration like 7d or 2h, 0 to bypass, or never'
+        raise ValueError(msg)
+    return float(_duration_to_timedelta(int(match.group(1)), match.group(2)).total_seconds())
+
+
+def resolve_cache_ttl(ttl_arg: str | None, config: TailCWConfig) -> float | None:
+    """Resolve the cache TTL from flag, environment, then config."""
+    raw = ttl_arg or os.environ.get(_CACHE_TTL_ENV)
+    if raw is None:
+        return float(config.cache.default_ttl_seconds) if config.cache.default_ttl_seconds is not None else None
+    return parse_cache_ttl(raw)
+
+
+@dataclass(slots=True)
+class _DiskBudget:
+    """What one command may still add to disk.
+
+    Attributes:
+        max_bytes: Ceiling on bytes added this command, from ``--max-disk``;
+            None leaves the cache cap and the free-space floor as the bounds.
+        added: Bytes written so far, persisted and sparse together.
+    """
+
+    max_bytes: int | None = None
+    added: int = 0
+
+
+def _segment_write(
+    cache: LogCache,
+    events: Iterator[LogEvent],
+    cache_key: str,
+    *,
+    request: FetchRequest,
+    segment: Segment,
+    budget: _DiskBudget | None,
+    notices: list[str],
+) -> Path | None:
+    """Write one fetched segment inside the write gate, honoring the disk budget."""
+    if cache.sparse_only:
+        return cache.write_sparse(events, log_group=request.log_group)
+    if budget is not None:
+        persist, notice = cache.prepare_write(request.log_group, max_added=budget.max_bytes, added=budget.added)
+        if notice is not None:
+            notices.append(notice)
+        if not persist:
+            path = cache.write_sparse(events, log_group=request.log_group)
+            budget.added += path.stat().st_size
+            return path
+    stats = cache.write(
+        events,
+        cache_key,
+        ttl_seconds=segment.ttl_seconds,
+        log_group=request.log_group,
+    )
+    if budget is not None:
+        budget.added += stats['file_size_bytes']
+    notices.extend(
+        PayloadRepair(
+            dropped=tuple(stats['dropped_payload_keys']),
+            widened=tuple(stats['widened_payload_keys']),
+        ).notices()
+    )
+    return cache.get_parquet_path(cache_key, record=False)
 
 
 async def _resolve_segment(
@@ -357,6 +457,7 @@ async def _resolve_segment(
     executor: ThreadPoolExecutor | None,
     write_gate: threading.Semaphore,
     notices: list[str],
+    budget: _DiskBudget | None = None,
 ) -> Path | None:
     whole_window_key = generate_cache_key(
         request.log_group,
@@ -378,8 +479,9 @@ async def _resolve_segment(
         )
     )
     # An unsettled segment is short of events CloudWatch had not ingested yet, so a
-    # hit on it is refetched rather than served.
-    if use_cache and segment.settled:
+    # hit on it is refetched rather than served. A sparse-only cache is bypassed
+    # outright: its entries are meant to be invisible, not read and not written.
+    if use_cache and not cache.sparse_only and segment.settled:
         # A segment fetched whole serves any filter, because the local filter runs on read.
         if (cached_path := cache.get_parquet_path(whole_window_key, log_group=request.log_group)) is not None:
             return cached_path
@@ -400,21 +502,15 @@ async def _resolve_segment(
         # Parquet conversion below is CPU work like any query, so it gets the query budget
         # instead of the fetch pool's width.
         with write_gate:
-            stats = cache.write(
+            return _segment_write(
+                cache,
                 chain([first_event], remaining),
                 cache_key,
-                ttl_seconds=segment.ttl_seconds,
-                log_group=request.log_group,
+                request=request,
+                segment=segment,
+                budget=budget,
+                notices=notices,
             )
-        # Appended rather than reported here: this runs on a worker thread, and the TUI's
-        # only legal writer is the message loop.
-        notices.extend(
-            PayloadRepair(
-                dropped=tuple(stats['dropped_payload_keys']),
-                widened=tuple(stats['widened_payload_keys']),
-            ).notices()
-        )
-        return cache.get_parquet_path(cache_key)
 
     return await consume_in_thread(executor, events, write)
 
@@ -432,6 +528,7 @@ async def _resolve_into_cache(
     write_gate: threading.Semaphore,
     notices: list[str],
     budget: _FetchBudget | None = None,
+    disk_budget: _DiskBudget | None = None,
 ) -> list[Path]:
     """Resolve every segment of one window, several at a time, in window order.
 
@@ -453,6 +550,7 @@ async def _resolve_into_cache(
                 executor=executor,
                 write_gate=write_gate,
                 notices=notices,
+                budget=disk_budget,
             )
 
     segments = plan_segments(request.start_time, request.end_time, now=now)
@@ -525,13 +623,17 @@ async def resolve_parquet_path(
     fetch_events: FetchEvents | None = None,
     executor: ThreadPoolExecutor | None = None,
     on_notice: NoticeSink | None = None,
+    ttl_arg: str | None = None,
+    max_disk_mb: int | None = None,
+    sparse_paths: list[Path] | None = None,
 ) -> list[Path]:
     """Return the cached Parquet segments for one request, fetching on miss.
 
     Returns an empty list when the request matches no events.
     """
     notices: list[str] = []
-    with open_log_cache(config) as cache:
+    budget = _DiskBudget(max_bytes=max_disk_mb * 1024 * 1024 if max_disk_mb is not None else None)
+    with open_log_cache(config, ttl_arg=ttl_arg) as cache:
         paths = await _resolve_into_cache(
             client,
             request,
@@ -543,7 +645,11 @@ async def resolve_parquet_path(
             limiter=_segment_limiter(config),
             write_gate=native_write_gate(),
             notices=notices,
+            disk_budget=budget,
         )
+        cache.maintain()
+        if sparse_paths is not None:
+            sparse_paths.extend(cache.sparse)
     _report_notices(notices, on_notice)
     return paths
 
@@ -559,6 +665,9 @@ async def resolve_parquet_paths(
     executor: ThreadPoolExecutor | None = None,
     on_notice: NoticeSink | None = None,
     limit: int | None = None,
+    ttl_arg: str | None = None,
+    max_disk_mb: int | None = None,
+    sparse_paths: list[Path] | None = None,
 ) -> list[Path]:
     """Resolve several fetches concurrently, dropping the ones with no events.
 
@@ -589,7 +698,8 @@ async def resolve_parquet_paths(
     write_gate = native_write_gate()
     notices: list[str] = []
     budget = _FetchBudget(limit=limit) if limit is not None and limit > 0 else None
-    with open_log_cache(config) as cache:
+    disk_budget = _DiskBudget(max_bytes=max_disk_mb * 1024 * 1024 if max_disk_mb is not None else None)
+    with open_log_cache(config, ttl_arg=ttl_arg) as cache:
 
         async def resolve(request: FetchRequest) -> list[Path]:
             return await _resolve_into_cache(
@@ -604,10 +714,14 @@ async def resolve_parquet_paths(
                 write_gate=write_gate,
                 notices=notices,
                 budget=budget,
+                disk_budget=disk_budget,
             )
 
         async with asyncio.TaskGroup() as group:
             tasks = [group.create_task(resolve(request)) for request in requests]
+        cache.maintain()
+        if sparse_paths is not None:
+            sparse_paths.extend(cache.sparse)
     _report_notices(notices, on_notice)
     return [path for task in tasks for path in task.result()]
 
@@ -818,12 +932,16 @@ def session_from_args(args: argparse.Namespace, now: datetime) -> Session:
     if start_time >= end_time:
         msg = f'--start ({start_time.isoformat()}) must be before --end ({end_time.isoformat()})'
         raise ValueError(msg)
+    if (ttl := getattr(args, 'cache_ttl', None)) is not None:
+        parse_cache_ttl(ttl)
     return Session(
         start=start_time,
         end=end_time,
         filter_pattern=getattr(args, 'filter_pattern', None),
         profile=args.profile,
         region=args.region,
+        cache_ttl=getattr(args, 'cache_ttl', None),
+        max_disk_mb=getattr(args, 'max_disk', None),
     )
 
 
@@ -964,6 +1082,7 @@ class _CacheRead:
     paths: list[Path]
     filter_node: FilterNode | None
     group_count: int
+    sparse: list[Path] = field(default_factory=list)
 
 
 async def _resolve_export_paths(
@@ -1013,6 +1132,7 @@ async def _resolve_export_paths(
         )
         for name in names
     ]
+    sparse: list[Path] = []
     paths = await resolve_parquet_paths(
         logs,
         requests,
@@ -1023,13 +1143,22 @@ async def _resolve_export_paths(
         executor=executor,
         on_notice=_stderr_notice,
         limit=limit,
+        ttl_arg=getattr(args, 'cache_ttl', None),
+        max_disk_mb=getattr(args, 'max_disk', None),
+        sparse_paths=sparse,
     )
     if not paths:
         sys.stderr.write(
             'No events matched the filter\n' if sent_pattern else 'No events found for the requested range\n',
         )
         return 0
-    return _CacheRead(paths=paths, filter_node=filter_node, group_count=len(names))
+    return _CacheRead(paths=paths, filter_node=filter_node, group_count=len(names), sparse=sparse)
+
+
+def _drop_sparse(paths: Iterable[Path]) -> None:
+    """Delete the staging files a sparse-mode fetch wrote, once the answer is out."""
+    for path in paths:
+        path.unlink(missing_ok=True)
 
 
 def _demo_paths(start_time: datetime, end_time: datetime) -> list[Path]:
@@ -1060,10 +1189,13 @@ async def _export_logs(
     )
     if isinstance(read, int):
         return read
-    rows = query_parquet_files_to_records(read.paths, read.filter_node, limit=args.limit)
-    written = await run_blocking(executor, lambda: write_records_ndjson(rows, sys.stdout, parsed=args.parsed))
-    _report_written(written, 'events')
-    return 0
+    try:
+        rows = query_parquet_files_to_records(read.paths, read.filter_node, limit=args.limit)
+        written = await run_blocking(executor, lambda: write_records_ndjson(rows, sys.stdout, parsed=args.parsed))
+        _report_written(written, 'events')
+        return 0
+    finally:
+        _drop_sparse(read.sparse)
 
 
 async def _export_stats(
@@ -1080,28 +1212,31 @@ async def _export_stats(
     read = await _resolve_export_paths(pool, args, now, config, fetch_events=fetch_events, executor=executor)
     if isinstance(read, int):
         return read
-    paths, filter_node = read.paths, read.filter_node
-    fields = args.fields or await run_blocking(
-        executor,
-        partial(discover_field_paths, paths, limit=DEFAULT_STATS_FIELD_LIMIT),
-    )
-    if not fields:
-        sys.stderr.write('No structured payload fields found in the cached events\n')
-        return 0
-    facets = [
-        await run_blocking(
+    try:
+        paths, filter_node = read.paths, read.filter_node
+        fields = args.fields or await run_blocking(
             executor,
-            partial(count_by_field, paths, field, filter_node=filter_node, top=args.top),
+            partial(discover_field_paths, paths, limit=DEFAULT_STATS_FIELD_LIMIT),
         )
-        for field in fields
-    ]
-    if args.output_format == 'md':
-        sys.stdout.write(render_facets_markdown(facets, window_label=_window_label(*_window_from_args(args, now))))
+        if not fields:
+            sys.stderr.write('No structured payload fields found in the cached events\n')
+            return 0
+        facets = [
+            await run_blocking(
+                executor,
+                partial(count_by_field, paths, field, filter_node=filter_node, top=args.top),
+            )
+            for field in fields
+        ]
+        if args.output_format == 'md':
+            sys.stdout.write(render_facets_markdown(facets, window_label=_window_label(*_window_from_args(args, now))))
+            return 0
+        for facet in facets:
+            _write_json_line(_facet_to_record(facet))
+        _report_written(len(facets), 'fields')
         return 0
-    for facet in facets:
-        _write_json_line(_facet_to_record(facet))
-    _report_written(len(facets), 'fields')
-    return 0
+    finally:
+        _drop_sparse(read.sparse)
 
 
 def _facet_to_record(facet: FieldFacet) -> dict[str, object]:
@@ -1279,6 +1414,7 @@ async def _export_summary(
         )
         for name in names
     ]
+    sparse: list[Path] = []
     paths = await resolve_parquet_paths(
         logs,
         requests,
@@ -1287,17 +1423,23 @@ async def _export_summary(
         use_cache=not args.no_cache,
         fetch_events=fetch_events,
         executor=executor,
+        ttl_arg=args.cache_ttl,
+        max_disk_mb=args.max_disk,
+        sparse_paths=sparse,
     )
-    return await _render_summary(
-        paths,
-        args,
-        filter_node,
-        window=(start_time, end_time),
-        names=names,
-        now=now,
-        executor=executor,
-        sent_pattern=sent_pattern,
-    )
+    try:
+        return await _render_summary(
+            paths,
+            args,
+            filter_node,
+            window=(start_time, end_time),
+            names=names,
+            now=now,
+            executor=executor,
+            sent_pattern=sent_pattern,
+        )
+    finally:
+        _drop_sparse(sparse)
 
 
 async def _render_summary(
@@ -1429,6 +1571,7 @@ async def _export_trace(
         return 1
     _warn_if_capped(names, args.max_groups, verb='searched')
     names = names[: args.max_groups]
+    sparse: list[Path] = []
     paths = await resolve_parquet_paths(
         logs,
         [
@@ -1446,15 +1589,21 @@ async def _export_trace(
         use_cache=not args.no_cache,
         fetch_events=fetch_events,
         executor=executor,
+        ttl_arg=args.cache_ttl,
+        max_disk_mb=args.max_disk,
+        sparse_paths=sparse,
     )
-    groups = await run_blocking(
-        executor,
-        lambda: query_traces_from_parquet_files(
-            paths,
-            trace_id=args.trace_id,
-            trace_id_fields=list(config.trace.trace_id_fields),
-        ),
-    )
+    try:
+        groups = await run_blocking(
+            executor,
+            lambda: query_traces_from_parquet_files(
+                paths,
+                trace_id=args.trace_id,
+                trace_id_fields=list(config.trace.trace_id_fields),
+            ),
+        )
+    finally:
+        _drop_sparse(sparse)
     if not groups:
         sys.stderr.write(f'Trace {args.trace_id} has no spans in {len(paths)} of {len(names)} groups\n')
         return 1
@@ -1967,21 +2116,32 @@ async def _run_export_command(
     # blocking call at a time, so nothing here can starve a query the way the TUI can.
     # The pool is opened with the account the config resolves to, so the handlers must
     # not be the first thing to read it.
-    if _load_config_or_report(args) is None:
+    config = _load_config_or_report(args)
+    if config is None:
         return 1
+    try:
+        resolve_cache_ttl(getattr(args, 'cache_ttl', None), config)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
     # A batch export has no one waiting on its next keystroke, unlike the TUI, so it
     # yields to interactive work under contention instead of competing for the CPU evenly.
     lower_priority_for_batch_work()
     with _exit_immediately_on_interrupt(), fetch_pool() as executor:
         async with client_pool(profile_name=args.profile, region_name=args.region) as pool:
-            status = await _dispatch_export(
-                pool,
-                args,
-                now,
-                executor=executor,
-                fetch_events=fetch_events,
-                stream_events=stream_events,
-            )
+            try:
+                status = await _dispatch_export(
+                    pool,
+                    args,
+                    now,
+                    executor=executor,
+                    fetch_events=fetch_events,
+                    stream_events=stream_events,
+                )
+            except DiskBudgetExceededError as err:
+                sys.stderr.write(f'{err}\n')
+                _report_run_stats()
+                return _BUDGET_EXIT
     _report_run_stats()
     return status
 

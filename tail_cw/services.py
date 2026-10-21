@@ -206,6 +206,8 @@ def _cache_services(
             config,
             executor=fetch_executor,
             on_notice=on_notice,
+            ttl_arg=session.cache_ttl,
+            max_disk_mb=session.max_disk_mb,
         )
 
     async def log_volume(log_group: str, start: datetime, end: datetime) -> list[float]:
