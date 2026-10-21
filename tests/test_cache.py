@@ -19,8 +19,8 @@ from tail_cw.cache.storage import (
 )
 from tests.factories import BASE_TIME, make_event, make_events
 
-_SHORT_TTL = 0.05
-"""Fractional TTL so expiry tests finish in milliseconds instead of seconds."""
+_SHORT_TTL = 0.25
+"""Fractional TTL with enough room for the write itself to clear it on a slow box."""
 
 _PAST_TTL = _SHORT_TTL * 3
 """Sleep long enough to clear _SHORT_TTL on a loaded CI machine."""
