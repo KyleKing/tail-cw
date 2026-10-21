@@ -59,6 +59,10 @@ class CacheConfig:
             expiration.
         min_free_mb: Free megabytes the cache's volume must keep. Below this
             floor the tool stops persisting and answers in sparse mode.
+        max_group_mb: Largest share of the cache one log group may hold; a group
+            past its quota loses its least-recently-read segments first.
+        max_segment_mb: Largest segment size that may persist; a bigger fetch
+            is answered sparse rather than stored.
         eviction_policy: Name of the eviction policy supplied to DiskCache.
     """
 
@@ -66,6 +70,8 @@ class CacheConfig:
     size_limit_mb: int = 1000
     default_ttl_seconds: int | None = None
     min_free_mb: int = 5120
+    max_group_mb: int = 0
+    max_segment_mb: int = 0
     eviction_policy: str = 'least-recently-stored'
 
 
@@ -430,6 +436,8 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'size_limit_mb = 1000\n'
             'default_ttl_seconds = 3600  # 1 hour after the last read\n'
             'min_free_mb = 5120  # stop persisting when the volume has less free\n'
+            '# max_group_mb = 500  # quota on what one log group may hold\n'
+            '# max_segment_mb = 250  # bigger fetches are answered sparse\n'
             'eviction_policy = "least-recently-stored"\n\n'
             '[fetch]\n'
             '# Segment fetches in flight at once, across every log group.\n'

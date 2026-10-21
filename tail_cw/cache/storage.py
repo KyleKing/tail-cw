@@ -850,6 +850,8 @@ class LogCache:
         eviction_policy: str = 'least-recently-stored',
         *,
         min_free_mb: int = 0,
+        max_group_mb: int = 0,
+        max_segment_mb: int = 0,
         sparse_only: bool = False,
     ) -> None:
         """Initialize LogCache with specified configuration.
@@ -865,6 +867,11 @@ class LogCache:
             min_free_mb: Stop persisting when free space on the cache's volume
                 drops below this many MB; the command is answered in sparse mode
                 instead. 0 disables the floor.
+            max_group_mb: Largest share one log group may hold; a group past its
+                quota loses its least-recently-read segments first. 0 disables
+                the quota.
+            max_segment_mb: Largest segment size that may persist; a bigger
+                fetch is answered sparse rather than stored. 0 disables the cap.
             sparse_only: Fetch and answer without persisting anything, as if
                 every write had already stepped down the degrade ladder.
 
@@ -876,6 +883,8 @@ class LogCache:
         self._read_ttl = default_ttl_seconds
         self._size_limit_bytes = size_limit_mb * 1024 * 1024
         self._min_free_bytes = min_free_mb * 1024 * 1024
+        self._max_group_bytes = max_group_mb * 1024 * 1024
+        self._max_segment_bytes = max_segment_mb * 1024 * 1024
         self._sparse_only = sparse_only
         self.sparse: list[Path] = []
         self._inflight: set[Path] = set()
@@ -1024,6 +1033,8 @@ class LogCache:
         if self._sparse_only:
             return False, None
         estimate = self._estimate_segment_bytes(log_group)
+        if self._max_segment_bytes and estimate > self._max_segment_bytes:
+            return False, 'cache: sparse (segment exceeds the max_segment_mb cap), not persisting'
         if max_added is not None and added + estimate > max_added:
             if estimate > max_added:
                 msg = (
@@ -1127,9 +1138,35 @@ class LogCache:
         cleaned = self._cleanup_orphaned_files()
         self._expire_read_ttl(moment)
         self._enforce_parquet_size_limit()
+        self._enforce_group_quota()
         self._sweep_staging(moment)
         _reads.compact(self._cache_dir)
         return cleaned
+
+    def _enforce_group_quota(self) -> int:
+        """Evict each group's least-recently-read entries until it fits its quota."""
+        if not self._max_group_bytes:
+            return 0
+        scan = self._scan_entries()
+        last_read = _reads.last_reads(self._cache_dir)
+        candidates = [
+            (last_read.get(key) or _birth(entry.path), key, entry.group, entry)
+            for key, entry in scan.live.items()
+            if not entry.expires and entry.group is not None
+        ]
+        held: dict[str, int] = {}
+        for _activity, _key, group, entry in candidates:
+            held[group] = held.get(group, 0) + entry.size
+        over = {group for group, total in held.items() if total > self._max_group_bytes}
+        evicted = 0
+        for _activity, key, group, entry in sorted(candidates, key=itemgetter(0)):
+            if group not in over or held[group] <= self._max_group_bytes:
+                continue
+            self._metadata.delete(key)
+            entry.path.unlink(missing_ok=True)
+            held[group] -= entry.size
+            evicted += 1
+        return evicted
 
     def _expire_read_ttl(self, now: datetime) -> int:
         """Evict settled entries last read longer ago than the configured TTL."""
@@ -1318,18 +1355,8 @@ class LogCache:
             with self._inflight_lock:
                 self._inflight.discard(parquet_path)
 
-        # Trigger DiskCache expiration and culling to enforce TTL and size limits
-        self._metadata.expire()
-        # Trigger cull to apply DiskCache eviction policy
-        # Note: cull() returns the number of entries evicted
-        self._metadata.cull()
-
-        # Clean up orphaned Parquet files after metadata changes
-        self._cleanup_orphaned_files()
-
-        # Enforce Parquet directory size limit
-        self._enforce_parquet_size_limit()
-
+        # Sweeps run once per command in maintain(), not per write: a wide fetch
+        # would otherwise pay a full metadata scan and orphan walk per segment.
         return stats
 
     def read(self, cache_key: str) -> Iterator[LogEvent]:

@@ -357,6 +357,8 @@ def open_log_cache(config: TailCWConfig, *, ttl_arg: str | None = None) -> LogCa
         default_ttl_seconds=ttl if ttl != 0 else None,
         eviction_policy=config.cache.eviction_policy,
         min_free_mb=config.cache.min_free_mb,
+        max_group_mb=config.cache.max_group_mb,
+        max_segment_mb=config.cache.max_segment_mb,
         sparse_only=ttl == 0,
     )
 

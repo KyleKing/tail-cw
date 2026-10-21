@@ -21,8 +21,8 @@ _END = datetime(2025, 1, 2, tzinfo=UTC)
 _NOW = datetime(2026, 10, 21, 12, 0, tzinfo=UTC)
 
 
-def _key(log_group: str = '/aws/lambda/fn', **kwargs) -> str:
-    return generate_cache_key(log_group, _START, _END, **kwargs)
+def _key(log_group: str = '/aws/lambda/fn', start: datetime = _START, end: datetime = _END, **kwargs) -> str:
+    return generate_cache_key(log_group, start, end, **kwargs)
 
 
 def test_a_sparse_write_answers_the_query_and_persists_nothing(fix_test_cache: Path):
@@ -133,6 +133,57 @@ def test_a_stale_staging_file_is_swept(fix_test_cache: Path):
 
     assert swept == 1
     assert not stale.exists()
+
+
+def test_the_group_quota_evicts_only_the_over_quota_group(fix_test_cache: Path):
+    with LogCache(fix_test_cache / 'c', max_group_mb=1) as cache:
+        big_old = _key('/aws/lambda/big', start=_START, end=_START + timedelta(hours=1))
+        big_new = _key('/aws/lambda/big', start=_START + timedelta(hours=1), end=_END)
+        small = _key('/aws/lambda/small')
+        cache.write(make_events(['a']), big_old, log_group='/aws/lambda/big')
+        cache.write(make_events(['b']), big_new, log_group='/aws/lambda/big')
+        cache.write(make_events(['c']), small, log_group='/aws/lambda/small')
+        # Both big entries together exceed the quota but either fits alone; make
+        # big_new the newer read so big_old is the one to go.
+        later = datetime.now(UTC) + timedelta(hours=1)
+        reads.record(cache._cache_dir, op='hit', key=big_new, log_group='/aws/lambda/big', now=later)
+        big_path = cache.get_parquet_path(big_new, record=False)
+        assert big_path is not None
+        cache._max_group_bytes = big_path.stat().st_size
+
+        cache._enforce_group_quota()
+
+        assert not cache.exists(big_old)
+        assert cache.exists(big_new)
+        assert cache.exists(small)
+
+
+def test_an_oversized_segment_is_answered_sparse_not_stored(fix_test_cache: Path, monkeypatch):
+    with LogCache(fix_test_cache / 'c', max_segment_mb=1) as cache:
+        monkeypatch.setattr(cache, '_estimate_segment_bytes', lambda _group: 5 * 1024**2)
+        persist, notice = cache.prepare_write('/g', max_added=None, added=0)
+
+    assert persist is False
+    assert notice == 'cache: sparse (segment exceeds the max_segment_mb cap), not persisting'
+
+
+def test_an_eviction_scans_the_metadata_once(fix_test_cache: Path, monkeypatch):
+    with LogCache(fix_test_cache / 'c', size_limit_mb=1) as cache:
+        keys = [_key(f'/aws/lambda/fn{index}') for index in range(6)]
+        for key in keys:
+            cache.write(make_events(['x']), key, log_group='/aws/lambda/fn')
+        scans = 0
+        real_iterkeys = cache._metadata.iterkeys
+
+        def counting_iterkeys(*args, **kwargs):
+            nonlocal scans
+            scans += 1
+            return real_iterkeys(*args, **kwargs)
+
+        monkeypatch.setattr(cache._metadata, 'iterkeys', counting_iterkeys)
+        cache._evict_for(cache._size_limit_bytes)
+
+    assert scans == 1
 
 
 def _write_config(tmp_path: Path, **cache_settings: int | str) -> Path:

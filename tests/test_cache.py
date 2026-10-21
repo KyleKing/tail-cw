@@ -381,8 +381,9 @@ def test_fifo_eviction_drops_the_oldest_entries(fix_test_cache: Path):
             key = _key(f'/aws/lambda/fn{index}')
             keys.append(key)
             cache.write(make_events(_incompressible(index * 3000 + row) for row in range(3000)), key)
-            # Distinct creation times, which is what the FIFO order reads.
+            # Distinct creation times, which is what the LRU order reads.
             time.sleep(0.01)
+        cache.maintain()
 
         assert sum(path.stat().st_size for path in cache._parquet_dir.glob('*.parquet')) <= 1024 * 1024
         assert not all(cache.exists(key) for key in keys[:5]), 'the oldest entries should be evicted first'
