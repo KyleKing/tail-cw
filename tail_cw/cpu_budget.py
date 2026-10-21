@@ -24,7 +24,13 @@ from __future__ import annotations
 import contextlib
 import math
 import os
+import sys
 import threading
+
+try:
+    import resource
+except ImportError:
+    resource = None  # type: ignore[assignment]
 
 from tail_cw.concurrency import DEFAULT_BLOCKING_WORKERS
 
@@ -32,7 +38,10 @@ CPU_FRACTION_ENV = 'TAIL_CW_CPU_FRACTION'
 MAX_THREADS_ENV = 'TAIL_CW_MAX_THREADS'
 POLARS_THREADS_ENV = 'POLARS_MAX_THREADS'
 NICE_INCREMENT_ENV = 'TAIL_CW_NICE'
+LOW_IMPACT_ENV = 'TAIL_CW_LOW_IMPACT'
+MAX_MEMORY_ENV = 'TAIL_CW_MAX_MEMORY_MB'
 DEFAULT_CPU_FRACTION = 0.4
+LOW_IMPACT_CPU_FRACTION = 0.15
 DEFAULT_NICE_INCREMENT = 10
 """How much batch work (``export``) lowers its own scheduling priority by, so an interactive
 foreground process is favored by the OS scheduler once the machine is actually contended.
@@ -58,19 +67,29 @@ def current_load() -> float:
         return 0.0
 
 
+def low_impact() -> bool:
+    """Whether the run was asked to stay out of the machine's way.
+
+    ``TAIL_CW_LOW_IMPACT=1`` or a ``--low-impact`` argument; argv is scanned
+    because the Polars pool is sized at import, before any parser runs.
+    """
+    return os.environ.get(LOW_IMPACT_ENV) == '1' or '--low-impact' in sys.argv
+
+
 def max_threads() -> int:
     """Return the total native threads tail-cw may run.
 
     ``TAIL_CW_MAX_THREADS`` overrides the budget outright. Otherwise it is the lesser of
-    ``TAIL_CW_CPU_FRACTION`` (default 0.4) of the CPU count and the headroom the machine
-    currently has (CPU count minus the 1-minute load average), never below one. An
-    unparseable or non-positive value in either env var falls back to the default rather
-    than failing a command over a environment typo.
+    ``TAIL_CW_CPU_FRACTION`` (default 0.4, or 0.15 under ``--low-impact``) of the CPU
+    count and the headroom the machine currently has (CPU count minus the 1-minute load
+    average), never below one. An unparseable or non-positive value in either env var
+    falls back to the default rather than failing a command over a environment typo.
     """
     override = _positive_int(os.environ.get(MAX_THREADS_ENV))
     if override is not None:
         return min(override, cpu_count())
-    fraction = _positive_float(os.environ.get(CPU_FRACTION_ENV)) or DEFAULT_CPU_FRACTION
+    default = LOW_IMPACT_CPU_FRACTION if low_impact() else DEFAULT_CPU_FRACTION
+    fraction = _positive_float(os.environ.get(CPU_FRACTION_ENV)) or default
     budget = max(1, int(cpu_count() * min(fraction, 1.0)))
     headroom = max(1, math.floor(cpu_count() - current_load()))
     return max(1, min(budget, headroom))
@@ -104,6 +123,28 @@ def apply_native_thread_limits() -> None:
     shell still wins.
     """
     os.environ.setdefault(POLARS_THREADS_ENV, str(max_threads()))
+
+
+def apply_memory_ceiling() -> None:
+    """Bound the process's address space from ``TAIL_CW_MAX_MEMORY_MB``.
+
+    A soft RLIMIT is the only portable lever over the native layers' allocation;
+    past it the engines raise rather than the machine swapping. Best-effort:
+    where setrlimit is absent (Windows) or refused, the command still runs.
+    """
+    mb = _positive_int(os.environ.get(MAX_MEMORY_ENV))
+    setrlimit = getattr(resource, 'setrlimit', None)
+    rlimit_as = getattr(resource, 'RLIMIT_AS', None)
+    getrlimit = getattr(resource, 'getrlimit', None)
+    if mb is None or setrlimit is None or rlimit_as is None or getrlimit is None:
+        return
+    try:
+        _soft, hard = getrlimit(rlimit_as)
+        setrlimit(rlimit_as, (mb * 1024 * 1024, hard))
+    except (OSError, ValueError):
+        # macOS refuses RLIMIT_AS at every value, so the warning has to say the
+        # ceiling was asked for and could not be set, not just that it is absent.
+        sys.stderr.write(f'{MAX_MEMORY_ENV}={mb} could not be applied on this platform\n')
 
 
 def lower_priority_for_batch_work() -> None:

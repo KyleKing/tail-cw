@@ -47,7 +47,13 @@ def _add_window_flags(parser: argparse.ArgumentParser, *, default_start: str) ->
     parser.add_argument('--filter', dest='filter_pattern', default=None, help='CloudWatch Logs filter pattern')
 
 
-def _add_cache_budget_flags(parser: argparse.ArgumentParser) -> None:
+def _add_fetch_budget_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        '--low-impact',
+        dest='low_impact',
+        action='store_true',
+        help="Stay out of the machine's way: fewer native threads, one segment fetch at a time",
+    )
     parser.add_argument(
         '--cache-ttl',
         dest='cache_ttl',
@@ -118,7 +124,7 @@ def _configure_logs(parser: argparse.ArgumentParser) -> None:
         action='store_true',
         help='Bypass the cache read (results are still written to the cache)',
     )
-    _add_cache_budget_flags(parser)
+    _add_fetch_budget_flags(parser)
 
 
 def _add_parsed_flag(parser: argparse.ArgumentParser) -> None:
@@ -183,7 +189,7 @@ def _configure_stats(parser: argparse.ArgumentParser) -> None:
     )
     _add_demo_flag(parser, 'Read the offline synthetic group instead of AWS (no credentials needed)')
     parser.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
-    _add_cache_budget_flags(parser)
+    _add_fetch_budget_flags(parser)
 
 
 def _configure_tail(parser: argparse.ArgumentParser) -> None:
@@ -254,7 +260,7 @@ def _configure_summary(parser: argparse.ArgumentParser) -> None:
     )
     _add_demo_flag(parser, 'Read the offline synthetic group instead of AWS (no credentials needed)')
     parser.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
-    _add_cache_budget_flags(parser)
+    _add_fetch_budget_flags(parser)
 
 
 def _configure_trace(parser: argparse.ArgumentParser) -> None:
@@ -273,7 +279,7 @@ def _configure_trace(parser: argparse.ArgumentParser) -> None:
         help=f'Cap on groups read (default: {DEFAULT_SUMMARY_MAX_GROUPS})',
     )
     parser.add_argument('--no-cache', action='store_true', help='Bypass the cache read')
-    _add_cache_budget_flags(parser)
+    _add_fetch_budget_flags(parser)
 
 
 def _configure_xray(parser: argparse.ArgumentParser) -> None:
@@ -478,7 +484,7 @@ def build_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Bypass the cache read (results are still written to the cache)',
     )
-    _add_cache_budget_flags(logs)
+    _add_fetch_budget_flags(logs)
 
     tail = subparsers.add_parser('tail', help='Open the log view streaming live events.')
     tail.add_argument(
@@ -495,7 +501,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=argparse.SUPPRESS,
         help='Use the offline synthetic data instead of AWS (no credentials needed)',
     )
-    _add_cache_budget_flags(tail)
+    _add_fetch_budget_flags(tail)
 
     dash = subparsers.add_parser('dash', help='Open a dashboard, or the dashboard picker when unnamed.')
     dash.add_argument('name', nargs='?', default=None, help='Dashboard name (omit to pick from a list)')

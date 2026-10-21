@@ -83,7 +83,7 @@ from tail_cw.cache.storage import (
 from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import INTERRUPTED_EXIT, closing_stream, consume_in_thread, fetch_pool, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
-from tail_cw.cpu_budget import lower_priority_for_batch_work, native_write_gate
+from tail_cw.cpu_budget import lower_priority_for_batch_work, max_threads, native_write_gate
 from tail_cw.demo import DEMO_LOG_GROUP, demo_dashboard, demo_resolve_logs
 from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.parser import DEFAULT_STATS_FIELD_LIMIT, DEFAULT_WINDOW, build_parser
@@ -1047,6 +1047,8 @@ def _run_shell_command(args: argparse.Namespace, now: datetime, run_shell: RunSh
     config = _load_config_or_report(args)
     if config is None:
         return 1
+    if getattr(args, 'low_impact', False):
+        config.fetch.max_concurrent_segments = 1
     try:
         seed = seed_from_args(args, config.presets)
         session.filter_pattern = expand_filter(session.filter_pattern, config.filters)
@@ -2126,6 +2128,9 @@ async def _run_export_command(
     except ValueError as err:
         sys.stderr.write(f'{err}\n')
         return 2
+    if getattr(args, 'low_impact', False):
+        config.fetch.max_concurrent_segments = 1
+        _stderr_notice(f'low-impact: one segment at a time, {max_threads()} native threads')
     # A batch export has no one waiting on its next keystroke, unlike the TUI, so it
     # yields to interactive work under contention instead of competing for the CPU evenly.
     lower_priority_for_batch_work()

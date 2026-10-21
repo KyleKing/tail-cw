@@ -221,6 +221,21 @@ def test_export_logs_with_cache_ttl_zero_stays_sparse(tmp_path, capsys):
     assert list((tmp_path / 'cache' / 'staging').iterdir()) == []
 
 
+def test_export_logs_low_impact_says_what_it_throttled(tmp_path, capsys):
+    config = _write_config(tmp_path)
+    events = [make_event('{"level":"INFO"}', timestamp=datetime.now(UTC) - timedelta(minutes=1))]
+
+    result = run_cli(
+        ['export', 'logs', '/g', '--start', '15m', '--low-impact', '--config', str(config)],
+        None,
+        fetch_events=_FakeFetcher(events),
+        is_tty=False,
+    )
+
+    assert result == 0
+    assert 'low-impact' in capsys.readouterr().err
+
+
 def test_export_logs_rejects_a_bad_cache_ttl(tmp_path, capsys):
     config = _write_config(tmp_path)
 

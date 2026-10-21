@@ -1,12 +1,16 @@
 """Tests for the native-engine CPU budget."""
 
 import os
+import subprocess  # noqa: S404 - a fresh interpreter is the only honest way to see a limit applied
+import sys
 
 import pytest
 
 from tail_cw import cpu_budget
 from tail_cw.cpu_budget import (
     CPU_FRACTION_ENV,
+    LOW_IMPACT_ENV,
+    MAX_MEMORY_ENV,
     MAX_THREADS_ENV,
     NICE_INCREMENT_ENV,
     POLARS_THREADS_ENV,
@@ -170,3 +174,45 @@ def test_lower_priority_for_batch_work_never_fails_a_batch_command(monkeypatch, 
     break_os_nice(monkeypatch)
 
     lower_priority_for_batch_work()
+
+
+@pytest.mark.usefixtures('twelve_cores')
+def test_low_impact_shrinks_the_default_budget(monkeypatch):
+    monkeypatch.setenv(LOW_IMPACT_ENV, '1')
+
+    assert max_threads() == 1
+
+
+@pytest.mark.usefixtures('twelve_cores')
+def test_low_impact_does_not_override_an_explicit_fraction(monkeypatch):
+    monkeypatch.setenv(LOW_IMPACT_ENV, '1')
+    monkeypatch.setenv(CPU_FRACTION_ENV, '0.5')
+
+    assert max_threads() == 6
+
+
+def test_low_impact_reads_the_flag_from_argv(monkeypatch):
+    monkeypatch.delenv(LOW_IMPACT_ENV, raising=False)
+    monkeypatch.setattr(sys, 'argv', ['tail-cw', 'export', 'logs', '/g', '--low-impact'])
+
+    assert cpu_budget.low_impact() is True
+
+
+@pytest.mark.skipif(not hasattr(__import__('resource'), 'RLIMIT_AS'), reason='no RLIMIT_AS')
+def test_the_memory_ceiling_applies_at_import():
+    code = 'import resource, tail_cw; print(resource.getrlimit(resource.RLIMIT_AS)[0])'
+    result = subprocess.run(  # noqa: S603 - fixed argv, no input
+        [sys.executable, '-c', code],
+        env={**os.environ, MAX_MEMORY_ENV: '2048'},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+
+    assert result.returncode == 0, result.stderr
+    applied = int(result.stdout.strip())
+    if 'could not be applied' in result.stderr:
+        assert applied != 2048 * 1024 * 1024  # a platform that refuses says so out loud
+    else:
+        assert applied == 2048 * 1024 * 1024

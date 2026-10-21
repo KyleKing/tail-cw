@@ -540,6 +540,33 @@ async def test_empty_search_restores_all_events():
 
 
 @pytest.mark.asyncio
+async def test_rapid_window_refreshes_collapse_into_one_fetch(tmp_path: Path):
+    """Walking several windows must cost the fetch where the cursor rests, not one per hop."""
+    calls = 0
+    path = _write_parquet(_make_test_log_events(2), tmp_path / 'events.parquet')
+
+    async def resolve(_groups: Sequence[str], _start: datetime, _end: datetime) -> list[Path]:
+        nonlocal calls
+        calls += 1
+        return [path]
+
+    app = _make_app(services=ShellServices(resolve_logs=resolve))
+
+    async with running(app) as pilot:
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert calls == 1
+
+        screen = _logs_screen(app)
+        screen.refresh_view()
+        screen.refresh_view()
+        screen.refresh_view()
+        await pilot.pause(0.6)  # the refetch debounce, then the load itself
+
+        assert calls == 2
+
+
+@pytest.mark.asyncio
 async def test_clearing_search_cancels_the_pending_debounced_query():
     """A stale debounce firing after the clear must not clobber the restored view."""
     app = _make_app()
@@ -834,6 +861,7 @@ async def test_refresh_extends_window_and_reloads(tmp_path: Path):
         await app.workers.wait_for_complete()
         await pilot.pause()
         await pilot.press('r')
+        _logs_screen(app)._refetch_debounce.flush()
         await app.workers.wait_for_complete()
         await pilot.pause()
 
@@ -868,7 +896,9 @@ async def test_the_session_filter_narrows_the_view_on_read(tmp_path: Path):
         assert app.screen.query_one('#log_table', DataTable).row_count == 2
 
         app.session.filter_pattern = 'ERROR'
-        _logs_screen(app).refresh_view()
+        screen = _logs_screen(app)
+        screen.refresh_view()
+        screen._refetch_debounce.flush()
         await app.workers.wait_for_complete()
         await pilot.pause()
 

@@ -60,6 +60,8 @@ LiveStreamFactory = Callable[[], AsyncIterator[LogEvent]]
 _LIVE_FLUSH_INTERVAL_SECONDS = 0.25
 _LOAD_TICK_SECONDS = 1.0
 _SEARCH_DEBOUNCE_SECONDS = 0.3
+_REFETCH_DEBOUNCE_SECONDS = 0.3
+"""Walking through windows or filters collapses into one fetch once the cursor rests."""
 _PIVOT_FIELDS_NAMED = 3
 _HISTOGRAM_MARGIN = 52
 _FACET_VALUES = 6
@@ -232,6 +234,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         self._load_timer: Timer | None = None
         self._loading_since: float | None = None
         self._search_debounce = Debounce(self, delay=_SEARCH_DEBOUNCE_SECONDS)
+        self._refetch_debounce = Debounce(self, delay=_REFETCH_DEBOUNCE_SECONDS)
 
     @property
     def _config(self) -> TailCWConfig:
@@ -334,12 +337,17 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         return targets
 
     def refresh_view(self) -> None:
-        """Re-read the source after the shared window or filter changed."""
+        """Re-read the source after the shared window or filter changed.
+
+        The window load goes through a debounce, so holding a navigation key
+        through several windows costs one fetch where the cursor rests instead
+        of one per hop.
+        """
         if self._live_mode:
             self._stop_live()
             self._start_live()
         else:
-            self._load_window()
+            self._refetch_debounce.schedule(self._load_window)
 
     def restore_focus(self) -> None:
         """Send focus back to the table."""
