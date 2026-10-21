@@ -27,6 +27,9 @@ MARKS_FILENAME = 'warm-marks.json'
 LOCK_FILENAME = 'command.lock'
 """File every cache command holds an advisory lock on while it resolves."""
 
+HAS_FLOCK = getattr(fcntl, 'flock', None) is not None
+"""Whether this platform can hold an advisory file lock (POSIX only)."""
+
 
 def load_marks(cache_dir: Path) -> dict[str, datetime]:
     """Read the last end time warmed per group; a corrupt file starts cold."""

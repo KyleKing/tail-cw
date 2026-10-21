@@ -189,7 +189,8 @@ def test_an_eviction_scans_the_metadata_once(fix_test_cache: Path, monkeypatch):
 def _write_config(tmp_path: Path, **cache_settings: int | str) -> Path:
     config = tmp_path / 'config.toml'
     lines = '\n'.join(f'{key} = {value}' for key, value in cache_settings.items())
-    config.write_text(f'[cache]\ncache_dir = "{tmp_path}/cache"\n{lines}\n', encoding='utf-8')
+    cache_dir = (tmp_path / 'cache').as_posix()
+    config.write_text(f'[cache]\ncache_dir = "{cache_dir}"\n{lines}\n', encoding='utf-8')
     return config
 
 
