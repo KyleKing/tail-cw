@@ -12,7 +12,7 @@ import json
 import tempfile
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from operator import itemgetter
 from pathlib import Path
 from threading import Lock
@@ -23,6 +23,7 @@ import polars as pl
 from diskcache import Cache, JSONDisk
 
 from tail_cw.aws.events import LogEvent
+from tail_cw.cache import reads as _reads
 from tail_cw.cache.records import is_jsonl_message, readable_message
 from tail_cw.progress import TOTAL_UNKNOWN, ProgressCallback
 
@@ -46,6 +47,12 @@ look orphaned and get swept on the first write. A new directory makes the format
 change explicit: the old cache is simply cold, and its files are reclaimed by the
 normal orphan sweep.
 """
+
+_TOP_GROUPS = 5
+"""How many log groups ``cache status`` names by bytes held."""
+
+_READS_WINDOW = timedelta(days=7)
+"""Reporting window for the hit and miss counts in ``cache status``."""
 
 
 # Precompiled regex for detecting ISO8601/RFC3339 timestamps at start of message
@@ -176,13 +183,28 @@ def _hash_canonical(canonical: dict[str, Any], *, prefix: str) -> str:
 def _metadata_path(metadata_value: Any) -> str:
     """Extract the Parquet path from a metadata entry.
 
-    Entries are ``[path, size]`` today. JSON serialization turns the stored
-    tuple into a list, and older caches hold a bare path string, so all three
-    shapes have to read back.
+    Entries are ``[path, size, log_group]`` today. JSON serialization turns the
+    stored tuple into a list, and older caches hold ``[path, size]`` or a bare
+    path string, so all three shapes have to read back.
     """
     if isinstance(metadata_value, (tuple, list)):
         return str(metadata_value[0])
     return str(metadata_value)
+
+
+def _metadata_size(metadata_value: Any) -> int:
+    """Extract the stored Parquet size, or 0 for an entry that never carried it."""
+    if isinstance(metadata_value, (tuple, list)) and len(metadata_value) > 1:
+        return int(metadata_value[1])
+    return 0
+
+
+def _metadata_group(metadata_value: Any) -> str | None:
+    """Extract the log group an entry was written for, or None when unrecorded."""
+    if not isinstance(metadata_value, (tuple, list)):
+        return None
+    tail = metadata_value[2:]
+    return str(tail[0]) if tail and tail[0] is not None else None
 
 
 _encode = json.JSONEncoder(separators=(',', ':')).encode
@@ -667,10 +689,6 @@ def read_parquet_to_log_events(parquet_path: Path) -> Iterator[LogEvent]:
 class CacheStatus:
     """What the cache holds right now, for :func:`LogCache.status`.
 
-    No hit rate and no per-group breakdown, because neither is knowable: nothing counts
-    reads, and a cache key is a BLAKE2b hash of the query, so the log group it came from
-    is not recoverable from it.
-
     Attributes:
         cache_dir: Root of the cache.
         files: Parquet files on disk.
@@ -684,6 +702,10 @@ class CacheStatus:
             every write sweeps them, so a non-zero count usually means a fetch is in
             flight or the last one did not finish.
         default_ttl_seconds: Configured TTL, or None when entries never expire.
+        top_groups: The log groups holding the most cached bytes, largest first.
+            Entries written before the group was recorded count under None.
+        reads: Hit and miss accounting over the reporting window, from the
+            append-only read log. None when nothing has been recorded yet.
     """
 
     cache_dir: Path
@@ -696,11 +718,32 @@ class CacheStatus:
     stale_entries: int
     orphan_files: int
     default_ttl_seconds: TtlSeconds | None
+    top_groups: tuple[tuple[str | None, int], ...] = ()
+    reads: _reads.ReadStats | None = None
 
     @property
     def fraction_used(self) -> float:
         """Share of the limit in use, 0.0 when there is no limit to speak of."""
         return self.bytes_used / self.bytes_limit if self.bytes_limit > 0 else 0.0
+
+
+@dataclass(frozen=True)
+class _EntryScan:
+    """One pass over the metadata store, shared by ``status`` and the sweeps.
+
+    Attributes:
+        entries: Metadata rows seen, whatever they point at.
+        referenced: Parquet paths any entry names.
+        stale: Entries whose file is gone.
+        live: ``cache:v2`` keys with a file on disk, to the file's stored size.
+        group_bytes: Log group to the bytes it holds, for entries that carry one.
+    """
+
+    entries: int
+    referenced: frozenset[Path]
+    stale: int
+    live: dict[str, int]
+    group_bytes: dict[str | None, int]
 
 
 class LogCache:
@@ -896,18 +939,7 @@ class LogCache:
         Counts files rather than trusting the metadata, because eviction deletes a file
         and its entry separately and a crash between the two leaves one of each behind.
         """
-        referenced: set[Path] = set()
-        stale = 0
-        entries = 0
-        for cache_key in list(self._metadata.iterkeys()):  # type: ignore[attr-defined]
-            metadata_value = self._metadata.get(cache_key)
-            if metadata_value is None:
-                continue
-            entries += 1
-            path = Path(_metadata_path(metadata_value))
-            referenced.add(path)
-            if not path.exists():
-                stale += 1
+        scan = self._scan_entries()
 
         files = 0
         used = 0
@@ -918,8 +950,17 @@ class LogCache:
             files += 1
             used += stat.st_size
             stamps.append(getattr(stat, 'st_birthtime', stat.st_ctime))
-            if parquet_file not in referenced:
+            if parquet_file not in scan.referenced:
                 orphans += 1
+
+        top_groups = tuple(sorted(scan.group_bytes.items(), key=itemgetter(1), reverse=True)[:_TOP_GROUPS])
+        read_stats = None
+        if (self._cache_dir / _reads.READS_FILENAME).exists():
+            read_stats = _reads.summarize(
+                self._cache_dir,
+                scan.live,
+                since=datetime.now(UTC) - _READS_WINDOW,
+            )
 
         return CacheStatus(
             cache_dir=self._cache_dir,
@@ -928,10 +969,43 @@ class LogCache:
             bytes_limit=self._size_limit_bytes,
             oldest=datetime.fromtimestamp(min(stamps), tz=UTC) if stamps else None,
             newest=datetime.fromtimestamp(max(stamps), tz=UTC) if stamps else None,
-            entries=entries,
-            stale_entries=stale,
+            entries=scan.entries,
+            stale_entries=scan.stale,
             orphan_files=orphans,
             default_ttl_seconds=self._default_ttl,
+            top_groups=top_groups,
+            reads=read_stats,
+        )
+
+    def _scan_entries(self) -> _EntryScan:
+        """Walk the metadata once, returning everything a sweep or report needs."""
+        referenced: set[Path] = set()
+        stale = 0
+        entries = 0
+        live: dict[str, int] = {}
+        group_bytes: dict[str | None, int] = {}
+        for cache_key in list(self._metadata.iterkeys()):  # type: ignore[attr-defined]
+            metadata_value = self._metadata.get(cache_key)
+            if metadata_value is None:
+                continue
+            entries += 1
+            path = Path(_metadata_path(metadata_value))
+            referenced.add(path)
+            if not path.exists():
+                stale += 1
+                continue
+            if not (isinstance(cache_key, str) and cache_key.startswith(f'{CACHE_KEY_PREFIX}:')):
+                continue
+            size = _metadata_size(metadata_value)
+            live[cache_key] = size
+            group = _metadata_group(metadata_value)
+            group_bytes[group] = group_bytes.get(group, 0) + size
+        return _EntryScan(
+            entries=entries,
+            referenced=frozenset(referenced),
+            stale=stale,
+            live=live,
+            group_bytes=group_bytes,
         )
 
     def write(
@@ -940,6 +1014,8 @@ class LogCache:
         cache_key: str,
         ttl_seconds: TtlSeconds | None = None,
         progress_callback: ProgressCallback | None = None,
+        *,
+        log_group: str | None = None,
     ) -> WriteStats:
         """Write log events to cache.
 
@@ -950,6 +1026,8 @@ class LogCache:
                 uses default_ttl_seconds.
                 Pass None explicitly to override default and use no expiration.
             progress_callback: Optional callable notified of progress updates.
+            log_group: The group the events came from, stored with the entry so a
+                key that is only a hash still has a group to report against.
 
         Returns:
             Statistics dict from write_log_events_to_parquet().
@@ -975,11 +1053,18 @@ class LogCache:
 
             # Store metadata in DiskCache with file size for efficient size tracking
             ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
-            metadata_value = (str(parquet_path), stats['file_size_bytes'])
+            metadata_value = (str(parquet_path), stats['file_size_bytes'], log_group)
             self._metadata.set(
                 cache_key,
                 metadata_value,
                 expire=ttl,
+            )
+            _reads.record(
+                self._cache_dir,
+                op='write',
+                key=cache_key,
+                log_group=log_group,
+                bytes_served=stats['file_size_bytes'],
             )
         finally:
             with self._inflight_lock:
@@ -1075,11 +1160,14 @@ class LogCache:
         """
         return self.get_parquet_path(cache_key) is not None
 
-    def get_parquet_path(self, cache_key: str) -> Path | None:
+    def get_parquet_path(self, cache_key: str, *, log_group: str | None = None) -> Path | None:
         """Return the Parquet file path for a cache key.
 
         Args:
             cache_key: Cache key to look up.
+            log_group: The group being read, for the read log's per-group
+                accounting. Unneeded when the entry is already written, since the
+                hit then reports the group the metadata carries.
 
         Returns:
             Path to the cached Parquet file, or None when the key is missing,
@@ -1089,6 +1177,7 @@ class LogCache:
         metadata_value = self._metadata.get(cache_key)
 
         if metadata_value is None:
+            _reads.record(self._cache_dir, op='miss', key=cache_key, log_group=log_group)
             return None
 
         parquet_path_str = _metadata_path(metadata_value)
@@ -1097,8 +1186,16 @@ class LogCache:
         if not parquet_path.exists():
             # Clean up stale metadata
             self._metadata.delete(cache_key)
+            _reads.record(self._cache_dir, op='miss', key=cache_key, log_group=log_group)
             return None
 
+        _reads.record(
+            self._cache_dir,
+            op='hit',
+            key=cache_key,
+            log_group=_metadata_group(metadata_value) or log_group,
+            bytes_served=_metadata_size(metadata_value),
+        )
         return parquet_path
 
     def evict_expired(self) -> int:

@@ -16,6 +16,11 @@ import re
 import signal
 import sys
 import threading
+
+try:
+    import resource
+except ImportError:  # Windows has no resource module
+    resource = None  # type: ignore[assignment]
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
@@ -376,9 +381,12 @@ async def _resolve_segment(
     # hit on it is refetched rather than served.
     if use_cache and segment.settled:
         # A segment fetched whole serves any filter, because the local filter runs on read.
-        if (cached_path := cache.get_parquet_path(whole_window_key)) is not None:
+        if (cached_path := cache.get_parquet_path(whole_window_key, log_group=request.log_group)) is not None:
             return cached_path
-        if cache_key != whole_window_key and (cached_path := cache.get_parquet_path(cache_key)) is not None:
+        if (
+            cache_key != whole_window_key
+            and (cached_path := cache.get_parquet_path(cache_key, log_group=request.log_group)) is not None
+        ):
             return cached_path
     events = fetch_events(client, request.log_group, segment.start, segment.end, filter_pattern=request.filter_pattern)
     first_event = await anext(events, None)
@@ -392,7 +400,12 @@ async def _resolve_segment(
         # Parquet conversion below is CPU work like any query, so it gets the query budget
         # instead of the fetch pool's width.
         with write_gate:
-            stats = cache.write(chain([first_event], remaining), cache_key, ttl_seconds=segment.ttl_seconds)
+            stats = cache.write(
+                chain([first_event], remaining),
+                cache_key,
+                ttl_seconds=segment.ttl_seconds,
+                log_group=request.log_group,
+            )
         # Appended rather than reported here: this runs on a worker thread, and the TUI's
         # only legal writer is the message loop.
         notices.extend(
@@ -1847,7 +1860,7 @@ async def _export_dashboard(pool: ClientProvider, args: argparse.Namespace) -> i
 
 
 def _cache_status_record(status: CacheStatus) -> dict[str, object]:
-    return {
+    record: dict[str, object] = {
         'cache_dir': str(status.cache_dir),
         'files': status.files,
         'bytes_used': status.bytes_used,
@@ -1859,7 +1872,19 @@ def _cache_status_record(status: CacheStatus) -> dict[str, object]:
         'stale_entries': status.stale_entries,
         'orphan_files': status.orphan_files,
         'default_ttl_seconds': status.default_ttl_seconds,
+        'top_groups': [{'log_group': group, 'bytes': size} for group, size in status.top_groups],
     }
+    if status.reads is not None:
+        record['reads_7d'] = {
+            'hits': status.reads.hits,
+            'misses': status.reads.misses,
+            'hit_rate': round(status.reads.hit_rate, 4) if status.reads.hit_rate is not None else None,
+            'bytes_served': status.reads.bytes_served,
+            'bytes_fetched': status.reads.bytes_fetched,
+            'bytes_never_read': status.reads.bytes_never_read,
+            'oldest_read': status.reads.oldest_read.isoformat() if status.reads.oldest_read is not None else None,
+        }
+    return record
 
 
 def _run_cache_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -1949,7 +1974,7 @@ async def _run_export_command(
     lower_priority_for_batch_work()
     with _exit_immediately_on_interrupt(), fetch_pool() as executor:
         async with client_pool(profile_name=args.profile, region_name=args.region) as pool:
-            return await _dispatch_export(
+            status = await _dispatch_export(
                 pool,
                 args,
                 now,
@@ -1957,6 +1982,25 @@ async def _run_export_command(
                 fetch_events=fetch_events,
                 stream_events=stream_events,
             )
+    _report_run_stats()
+    return status
+
+
+def _report_run_stats() -> None:
+    """Close out a run with its peak memory and CPU, so a heavy command is self-reporting.
+
+    ``ru_maxrss`` is bytes on macOS and kilobytes on Linux. Not every platform
+    exposes ``resource`` (Windows does not), where the report is skipped rather
+    than failed.
+    """
+    getrusage = getattr(resource, 'getrusage', None)
+    rusage_self = getattr(resource, 'RUSAGE_SELF', None)
+    if getrusage is None or rusage_self is None:
+        return
+    usage = getrusage(rusage_self)
+    peak_bytes = usage.ru_maxrss if sys.platform == 'darwin' else usage.ru_maxrss * 1024
+    cpu_seconds = usage.ru_utime + usage.ru_stime
+    sys.stderr.write(f'Peak {peak_bytes / 1_048_576:.0f} MB RSS · {cpu_seconds:.1f}s CPU\n')
 
 
 def run_cli(

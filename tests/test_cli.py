@@ -1871,6 +1871,7 @@ def test_run_cli_cache_status_reports_the_size_against_the_limit(tmp_path, capsy
         'stale_entries',
         'orphan_files',
         'default_ttl_seconds',
+        'top_groups',
     }
 
 
