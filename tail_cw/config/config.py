@@ -162,6 +162,21 @@ class MessageConfig:
 
 
 @dataclass(slots=True)
+class WarmConfig:
+    """Schedule-driven cache warming configuration.
+
+    Attributes:
+        groups: Log groups ``tail-cw warm`` keeps the latest segments cached for.
+        window: How far back the first run looks, as a duration like ``2h``.
+            Later runs fetch only what is new since the last one's high-water
+            mark.
+    """
+
+    groups: list[str] = field(default_factory=list)
+    window: str = '2h'
+
+
+@dataclass(slots=True)
 class TraceConfig:
     """Trace extraction configuration.
 
@@ -211,6 +226,7 @@ class TailCWConfig:
         preview: Log group preview sampling configuration.
         tui: TUI incremental loading configuration.
         trace: Trace extraction configuration.
+        warm: The groups a scheduled ``tail-cw warm`` keeps cached.
         presets: Named log group sets, referenced as ``@name`` wherever a log
             group pattern is accepted.
         preset_profiles: The AWS profile a preset names, for the presets that
@@ -227,6 +243,7 @@ class TailCWConfig:
     preview: PreviewConfig = field(default_factory=PreviewConfig)
     tui: TUIConfig = field(default_factory=TUIConfig)
     trace: TraceConfig = field(default_factory=TraceConfig)
+    warm: WarmConfig = field(default_factory=WarmConfig)
     presets: dict[str, list[str]] = field(default_factory=dict)
     preset_profiles: dict[str, str] = field(default_factory=dict)
     filters: dict[str, str] = field(default_factory=dict)
@@ -335,6 +352,7 @@ _SECTIONS: Final[dict[str, Any]] = {
     'preview': PreviewConfig,
     'tui': TUIConfig,
     'trace': TraceConfig,
+    'warm': WarmConfig,
 }
 """TOML section name to its dataclass. Each key is also the matching :class:`TailCWConfig` field."""
 
@@ -464,6 +482,10 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'theme = "catppuccin-mocha"\n\n'
             '[trace]\n'
             'trace_id_fields = ["trace_id", "traceId", "x-trace-id"]\n\n'
+            '[warm]\n'
+            '# Groups a scheduled `tail-cw warm` keeps the latest segments cached for.\n'
+            '# groups = ["/aws/lambda/api"]\n'
+            '# window = "2h"\n\n'
             '[presets]\n'
             '# Reference a preset as @api wherever a log group pattern is accepted.\n'
             '# api = ["/aws/lambda/api-a", "/ecs/api-b"]\n'

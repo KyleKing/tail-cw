@@ -515,6 +515,14 @@ def build_parser() -> argparse.ArgumentParser:
         help='Open a synthetic dashboard with generated seed data (no AWS calls)',
     )
 
+    warm = subparsers.add_parser(
+        'warm',
+        help='Fetch the latest segments for configured groups so repeat reads are instant.',
+    )
+    warm.add_argument('groups', nargs='*', default=[], help='Log groups to warm (default: [warm].groups)')
+    _add_aws_flags(warm)
+    _add_fetch_budget_flags(warm)
+
     cache = subparsers.add_parser('cache', help='Inspect the local Parquet cache.')
     cache_sub = cache.add_subparsers(dest='cache_command')
     status = cache_sub.add_parser('status', help='Write what the cache holds against its limit, as JSON.')

@@ -13,6 +13,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import signal
 import sys
 import threading
@@ -97,6 +98,7 @@ from tail_cw.query.rollup import Granularity, RollupReport, roll_up
 from tail_cw.query.severity import Severity
 from tail_cw.query.trace import query_traces_from_parquet_files
 from tail_cw.recents import load_recents, record_selection, save_recents
+from tail_cw.warm import command_lock, load_marks, on_battery, save_marks
 
 FetchEvents = Callable[..., AsyncIterator[LogEvent]]
 NoticeSink = Callable[[str], None]
@@ -635,7 +637,7 @@ async def resolve_parquet_path(
     """
     notices: list[str] = []
     budget = _DiskBudget(max_bytes=max_disk_mb * 1024 * 1024 if max_disk_mb is not None else None)
-    with open_log_cache(config, ttl_arg=ttl_arg) as cache:
+    with open_log_cache(config, ttl_arg=ttl_arg) as cache, command_lock(request_cache_dir(config)):
         paths = await _resolve_into_cache(
             client,
             request,
@@ -701,7 +703,7 @@ async def resolve_parquet_paths(
     notices: list[str] = []
     budget = _FetchBudget(limit=limit) if limit is not None and limit > 0 else None
     disk_budget = _DiskBudget(max_bytes=max_disk_mb * 1024 * 1024 if max_disk_mb is not None else None)
-    with open_log_cache(config, ttl_arg=ttl_arg) as cache:
+    with open_log_cache(config, ttl_arg=ttl_arg) as cache, command_lock(request_cache_dir(config)):
 
         async def resolve(request: FetchRequest) -> list[Path]:
             return await _resolve_into_cache(
@@ -2153,6 +2155,94 @@ async def _run_export_command(
     return status
 
 
+async def _run_warm_command(
+    args: argparse.Namespace,
+    now: datetime,
+    *,
+    fetch_events: FetchEvents | None = None,
+) -> int:
+    """Fetch the latest settled segments for the configured groups, then exit.
+
+    A schedule (launchd or cron) runs this; it is not a daemon. The skips run
+    before anything costs anything: a command in flight, a battery, or a disk
+    under its floor each ends the run quietly with a reason on stderr.
+    """
+    config = _load_config_or_report(args)
+    if config is None:
+        return 1
+    groups = args.groups or config.warm.groups
+    if not groups:
+        sys.stderr.write('warm: nothing to do (set [warm].groups or pass groups)\n')
+        return 0
+    try:
+        cold_window = _window_duration(config.warm.window)
+    except ValueError as err:
+        sys.stderr.write(f'{err}\n')
+        return 2
+    cache_dir = request_cache_dir(config)
+    with command_lock(cache_dir) as held:
+        if reason := _warm_skip_reason(held=held, cache_dir=cache_dir, config=config):
+            sys.stderr.write(f'warm: skipped ({reason})\n')
+            return 0
+        if getattr(args, 'low_impact', False):
+            config.fetch.max_concurrent_segments = 1
+        marks = load_marks(cache_dir)
+        cold_start = now - cold_window
+        sparse: list[Path] = []
+        try:
+            async with client_pool(profile_name=args.profile, region_name=args.region) as pool:
+                paths = await resolve_parquet_paths(
+                    await pool.client('logs'),
+                    [
+                        FetchRequest(
+                            log_group=group,
+                            start_time=marks.get(group, cold_start),
+                            end_time=now,
+                            profile=args.profile,
+                            region=args.region,
+                        )
+                        for group in groups
+                    ],
+                    config,
+                    now=now,
+                    fetch_events=fetch_events,
+                    on_notice=_stderr_notice,
+                    ttl_arg=getattr(args, 'cache_ttl', None),
+                    max_disk_mb=getattr(args, 'max_disk', None),
+                    sparse_paths=sparse,
+                )
+        except DiskBudgetExceededError as err:
+            sys.stderr.write(f'{err}\n')
+            return _BUDGET_EXIT
+        finally:
+            _drop_sparse(sparse)
+        marks.update(dict.fromkeys(groups, now))
+        save_marks(cache_dir, marks)
+        sys.stderr.write(f'warm: {len(paths)} segments cached for {len(groups)} groups\n')
+    _report_run_stats()
+    return 0
+
+
+def _warm_skip_reason(*, held: bool, cache_dir: Path, config: TailCWConfig) -> str | None:
+    """The reason a warm run should do nothing, or None when it should run."""
+    if not held:
+        return 'a tail-cw command is running'
+    if on_battery():
+        return 'on battery'
+    if shutil.disk_usage(cache_dir).free < config.cache.min_free_mb * 1024 * 1024:
+        return 'free disk is under the floor'
+    return None
+
+
+def _window_duration(text: str) -> timedelta:
+    """Parse a duration like ``2h``; used for the warm window config value."""
+    match = _DURATION_RE.fullmatch(text.strip().lower())
+    if match is None:
+        msg = f'Invalid [warm].window {text!r}: a duration like 2h or 1d'
+        raise ValueError(msg)
+    return _duration_to_timedelta(int(match.group(1)), match.group(2))
+
+
 def _report_run_stats() -> None:
     """Close out a run with its peak memory and CPU, so a heavy command is self-reporting.
 
@@ -2214,6 +2304,8 @@ def dispatch(
             )
         case 'cache':
             return _run_cache_command(args, parser)
+        case 'warm':
+            return asyncio.run(_run_warm_command(args, now, fetch_events=fetch_events))
         case 'logs' | 'tail' | 'dash':
             return _run_shell_command(args, now, run_shell)
         case _ if interactive:
