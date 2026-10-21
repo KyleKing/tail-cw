@@ -4,7 +4,9 @@ Written 2026-07-05 from a code capability review and a survey of the CloudWatch 
 landscape.
 Pruned five times since, most recently on 2026-10-05, each time by moving what shipped
 into the ADR that records the decision and deleting the planning detail.
-The numbers behind a shipped decision live in its ADR; this file holds what is next.
+Rewritten on 2026-10-21 after a critical review of how the tool is used on this machine,
+which added the disk budget, the cache measurements, and milestones M13 to M19.
+The numbers behind a shipped decision live in its ADR, and this file holds what is next.
 
 ## Delivered
 
@@ -33,7 +35,302 @@ return it (that would be a `DescribeLogStreams` call per group); your own select
 recency sorts the list instead, which is what the console's "recently accessed" actually
 gives you.
 
-## Open
+## What the 2026-10-21 review found
+
+Measured on this machine today, from files and commands, with no profiler run.
+
+- The cache holds 3,357 Parquet files and 1,046,536,312 bytes against a limit of
+    1,048,576,000, which is 99.8% full.
+    `cache status` also reports 7 orphan files and 0 stale entries
+- The data volume is 96% used with 19 GiB free, so a cache that fills its cap and a cold
+    fetch that stages NDJSON beside it both draw on a scarce resource
+- File sizes are skewed.
+    The median file is 18 KB, 51% are under 20 KB, and the largest is 149 MB from one
+    segment on 2026-09-16, which is 14% of the whole cache
+- Nothing records a read.
+    `access_count` is 0 on every metadata row and `cache status` has no hit rate, so the
+    question "how often does it read a hot cache" cannot be answered from the tool
+- Real use is mostly agents running `export summary` and `export alarms` against
+    `read-prod` through the skill, plus repeated `logs ... --start 15m` runs from the
+    checkout
+- A live `export summary --start 72h` sampled at 9.7% CPU and 78 MB RSS, so the warm and
+    network-bound path is not the spike
+
+Read from the code and not yet profiled, so treat each as a hypothesis until M13
+measures
+it.
+
+- `LogCache.write` runs `expire`, `cull`, an orphan sweep over every Parquet file, and a
+    size pass that globs and stats every file, once per segment written
+- At the cap, `_enforce_parquet_size_limit` evicts oldest-stored first and, for each file
+    it deletes, walks every metadata key to find the row that points at it.
+    That is evictions times entries in sqlite reads on each write, and a saturated cache
+    evicts on nearly every write
+- Eviction order is store time, so a read never protects an entry and one wide fetch can
+    push out hundreds of small segments read daily
+- Staging NDJSON goes through `tempfile.NamedTemporaryFile(delete=False)` in the system
+    temp directory (`tail_cw/cache/storage.py:358`), where the cache cap does not count
+    them
+- The 6 GB RSS from the 2026-09-30 30-hour filtered export is the one memory number on
+    record, and no run reports its own peak
+
+The user's doubt that exports produce more than 100 MB of files is plausible.
+Exports stream to stdout, so the whole-tool budget reduces to the cache plus the staging
+files, and M14 measures staging before it adds a second budget.
+
+## Next milestones
+
+Sequenced so each one measures what the next one changes.
+M13 comes first because every later choice (eviction policy, TTL default, whether to
+warm
+anything) depends on knowing what is actually re-read.
+
+### M13 measure before changing anything
+
+Effort: small.
+
+- Count hits and misses per cache key and per log group, with bytes served from cache and
+    bytes fetched.
+    Write the counts to a small append-only file or a separate sqlite table in the cache
+    directory, never as a metadata update on each read, because a write on the read path
+    adds the contention this milestone is meant to find
+- `cache status` prints the hit rate over the last 7 days, the top groups by bytes, the
+    oldest-read age of the bytes it holds, and how many bytes were never read after the
+    write
+- Every export's closing stderr line gains peak RSS and CPU seconds
+    (`resource.getrusage`),
+    next to the existing `Wrote N events`
+- Profile one cold 1-hour fetch with py-spy and `benchmark_backends()` and write down
+    which
+    of JSON encoding, `sink_parquet`, the per-write cache upkeep, or schema repair
+    dominates.
+    The CPU spike is not diagnosed until a trace says so
+- Run it for a week of normal use before M15 picks an eviction policy.
+    If more than about 90% of cached bytes are never read again, the right answer to disk
+    cost is to stop persisting wide windows, and compaction is not needed
+
+### M14 a disk budget with a degrade ladder
+
+Effort: medium.
+Depends on M13 for the numbers and for the default TTL.
+
+The limit covers four things.
+
+- `[cache].size_limit_mb` already exists and stays the cap on persisted Parquet
+- `[cache].min_free_mb`, default 5120, stops persisting when free space on the cache
+    volume drops below it, because this machine has 19 GiB free and a full volume breaks
+    tools that have nothing to do with tail-cw
+- Staging files move inside the cache directory and count against the cap, with the
+    segment writer's concurrency (`DEFAULT_FETCH_WORKERS`) bounding how many exist at once
+- A per-command ceiling, `--max-disk MB`, for one run that would write more than expected
+
+When a fetch would exceed any of them, the tool steps down a fixed ladder and says which
+step ran on stderr in one line, for example
+`cache: sparse (free disk 4.1 GB is under the 5 GB floor), not persisting`.
+
+1. Fits: fetch, write, and cache as today
+1. Over the cap: evict the least recently read settled segments, skipping anything read in
+    the last 24 hours and anything inflight, then continue
+1. Still over, or under the free-space floor: sparse mode.
+    Fetch each segment to a temp file inside the budget, query it, and delete it when the
+    command ends, so the answer is correct and nothing persists
+1. The window alone exceeds the budget and the command is an aggregate (`summary`, `stats`,
+    `insights`): send it to Logs Insights and cache only the aggregate result, behind the
+    existing scan-estimate gate
+1. Anything else that cannot fit: exit with the estimate and the flag that raises the
+    ceiling.
+    This is the one refusal, and it is for the case where silently returning less would
+    be wrong
+
+A size estimate has to exist before step 2 can choose.
+Use the segment sizes already cached for the same group to predict, and probe the first
+segment and extrapolate when there is no history.
+The 25-bytes-per-event figure in ADR 0003 is for the schema and will mislead for large
+`parsed` payloads.
+
+TTL controls come with it.
+
+- `--cache-ttl <duration>` on every command that reads the cache, plus
+    `[cache].default_ttl_seconds` (already present) and `TAIL_CW_CACHE_TTL`
+- `never` (or `-1`) means entries do not expire, which is what `None` does today, so the
+    explicit spelling documents a default that is currently invisible
+- `0` means bypass: fetch and answer without persisting, the same as step 3 forced on
+- A positive value like `7d` expires settled segments that long after they were last
+    read, which needs M13's read record.
+    Today a TTL counts from the write, so a segment read every day still expires
+- Unsettled and ragged-end segments keep their short TTL whatever the flag says
+
+Cheaper local storage, in the order worth trying after M13 reports.
+
+1. Admit on second read: a segment fetched once for a wide window stays in the temp area
+    and is promoted into the cache only if a second command reads it.
+    Only worth building if M13 shows most bytes are never re-read
+1. Lower the ZSTD level for cold segments or raise it for old settled ones, measured on a
+    real group, and drop columns no command reads
+1. Compact small segments (M15)
+
+**S3 as a remote cache is deferred, not planned.**
+DuckDB can query Parquet in S3 directly, so it is technically cheap to try.
+It still trades local disk for S3 storage and request cost, adds `s3:PutObject` to a
+workflow that runs on a read-only profile (`read-prod`), and copies production log
+content, which may hold customer data, into a second store with its own retention and
+access rules.
+Warm reads would also move from local files to network range reads, which gives up the
+repeat-latency win the tool exists for.
+Revisit only for a shared team cache, with a bucket in the same account, SSE-KMS, a
+lifecycle expiry no longer than the local TTL, and write access held by a separate role.
+
+### M15 eviction and layout that follow reads
+
+Effort: medium.
+Depends on M13.
+
+- Evict by last read (LRU) with a per-group quota, so one noisy group cannot push out the
+    rest and a segment read yesterday outlives one stored last week and never touched
+- Replace the per-file walk over all metadata keys with a path-to-key index, so an
+    eviction
+    is one lookup and not a scan
+- Run the orphan sweep and the size pass once per command, or on a size threshold, in
+    place of once per segment write.
+    The result is the same cap with far fewer file-system calls
+- Compact settled 5-minute segments into one Parquet file per group per hour (and hour
+    segments into a day), so a day of one group is a few files DuckDB can glob in place of
+    hundreds.
+    Run it during eviction passes, under the `nice` budget, and never on a segment
+    that is unsettled or inflight
+- Cap one segment's size.
+    A single 149 MB segment is 14% of the cache, so split a wide ragged window before the
+    write
+- Acceptance: a regression test with a cache at its cap and a thousand entries shows the
+    number of sqlite reads per eviction does not grow with the entry count
+
+### M16 CPU and peak memory on a constrained laptop
+
+Effort: medium.
+Depends on M13's profile for where the time goes.
+
+The target is a laptop also running Docker, a browser, and an editor, where a spike in
+CPU
+or memory costs more than a slow answer.
+`cpu_budget.py` already caps the native engines at 40% of the CPU count and exports run
+at
+`nice` +10, which cut a measured 906% to about 374% with no wall-time cost.
+That leaves memory and the Python side unbounded.
+
+- A memory ceiling, `[resources].max_memory_mb` with `TAIL_CW_MAX_MEMORY_MB`.
+    Derive the default from physical memory (`os.sysconf`, no `psutil`) as a fraction,
+    and give it two effects: fewer concurrent segment writers when the budget is tight, and
+    streaming collects in place of full ones for the local scans
+- A `--low-impact` switch (and a `[resources].profile = "low-impact"`) that sets half the
+    CPU fraction, one segment writer, and `nice` on the TUI's background fetches too.
+    Name the profile in the status line so a slow answer has a visible reason
+- Cap the TUI's refetch.
+    The review found that whole-window refetches on each filter edit are the path most
+    likely to reproduce the 6 GB RSS, so debounce them and fetch only the segments the new
+    window adds
+- Back the budget with a test that runs a synthetic 1.5M-event window under a lowered
+    ceiling and asserts the run completes, with the peak RSS read from `getrusage` and
+    compared to the ceiling with a generous margin (no wall-clock assertion)
+- Push regex and numeric filters down (carried item below), because a narrower
+    cold download is the largest single cut in CPU, memory, and disk at once
+
+### M17 what changed since the last window
+
+Effort: medium.
+Needs only the segment cache, so it can ship before any warming.
+
+`export summary --baseline <duration>` compares the window with the same-length window
+that many durations earlier (`--baseline 1d` or `7d`) and labels each pattern `new`,
+`gone`, `up`, `down`, or `same`, with both counts and the ratio.
+This is the question CloudWatch and the AWS CLI cannot answer without a script, and it
+is
+where the `ReadTimeoutError` ramp (2, then 13, then 87 over three days) would have shown
+up on day two.
+
+- The first run pays a cold fetch for the baseline, so it respects the M14 budget and
+    reports when the baseline was sparse or fetched through Insights
+- Patterns merge across the two windows with the existing fuzzy merge, so a changed
+    request id does not split a pattern into `new` and `gone`
+- The TUI summary view marks new patterns with a glyph, because colour alone does not
+    carry meaning
+- Tests build the two windows from real log lines, because the earlier pattern and
+    severity bugs appeared only against real data
+
+### M18 warm the windows people reread
+
+Effort: medium.
+Depends on M13 (proves repeat reads exist) and M14 (bounds what warming may store).
+
+`tail-cw warm` fetches the latest settled segments for the groups in `[warm].groups`,
+under the same CPU, memory, and disk budgets, and exits.
+A schedule runs it (launchd on macOS, cron elsewhere) and the tool does not stay
+resident, because
+[ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md)
+chose a narrow scope and a daemon on a laptop adds the background CPU the review is
+trying to remove.
+
+- Per-group high-water mark, so a run fetches only segments since the last one
+- Skips when on battery, when free disk is under the floor, or when a command is running
+- Warming counts against the per-group quota, so it cannot fill the cache
+- Ship it last.
+    If M13 shows the reread windows are already warm because agents repeat the same
+    queries, delete this milestone instead of building it
+
+### M19 a better surface for agents and humans
+
+Effort: ongoing.
+Each item needs a scope check against the standing risk below, and the run report and
+the answer budget are the two to build first.
+
+For agents, who are the heaviest users today.
+
+- Settle the trailer record contract (carried item) and decide `--output PATH`, because
+    both answer "did I get everything"
+- A machine-readable run report: `--report FILE` writes one JSON object with the path
+    taken
+    (cache hit count, pushdown applied or not, sparse or Insights, bytes fetched, peak RSS,
+    CPU seconds, events written, truncation).
+    It survives `2>/dev/null`, adds no record to the NDJSON stream, and settles the
+    completeness question without the trailer's contract change
+- A budget on the answer: `export summary --max-events N --max-cost-usd X` that stops and
+    says what it skipped, in place of running until the user interrupts
+- `tail-cw export schema <command>` printing the record fields, so a consumer reads the
+    contract from the tool and not from the docs
+- `--stream` on `export logs` (carried item)
+- Stable exit codes documented once: 0 complete, 2 usage, 3 partial because of a budget
+    step, 130 interrupted
+
+For humans.
+
+- The TUI footer shows cache state for the current view
+    (`hot 7 of 9 segments · disk 0.9 of 1.0 GB`), so the cost of a keystroke is visible
+- `cache status` as a table by group with hit rate and bytes, in place of one JSON line,
+    with `--json` kept for scripts
+- `y` in the log view copies the equivalent `tail-cw export logs ...` command, so an
+    investigation moves from the TUI to an agent or a script without retyping
+- A first-run check (`tail-cw doctor`) that reports profile, region, cache location and
+    free space, and which budgets apply
+
+Considered and not planned: an MCP server in front of the export commands.
+The skill plus the CLI already serves the agents that use the tool, and the official AWS
+CloudWatch MCP server covers Insights.
+Revisit if the skill's approval prompts or token cost show up as the bottleneck.
+
+## Housekeeping
+
+- `./run` is documented as broken, so the gate in `AGENTS.md` cannot be run as written.
+    Fix the task runner or correct the document
+- `err.log`, `err2.log`, `stderr.log`, `demo-aws`, `tui-eval`, and `node_modules` sit in
+    the repo root.
+    Delete what is stray and ignore what is not
+- ADR 0010 said the codebase was about 2,000 lines when it was about 8,000 and is now
+    18,800 plus 16,100 of tests.
+    Record the true size where the scope argument reads it, because the argument rested on
+    the smaller number
+- Update ADR 0003 when M14 and M15 change the eviction policy, and add an ADR for the
+    degrade ladder because it changes what an answer means
+
+## Carried open items
 
 Ordered by value against effort.
 
@@ -46,6 +343,38 @@ whole window.
 Each needs the same live check before it moves: a regex can span JSON keys, whose order
 the cache does not keep, and `status:>=500` is unverified against a number logged as a
 string.
+
+**A quoted term that matches nothing gives no hint that CloudWatch terms are
+case-sensitive.**
+On 2026-10-21 a watch-doggo worker polled
+`export logs '/watchdoggo/jobs/codegen' --filter '"dev-11423"' --limit 3` every 60
+seconds for over half an hour and got nothing, then guessed that tail-cw had cached an
+open window and never re-read it.
+The result was correct.
+No event in the window held `dev-11423` in lowercase, three held `DEV-11423` (from a
+different build that quotes the ticket), and the build it waited for never logged the
+id.
+Run after the events existed, the lowercase term returned 0 events cached and with
+`--no-cache`, and `"DEV-11423"` returned 3 on both.
+`aws logs filter-log-events` gave the same split, so tail-cw passes the term through
+faithfully.
+
+The cache did not cause it, and for a poll with no `--end` it cannot.
+`plan_segments` marks a segment that ended within `INGESTION_LAG` (5 minutes) of now as
+unsettled, and an unsettled segment is refetched even on a cache hit
+(`tail_cw/cache/window.py`).
+The one gap is an event that arrives more than 5 minutes late, which a settled aligned
+segment keeps missing because it never expires.
+No test re-reads one window while a new event lands inside the last 5 minutes, and a
+fake clock advanced past `INGESTION_LAG` between two reads would pin the refetch.
+
+A case-insensitive search already exists as a regex (`%(?i)dev-11423%`, in the
+[filter guide](../docs/docs/FILTER_GUIDE.md)), but a regex is not pushed down, so a cold
+export downloads the whole window.
+The cheaper fix is a stderr hint when a quoted term matches nothing, naming the case
+sensitivity and the regex form.
+It matters only if silent zero-match polls keep happening, and it must not change what a
+bare command does.
 
 **The scan estimate is the only cost gate on a wide Insights window.**
 `[insights].confirm_above_gb` decides on the estimate alone, whatever the window.
@@ -232,6 +561,9 @@ Both directions belong here, because the losses are what the open list is for.
     DuckDB and Polars at 40% of the CPU count), because a background fetch that takes 7.6 of
     12 cores makes the laptop unusable and buys no wall time when the work is bound by
     CloudWatch's API
+- Bounded on disk too: the cache, its staging files, and the free space on its volume each
+    have a limit, and a fetch that would break one steps down a stated ladder (evict, go
+    sparse, ask Insights, refuse) and says which step ran
 - Keep logic in pure functions with side effects at the edges (per AGENTS.md).
     The async migration reinforced this: `aws/` functions take an open client and the pure
     translation code stayed untouched
