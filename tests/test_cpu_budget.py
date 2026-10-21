@@ -198,7 +198,7 @@ def test_low_impact_reads_the_flag_from_argv(monkeypatch):
     assert cpu_budget.low_impact() is True
 
 
-@pytest.mark.skipif(cpu_budget.resource is None or not hasattr(cpu_budget.resource, 'RLIMIT_AS'), reason='no RLIMIT_AS')
+@pytest.mark.skipif(not cpu_budget.HAS_RLIMIT_AS, reason='no RLIMIT_AS')
 def test_the_memory_ceiling_applies_at_import():
     code = 'import resource, tail_cw; print(resource.getrlimit(resource.RLIMIT_AS)[0])'
     result = subprocess.run(  # noqa: S603 - fixed argv, no input

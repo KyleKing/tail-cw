@@ -47,6 +47,9 @@ DEFAULT_NICE_INCREMENT = 10
 foreground process is favored by the OS scheduler once the machine is actually contended.
 Raising niceness never fails for a process's own priority, unlike lowering it."""
 
+HAS_RLIMIT_AS = getattr(resource, 'RLIMIT_AS', None) is not None
+"""Whether a soft address-space ceiling can be set (POSIX, minus macOS quirks aside)."""
+
 
 def cpu_count() -> int:
     """Return usable CPUs, honoring a cgroup or affinity limit where the OS reports one."""
