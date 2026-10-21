@@ -15,6 +15,7 @@ from tail_cw.cli import resolve_cache_ttl, run_cli
 from tail_cw.config import TailCWConfig
 from tail_cw.query.engine import query_parquet_file
 from tests.factories import make_event, make_events
+from tests.test_cache import _incompressible
 
 _START = datetime(2025, 1, 1, tzinfo=UTC)
 _END = datetime(2025, 1, 2, tzinfo=UTC)
@@ -76,6 +77,7 @@ def test_eviction_drops_the_least_recently_read(fix_test_cache: Path):
         old_key, new_key = _key('/g/old'), _key('/g/new')
         cache.write(make_events(['a']), old_key, log_group='/g/old')
         cache.write(make_events(['b']), new_key, log_group='/g/new')
+        cache._written.clear()  # stand-ins for a previous command's entries
         # /g/old was read two days ago; /g/new was never read, so its activity is
         # its write time, which is newer and should outlive the old hit.
         reads.record(cache._cache_dir, op='hit', key=old_key, log_group='/g/old', now=_NOW - timedelta(days=2))
@@ -143,6 +145,7 @@ def test_the_group_quota_evicts_only_the_over_quota_group(fix_test_cache: Path):
         cache.write(make_events(['a']), big_old, log_group='/aws/lambda/big')
         cache.write(make_events(['b']), big_new, log_group='/aws/lambda/big')
         cache.write(make_events(['c']), small, log_group='/aws/lambda/small')
+        cache._written.clear()  # stand-ins for a previous command's entries
         # Both big entries together exceed the quota but either fits alone; make
         # big_new the newer read so big_old is the one to go.
         later = datetime.now(UTC) + timedelta(hours=1)
@@ -184,6 +187,57 @@ def test_an_eviction_scans_the_metadata_once(fix_test_cache: Path, monkeypatch):
         cache._evict_for(cache._size_limit_bytes)
 
     assert scans == 1
+
+
+def test_prepare_write_does_not_rescan_per_segment(fix_test_cache: Path, monkeypatch):
+    """A wide fetch calls prepare_write once per segment; the scan must not repeat."""
+    with LogCache(fix_test_cache / 'c', size_limit_mb=1) as cache:
+        scans = 0
+        real_iterkeys = cache._metadata.iterkeys
+
+        def counting_iterkeys(*args, **kwargs):
+            nonlocal scans
+            scans += 1
+            return real_iterkeys(*args, **kwargs)
+
+        monkeypatch.setattr(cache._metadata, 'iterkeys', counting_iterkeys)
+        for _ in range(4):
+            cache.prepare_write('/g', max_added=None, added=0)
+
+    assert scans == 1  # the one-time seed of the size index
+
+
+def test_maintain_scans_the_metadata_once(fix_test_cache: Path, monkeypatch):
+    with LogCache(fix_test_cache / 'c', default_ttl_seconds=60, max_group_mb=1) as cache:
+        cache.write(make_events(['a']), _key(), log_group='/g')
+        scans = 0
+        real_iterkeys = cache._metadata.iterkeys
+
+        def counting_iterkeys(*args, **kwargs):
+            nonlocal scans
+            scans += 1
+            return real_iterkeys(*args, **kwargs)
+
+        monkeypatch.setattr(cache._metadata, 'iterkeys', counting_iterkeys)
+        cache.maintain()
+
+    assert scans == 1
+
+
+def test_eviction_never_drops_a_segment_this_command_wrote(fix_test_cache: Path):
+    """A file the pending answer still names must outlive the eviction pass."""
+    with LogCache(fix_test_cache / 'c', size_limit_mb=1) as cache:
+        old_key, new_key = _key('/g/old'), _key('/g/new')
+        cache.write(make_events(_incompressible(i) for i in range(3000)), old_key, log_group='/g')
+        cache._written.clear()  # old_key stands in for a previous command
+        cache.write(make_events(_incompressible(i) for i in range(3000)), new_key, log_group='/g')
+        new_path = cache.get_parquet_path(new_key, record=False)
+
+        cache._evict_for(cache._size_limit_bytes, now=_NOW)
+
+        assert not cache.exists(old_key)
+        assert new_path is not None
+        assert new_path.exists()
 
 
 def _write_config(tmp_path: Path, **cache_settings: int | str) -> Path:
