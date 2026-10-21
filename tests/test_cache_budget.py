@@ -198,15 +198,16 @@ class _FakeFetcher:
         self._events = events
         self.calls = 0
 
-    async def __call__(self, *_args, **_kwargs) -> AsyncIterator[LogEvent]:
+    async def __call__(self, _client, _group, start_time, end_time, **_kwargs) -> AsyncIterator[LogEvent]:
         self.calls += 1
         for event in self._events:
-            yield event
+            if start_time <= event.timestamp < end_time:
+                yield event
 
 
 def test_export_logs_with_cache_ttl_zero_stays_sparse(tmp_path, capsys):
     config = _write_config(tmp_path)
-    events = [make_event('{"level":"INFO"}', timestamp=_NOW - timedelta(minutes=1))]
+    events = [make_event('{"level":"INFO"}', timestamp=datetime.now(UTC) - timedelta(minutes=1))]
 
     result = run_cli(
         ['export', 'logs', '/g', '--start', '15m', '--cache-ttl', '0', '--config', str(config)],
@@ -248,6 +249,78 @@ def test_export_logs_rejects_a_bad_cache_ttl(tmp_path, capsys):
 
     assert result != 0
     assert 'cache-ttl' in capsys.readouterr().err
+
+
+def test_export_logs_stream_flag_narrows_the_read(tmp_path, capsys):
+    config = _write_config(tmp_path)
+    now = datetime.now(UTC)
+    events = [
+        make_event('{"level":"INFO","n":1}', timestamp=now - timedelta(minutes=2), log_stream='build-1'),
+        make_event('{"level":"INFO","n":2}', timestamp=now - timedelta(minutes=1), log_stream='build-2'),
+    ]
+
+    result = run_cli(
+        ['export', 'logs', '/g', '--start', '15m', '--stream', 'build-1', '--config', str(config)],
+        None,
+        fetch_events=_FakeFetcher(events),
+        is_tty=False,
+    )
+
+    assert result == 0
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 1
+    assert json.loads(out[0])['log_stream'] == 'build-1'
+
+
+def test_export_logs_stream_prefix_narrows_the_read(tmp_path, capsys):
+    config = _write_config(tmp_path)
+    now = datetime.now(UTC)
+    events = [
+        make_event('{"level":"INFO","n":1}', timestamp=now - timedelta(minutes=2), log_stream='build-1'),
+        make_event('{"level":"INFO","n":2}', timestamp=now - timedelta(minutes=1), log_stream='other-9'),
+    ]
+
+    result = run_cli(
+        ['export', 'logs', '/g', '--start', '15m', '--stream-prefix', 'build-', '--config', str(config)],
+        None,
+        fetch_events=_FakeFetcher(events),
+        is_tty=False,
+    )
+
+    assert result == 0
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 1
+    assert json.loads(out[0])['log_stream'] == 'build-1'
+
+
+def test_a_zero_match_quoted_term_names_case_sensitivity(tmp_path, capsys):
+    config = _write_config(tmp_path)
+
+    result = run_cli(
+        ['export', 'logs', '/g', '--start', '15m', '--filter', '"dev-11423"', '--config', str(config)],
+        None,
+        fetch_events=_FakeFetcher([]),
+        is_tty=False,
+    )
+
+    assert result == 0
+    err = capsys.readouterr().err
+    assert 'case-sensitive' in err
+    assert '%(?i)' in err
+
+
+def test_a_zero_match_unquoted_term_gets_no_hint(tmp_path, capsys):
+    config = _write_config(tmp_path)
+
+    result = run_cli(
+        ['export', 'logs', '/g', '--start', '15m', '--filter', 'error', '--config', str(config)],
+        None,
+        fetch_events=_FakeFetcher([]),
+        is_tty=False,
+    )
+
+    assert result == 0
+    assert 'case-sensitive' not in capsys.readouterr().err
 
 
 def test_resolve_cache_ttl_spells():

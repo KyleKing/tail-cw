@@ -100,6 +100,7 @@ async def fetch_log_events(
     *,
     filter_pattern: str | None = None,
     log_stream_names: list[str] | None = None,
+    log_stream_prefix: str | None = None,
     interleaved: bool = True,
     progress_callback: ProgressCallback | None = None,
 ) -> AsyncIterator[LogEvent]:
@@ -120,6 +121,10 @@ async def fetch_log_events(
             filtering. See AWS documentation for filter syntax.
         log_stream_names: Optional list of log stream names to filter. If None,
             searches all streams in the log group.
+        log_stream_prefix: Optional stream-name prefix (``logStreamNamePrefix``),
+            for the "one build's stream" case a full name cannot name. Mutually
+            exclusive with ``log_stream_names`` in the API; passing both is the
+            caller's error.
         interleaved: Whether to interleave events from multiple streams
             chronologically. Default is True.
         progress_callback: Optional callable invoked every 100 events fetched. The
@@ -150,6 +155,8 @@ async def fetch_log_events(
         kwargs['filterPattern'] = filter_pattern
     if log_stream_names is not None:
         kwargs['logStreamNames'] = log_stream_names
+    if log_stream_prefix is not None:
+        kwargs['logStreamNamePrefix'] = log_stream_prefix
 
     paginator = client.get_paginator('filter_log_events')
     page_iterator = paginator.paginate(PaginationConfig={'PageSize': 10000}, **kwargs)

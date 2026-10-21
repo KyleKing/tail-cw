@@ -28,7 +28,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from functools import partial
-from itertools import chain
+from itertools import chain, islice
 from pathlib import Path
 from types import FrameType
 from typing import Any, Literal
@@ -140,6 +140,9 @@ class FetchRequest:
         region: Optional AWS region name.
         filter_pattern: A pattern from :func:`tail_cw.query.expression.pushdown_filter_pattern`
             that narrows the fetch, cached under its own key. The local filter still runs on read.
+        log_stream_names: Exact stream names to fetch, sent to CloudWatch and
+            part of the cache key. Empty means every stream.
+        log_stream_prefix: A stream-name prefix, likewise sent and keyed.
     """
 
     log_group: str
@@ -148,6 +151,8 @@ class FetchRequest:
     profile: str | None = None
     region: str | None = None
     filter_pattern: str | None = None
+    log_stream_names: tuple[str, ...] = ()
+    log_stream_prefix: str | None = None
 
 
 @dataclass(frozen=True)
@@ -470,6 +475,9 @@ async def _resolve_segment(
         region_name=request.region,
         profile_name=request.profile,
     )
+    stream_names = [*request.log_stream_names]
+    if request.log_stream_prefix is not None:
+        stream_names.append(f'prefix:{request.log_stream_prefix}')
     cache_key = (
         whole_window_key
         if request.filter_pattern is None
@@ -480,8 +488,20 @@ async def _resolve_segment(
             region_name=request.region,
             profile_name=request.profile,
             filter_pattern=request.filter_pattern,
+            log_stream_names=stream_names or None,
         )
     )
+    if stream_names and request.filter_pattern is None:
+        # A stream-scoped fetch with no message filter still narrows the window,
+        # so it must not share the whole-window key either.
+        cache_key = generate_cache_key(
+            request.log_group,
+            segment.start,
+            segment.end,
+            region_name=request.region,
+            profile_name=request.profile,
+            log_stream_names=stream_names,
+        )
     # An unsettled segment is short of events CloudWatch had not ingested yet, so a
     # hit on it is refetched rather than served. A sparse-only cache is bypassed
     # outright: its entries are meant to be invisible, not read and not written.
@@ -494,7 +514,15 @@ async def _resolve_segment(
             and (cached_path := cache.get_parquet_path(cache_key, log_group=request.log_group)) is not None
         ):
             return cached_path
-    events = fetch_events(client, request.log_group, segment.start, segment.end, filter_pattern=request.filter_pattern)
+    events = fetch_events(
+        client,
+        request.log_group,
+        segment.start,
+        segment.end,
+        filter_pattern=request.filter_pattern,
+        log_stream_names=list(request.log_stream_names) or None,
+        log_stream_prefix=request.log_stream_prefix,
+    )
     first_event = await anext(events, None)
     if first_event is None:
         return None
@@ -1135,6 +1163,8 @@ async def _resolve_export_paths(
             profile=args.profile,
             region=args.region,
             filter_pattern=sent_pattern,
+            log_stream_names=tuple(getattr(args, 'stream', None) or ()),
+            log_stream_prefix=getattr(args, 'stream_prefix', None),
         )
         for name in names
     ]
@@ -1157,8 +1187,32 @@ async def _resolve_export_paths(
         sys.stderr.write(
             'No events matched the filter\n' if sent_pattern else 'No events found for the requested range\n',
         )
+        if hint := _case_hint(filter_text or sent_pattern):
+            sys.stderr.write(hint)
         return 0
     return _CacheRead(paths=paths, filter_node=filter_node, group_count=len(names), sparse=sparse)
+
+
+_QUOTED_TERM_RE = re.compile(r'"([^"\s][^"]*)"')
+
+
+def _case_hint(filter_text: str | None) -> str | None:
+    """The case-sensitivity note a zero-match quoted filter should hear.
+
+    CloudWatch terms match case-sensitively, so a quoted phrase that matched
+    nothing may only be spelled differently in the logs; the hint says that and
+    names the case-insensitive regex form.
+    """
+    if not filter_text:
+        return None
+    terms = _QUOTED_TERM_RE.findall(filter_text)
+    if not terms:
+        return None
+    named = ' '.join(f'"{term}"' for term in terms[:3])
+    return (
+        f'{named} matched nothing. CloudWatch terms are case-sensitive; '
+        'a regex like %(?i)term% matches either case (see docs/docs/FILTER_GUIDE.md)\n'
+    )
 
 
 def _drop_sparse(paths: Iterable[Path]) -> None:
@@ -1196,9 +1250,24 @@ async def _export_logs(
     if isinstance(read, int):
         return read
     try:
-        rows = query_parquet_files_to_records(read.paths, read.filter_node, limit=args.limit)
+        streams = getattr(args, 'stream', None) or ()
+        prefix = getattr(args, 'stream_prefix', None)
+        rows = query_parquet_files_to_records(
+            read.paths, read.filter_node, limit=None if streams or prefix else args.limit
+        )
+        if streams or prefix:
+
+            def keep(row: Mapping[str, Any]) -> bool:
+                stream = str(row.get('log_stream') or '')
+                return stream in streams or (prefix is not None and stream.startswith(prefix))
+
+            rows = (row for row in rows if keep(row))
+            if args.limit is not None:
+                rows = islice(rows, args.limit)
         written = await run_blocking(executor, lambda: write_records_ndjson(rows, sys.stdout, parsed=args.parsed))
         _report_written(written, 'events')
+        if written == 0 and (hint := _case_hint(args.filter_pattern)):
+            sys.stderr.write(hint)
         return 0
     finally:
         _drop_sparse(read.sparse)

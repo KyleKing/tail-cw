@@ -117,6 +117,21 @@ def _configure_logs(parser: argparse.ArgumentParser) -> None:
     _add_window_flags(parser, default_start=DEFAULT_WINDOW)
     _add_parsed_flag(parser)
     _add_fetch_limit_flag(parser)
+    parser.add_argument(
+        '--stream',
+        dest='stream',
+        action='append',
+        default=None,
+        metavar='NAME',
+        help='Only events from this log stream (repeatable); sent to CloudWatch',
+    )
+    parser.add_argument(
+        '--stream-prefix',
+        dest='stream_prefix',
+        default=None,
+        metavar='PREFIX',
+        help='Only events from streams under this prefix; sent to CloudWatch',
+    )
     _add_demo_flag(parser, 'Read the offline synthetic group instead of AWS (no credentials needed)')
     parser.add_argument(
         '--no-cache',
