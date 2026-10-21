@@ -101,7 +101,7 @@ def test_warm_skips_while_a_command_runs(tmp_path, capsys, monkeypatch):
 
 def test_warm_with_no_groups_is_a_quiet_noop(tmp_path, capsys):
     config = tmp_path / 'config.toml'
-    config.write_text(f'[cache]\ncache_dir = "{tmp_path}/cache"\n', encoding='utf-8')
+    config.write_text(f'[cache]\ncache_dir = "{(tmp_path / "cache").as_posix()}"\n', encoding='utf-8')
 
     result = run_cli(['warm', '--config', str(config)], None, is_tty=False)
 

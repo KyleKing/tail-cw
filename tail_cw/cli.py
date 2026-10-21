@@ -2260,6 +2260,7 @@ async def _run_warm_command(
         sys.stderr.write(f'{err}\n')
         return 2
     cache_dir = request_cache_dir(config)
+    cache_dir.mkdir(parents=True, exist_ok=True)
     with command_lock(cache_dir) as held:
         if reason := _warm_skip_reason(held=held, cache_dir=cache_dir, config=config):
             sys.stderr.write(f'warm: skipped ({reason})\n')
