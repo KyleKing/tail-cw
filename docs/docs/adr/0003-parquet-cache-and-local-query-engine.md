@@ -67,8 +67,9 @@ Key decisions inside this design:
     collide
 - JSONL-looking messages are parsed at write time into a `parsed` struct column, making
     field filters (`{ $.level = "ERROR" }`, `level:ERROR`) cheap at query time
-- eviction is TTL plus FIFO size limit with orphan cleanup, configured in `[cache]` in
-    config.toml
+- eviction is a last-read TTL plus a least-recently-read size limit with orphan cleanup,
+    configured in `[cache]` in config.toml; the degrade ladder that bounds disk use is
+    [ADR 0014](./0014-bound-disk-use-with-a-degrade-ladder.md)
 - `--no-cache` bypasses the read but still writes, so a forced refresh still benefits the
     next query
 

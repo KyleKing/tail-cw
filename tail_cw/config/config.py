@@ -106,6 +106,21 @@ class PreviewConfig:
 
 
 @dataclass(slots=True)
+class ResourcesConfig:
+    """Process-wide resource ceilings.
+
+    Attributes:
+        max_memory_mb: Soft address-space ceiling applied at startup, the same
+            lever ``TAIL_CW_MAX_MEMORY_MB`` sets. 0 means unbounded.
+        profile: ``"low-impact"`` applies the same throttles the flag does:
+            fewer native threads and one segment fetch at a time.
+    """
+
+    max_memory_mb: int = 0
+    profile: str = ''
+
+
+@dataclass(slots=True)
 class TUIConfig:
     """TUI behaviour and incremental loading parameters.
 
@@ -224,6 +239,7 @@ class TailCWConfig:
         insights: Guards on billed Logs Insights queries.
         message: Which record fields the log table reads as the phrase.
         preview: Log group preview sampling configuration.
+        resources: Memory ceiling and the low-impact profile.
         tui: TUI incremental loading configuration.
         trace: Trace extraction configuration.
         warm: The groups a scheduled ``tail-cw warm`` keeps cached.
@@ -241,6 +257,7 @@ class TailCWConfig:
     insights: InsightsConfig = field(default_factory=InsightsConfig)
     message: MessageConfig = field(default_factory=MessageConfig)
     preview: PreviewConfig = field(default_factory=PreviewConfig)
+    resources: ResourcesConfig = field(default_factory=ResourcesConfig)
     tui: TUIConfig = field(default_factory=TUIConfig)
     trace: TraceConfig = field(default_factory=TraceConfig)
     warm: WarmConfig = field(default_factory=WarmConfig)
@@ -350,6 +367,7 @@ _SECTIONS: Final[dict[str, Any]] = {
     'insights': InsightsConfig,
     'message': MessageConfig,
     'preview': PreviewConfig,
+    'resources': ResourcesConfig,
     'tui': TUIConfig,
     'trace': TraceConfig,
     'warm': WarmConfig,
@@ -465,6 +483,9 @@ def create_default_config_file(config_path: Path | None = None) -> Path:
             'confirm_above_gb = 1.0\n\n'
             '[message]\n'
             '# phrase_fields = ["event", "message", "msg"]\n\n'
+            '[resources]\n'
+            '# max_memory_mb = 4096  # soft ceiling; TAIL_CW_MAX_MEMORY_MB also works\n'
+            '# profile = "low-impact"  # fewer native threads, one fetch at a time\n\n'
             '[preview]\n'
             'sample_limit = 500\n'
             'window_seconds = 900  # 15 minutes\n'

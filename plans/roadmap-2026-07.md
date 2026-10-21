@@ -10,21 +10,27 @@ The numbers behind a shipped decision live in its ADR, and this file holds what 
 
 ## Delivered
 
-| Milestone                             | Outcome                                                                                                                                                                                                         | Record                                                                                                                                        |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0 wire the drivetrain                | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                                                                                                            | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
-| M1 live tail                          | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached                                                                                     | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
-| M2 navigation-first discovery         | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets                                                                                              | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
-| M3 investigation tools                | X-Ray reader, the `:xray` waterfall, the `p` and `x` correlation pivots, the `h` histogram                                                                                                                      | [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md), [0013](../docs/docs/adr/0013-read-x-ray-directly-for-spans.md)        |
-| M4 dashboards and metrics             | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs                                                                                  | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
-| M5 async AWS I/O                      | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests                                                                                   | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
-| M6 aggregation surface                | `export summary` with fuzzy-merged rollups, `export insights` in CWLI, SQL, and PPL, `export alarms --history`, `export metrics`, CPU budget                                                                    | [the evaluation](evaluation-2026-08-21-vs-aws-cli.md)                                                                                         |
-| M7 cache v2 and one front door        | segmented cache windows, a schema at 25 bytes per event, rollup/alarms/Insights in the TUI behind a cost gate, one shared history, `cache status`                                                               | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
-| M8 the queue's last five              | Insights scan estimate and a confirmation ceiling, `export trace` as OTLP, a 0.07s CLI start, a log table budgeted by width, `export dimensions`                                                                | [0008](../docs/docs/adr/0008-single-interactive-tui.md), [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)               |
-| M9 the filter surface                 | `AND`, `OR`, `NOT`, and parentheses, named filters, a parse error that names its fix, and a translator that refuses what CloudWatch would answer wrongly                                                        | [the filter guide](../docs/docs/FILTER_GUIDE.md)                                                                                              |
-| M10 what a week of use showed         | `export logs --parsed` and `--limit`, `export stats --by`, globs and `--demo` across export, `[aws].profile` and per-preset profiles, the field panel, repaired payload dtypes, and the terminal fixes          | [the review](review-2026-08-31.md)                                                                                                            |
-| M11 what a prod incident showed       | `--filter` sent to CloudWatch on export, case-sensitive text everywhere, Insights with no window cap and with the query's own `limit`, `export xray-trace` reading a logged id, and an interrupt that exits 130 | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
-| M12 a cold export that answers Ctrl+C | a stderr notice before a segment's write begins, and SIGINT/SIGTERM exiting immediately instead of waiting on `ThreadPoolExecutor.shutdown` for an in-flight Parquet write to finish                            | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
+| Milestone                                       | Outcome                                                                                                                                                                                                         | Record                                                                                                                                        |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 wire the drivetrain                          | argparse dispatch, fetch through the Parquet cache into the TUI, profile and region threaded through                                                                                                            | [0002](../docs/docs/adr/0002-cli-first-layered-architecture.md), [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md)        |
+| M1 live tail                                    | `StartLiveTail` with reconnects and sampling, ring-buffered rendering, one filter model across live, historical, and cached                                                                                     | [0004](../docs/docs/adr/0004-live-tail-via-startlivetail.md)                                                                                  |
+| M2 navigation-first discovery                   | group browser as the home screen, resolution ladder, ten-group multi-select, content previews, recents and presets                                                                                              | [0008](../docs/docs/adr/0008-single-interactive-tui.md)                                                                                       |
+| M3 investigation tools                          | X-Ray reader, the `:xray` waterfall, the `p` and `x` correlation pivots, the `h` histogram                                                                                                                      | [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md), [0013](../docs/docs/adr/0013-read-x-ray-directly-for-spans.md)        |
+| M4 dashboards and metrics                       | `GetDashboard` import, `metrics[]` shorthand translated to `GetMetricData`, native plotext charts, dive from a chart into logs                                                                                  | [0005](../docs/docs/adr/0005-dashboards-metrics-and-terminal-charts.md), [0006](../docs/docs/adr/0006-dashboard-rendering-and-interaction.md) |
+| M5 async AWS I/O                                | aiobotocore throughout, session-scoped client pool, bounded pool for DuckDB/Polars, cancellation that actually stops requests                                                                                   | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
+| M6 aggregation surface                          | `export summary` with fuzzy-merged rollups, `export insights` in CWLI, SQL, and PPL, `export alarms --history`, `export metrics`, CPU budget                                                                    | [the evaluation](evaluation-2026-08-21-vs-aws-cli.md)                                                                                         |
+| M7 cache v2 and one front door                  | segmented cache windows, a schema at 25 bytes per event, rollup/alarms/Insights in the TUI behind a cost gate, one shared history, `cache status`                                                               | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
+| M8 the queue's last five                        | Insights scan estimate and a confirmation ceiling, `export trace` as OTLP, a 0.07s CLI start, a log table budgeted by width, `export dimensions`                                                                | [0008](../docs/docs/adr/0008-single-interactive-tui.md), [0012](../docs/docs/adr/0012-export-traces-instead-of-drawing-them.md)               |
+| M9 the filter surface                           | `AND`, `OR`, `NOT`, and parentheses, named filters, a parse error that names its fix, and a translator that refuses what CloudWatch would answer wrongly                                                        | [the filter guide](../docs/docs/FILTER_GUIDE.md)                                                                                              |
+| M10 what a week of use showed                   | `export logs --parsed` and `--limit`, `export stats --by`, globs and `--demo` across export, `[aws].profile` and per-preset profiles, the field panel, repaired payload dtypes, and the terminal fixes          | [the review](review-2026-08-31.md)                                                                                                            |
+| M11 what a prod incident showed                 | `--filter` sent to CloudWatch on export, case-sensitive text everywhere, Insights with no window cap and with the query's own `limit`, `export xray-trace` reading a logged id, and an interrupt that exits 130 | [0003](../docs/docs/adr/0003-parquet-cache-and-local-query-engine.md), [0008](../docs/docs/adr/0008-single-interactive-tui.md)                |
+| M12 a cold export that answers Ctrl+C           | a stderr notice before a segment's write begins, and SIGINT/SIGTERM exiting immediately instead of waiting on `ThreadPoolExecutor.shutdown` for an in-flight Parquet write to finish                            | [0011](../docs/docs/adr/0011-async-aws-io-and-blocking-work.md)                                                                               |
+| M13 measure before changing anything            | an append-only read log (hits, misses, bytes served/fetched, per group), hit rate and top groups in `cache status`, a peak-RSS/CPU trailer on every export                                                      | —                                                                                                                                             |
+| M14 a disk budget with a degrade ladder         | `min_free_mb` floor, staging inside the cache dir, `--max-disk`, `--cache-ttl`/`TAIL_CW_CACHE_TTL` (read-age TTL, `0` bypasses), fit → evict → sparse → refuse at exit 3                                        | [0014](../docs/docs/adr/0014-bound-disk-use-with-a-degrade-ladder.md)                                                                         |
+| M15 eviction and layout that follow reads       | least-recently-read eviction with a per-group quota, a path-to-key index, and the sweeps moved from per-write to once per command                                                                               | [0014](../docs/docs/adr/0014-bound-disk-use-with-a-degrade-ladder.md)                                                                         |
+| M16 CPU and peak memory on a constrained laptop | `TAIL_CW_MAX_MEMORY_MB`/`[resources].max_memory_mb`, `--low-impact`/`[resources].profile` (15% CPU fraction, one segment fetch), a 300ms debounce on TUI window refetches                                       | —                                                                                                                                             |
+| M18 warm the windows people reread              | `tail-cw warm` with per-group high-water marks, skipping on battery, under the free-space floor, or while a command runs                                                                                        | —                                                                                                                                             |
+| Carried operational fixes                       | `export logs --stream`/`--stream-prefix` sent to CloudWatch and keyed into the cache, and a case-sensitivity stderr hint when a quoted term matches nothing                                                     | —                                                                                                                                             |
 
 Two deviations from the original plans are worth carrying forward, because they change
 what a reader should expect to find.
@@ -47,32 +53,17 @@ Measured on this machine today, from files and commands, with no profiler run.
 - File sizes are skewed.
     The median file is 18 KB, 51% are under 20 KB, and the largest is 149 MB from one
     segment on 2026-09-16, which is 14% of the whole cache
-- Nothing records a read.
-    `access_count` is 0 on every metadata row and `cache status` has no hit rate, so the
-    question "how often does it read a hot cache" cannot be answered from the tool
 - Real use is mostly agents running `export summary` and `export alarms` against
     `read-prod` through the skill, plus repeated `logs ... --start 15m` runs from the
     checkout
 - A live `export summary --start 72h` sampled at 9.7% CPU and 78 MB RSS, so the warm and
     network-bound path is not the spike
 
-Read from the code and not yet profiled, so treat each as a hypothesis until M13
-measures
-it.
-
-- `LogCache.write` runs `expire`, `cull`, an orphan sweep over every Parquet file, and a
-    size pass that globs and stats every file, once per segment written
-- At the cap, `_enforce_parquet_size_limit` evicts oldest-stored first and, for each file
-    it deletes, walks every metadata key to find the row that points at it.
-    That is evictions times entries in sqlite reads on each write, and a saturated cache
-    evicts on nearly every write
-- Eviction order is store time, so a read never protects an entry and one wide fetch can
-    push out hundreds of small segments read daily
-- Staging NDJSON goes through `tempfile.NamedTemporaryFile(delete=False)` in the system
-    temp directory (`tail_cw/cache/storage.py:358`), where the cache cap does not count
-    them
-- The 6 GB RSS from the 2026-09-30 30-hour filtered export is the one memory number on
-    record, and no run reports its own peak
+The hypotheses this review raised are answered: reads are recorded (M13), the
+per-write sweeps now run once per command and evictions read one index instead of every
+key (M15), eviction follows last read rather than store time (M15), staging lives inside
+the cache and counts against the cap (M14), and every export reports its own peak RSS
+and CPU (M13).
 
 The user's doubt that exports produce more than 100 MB of files is plausible.
 Exports stream to stdout, so the whole-tool budget reduces to the cache plus the staging
@@ -81,84 +72,30 @@ files, and M14 measures staging before it adds a second budget.
 ## Next milestones
 
 Sequenced so each one measures what the next one changes.
-M13 comes first because every later choice (eviction policy, TTL default, whether to
-warm
-anything) depends on knowing what is actually re-read.
+M13 through M18 shipped; what is left in each is the work the read log exists to decide.
 
 ### M13 measure before changing anything
 
 Effort: small.
 
-- Count hits and misses per cache key and per log group, with bytes served from cache and
-    bytes fetched.
-    Write the counts to a small append-only file or a separate sqlite table in the cache
-    directory, never as a metadata update on each read, because a write on the read path
-    adds the contention this milestone is meant to find
-- `cache status` prints the hit rate over the last 7 days, the top groups by bytes, the
-    oldest-read age of the bytes it holds, and how many bytes were never read after the
-    write
-- Every export's closing stderr line gains peak RSS and CPU seconds
-    (`resource.getrusage`),
-    next to the existing `Wrote N events`
 - Profile one cold 1-hour fetch with py-spy and `benchmark_backends()` and write down
     which
-    of JSON encoding, `sink_parquet`, the per-write cache upkeep, or schema repair
+    of JSON encoding, `sink_parquet`, the per-command cache upkeep, or schema repair
     dominates.
     The CPU spike is not diagnosed until a trace says so
-- Run it for a week of normal use before M15 picks an eviction policy.
+- Watch the read log for a week of normal use before spending more on the cache.
     If more than about 90% of cached bytes are never read again, the right answer to disk
     cost is to stop persisting wide windows, and compaction is not needed
 
 ### M14 a disk budget with a degrade ladder
 
 Effort: medium.
-Depends on M13 for the numbers and for the default TTL.
+Shipped except the deferred step below; the ladder, TTL controls, and staging layout are
+in [ADR 0014](../docs/docs/adr/0014-bound-disk-use-with-a-degrade-ladder.md).
 
-The limit covers four things.
-
-- `[cache].size_limit_mb` already exists and stays the cap on persisted Parquet
-- `[cache].min_free_mb`, default 5120, stops persisting when free space on the cache
-    volume drops below it, because this machine has 19 GiB free and a full volume breaks
-    tools that have nothing to do with tail-cw
-- Staging files move inside the cache directory and count against the cap, with the
-    segment writer's concurrency (`DEFAULT_FETCH_WORKERS`) bounding how many exist at once
-- A per-command ceiling, `--max-disk MB`, for one run that would write more than expected
-
-When a fetch would exceed any of them, the tool steps down a fixed ladder and says which
-step ran on stderr in one line, for example
-`cache: sparse (free disk 4.1 GB is under the 5 GB floor), not persisting`.
-
-1. Fits: fetch, write, and cache as today
-1. Over the cap: evict the least recently read settled segments, skipping anything read in
-    the last 24 hours and anything inflight, then continue
-1. Still over, or under the free-space floor: sparse mode.
-    Fetch each segment to a temp file inside the budget, query it, and delete it when the
-    command ends, so the answer is correct and nothing persists
-1. The window alone exceeds the budget and the command is an aggregate (`summary`, `stats`,
-    `insights`): send it to Logs Insights and cache only the aggregate result, behind the
-    existing scan-estimate gate
-1. Anything else that cannot fit: exit with the estimate and the flag that raises the
-    ceiling.
-    This is the one refusal, and it is for the case where silently returning less would
-    be wrong
-
-A size estimate has to exist before step 2 can choose.
-Use the segment sizes already cached for the same group to predict, and probe the first
-segment and extrapolate when there is no history.
-The 25-bytes-per-event figure in ADR 0003 is for the schema and will mislead for large
-`parsed` payloads.
-
-TTL controls come with it.
-
-- `--cache-ttl <duration>` on every command that reads the cache, plus
-    `[cache].default_ttl_seconds` (already present) and `TAIL_CW_CACHE_TTL`
-- `never` (or `-1`) means entries do not expire, which is what `None` does today, so the
-    explicit spelling documents a default that is currently invisible
-- `0` means bypass: fetch and answer without persisting, the same as step 3 forced on
-- A positive value like `7d` expires settled segments that long after they were last
-    read, which needs M13's read record.
-    Today a TTL counts from the write, so a segment read every day still expires
-- Unsettled and ragged-end segments keep their short TTL whatever the flag says
+Deferred from the ladder's step 4: when the window alone exceeds the budget and the
+command is an aggregate (`summary`, `stats`, `insights`), send it to Logs Insights and
+cache only the aggregate result, behind the existing scan-estimate gate.
 
 Cheaper local storage, in the order worth trying after M13 reports.
 
@@ -183,51 +120,27 @@ lifecycle expiry no longer than the local TTL, and write access held by a separa
 ### M15 eviction and layout that follow reads
 
 Effort: medium.
-Depends on M13.
+Shipped except compaction, which waits on M13's read numbers.
 
-- Evict by last read (LRU) with a per-group quota, so one noisy group cannot push out the
-    rest and a segment read yesterday outlives one stored last week and never touched
-- Replace the per-file walk over all metadata keys with a path-to-key index, so an
-    eviction
-    is one lookup and not a scan
-- Run the orphan sweep and the size pass once per command, or on a size threshold, in
-    place of once per segment write.
-    The result is the same cap with far fewer file-system calls
 - Compact settled 5-minute segments into one Parquet file per group per hour (and hour
     segments into a day), so a day of one group is a few files DuckDB can glob in place of
     hundreds.
     Run it during eviction passes, under the `nice` budget, and never on a segment
-    that is unsettled or inflight
-- Cap one segment's size.
-    A single 149 MB segment is 14% of the cache, so split a wide ragged window before the
-    write
-- Acceptance: a regression test with a cache at its cap and a thousand entries shows the
-    number of sqlite reads per eviction does not grow with the entry count
+    that is unsettled or inflight.
+    It changes the read path (a timestamp filter becomes necessary), so it waits for M13
+    to show the rereads justify the complexity
 
 ### M16 CPU and peak memory on a constrained laptop
 
 Effort: medium.
-Depends on M13's profile for where the time goes.
+The ceiling, the low-impact profile, and the TUI refetch debounce shipped; what remains
+is tightening them.
 
-The target is a laptop also running Docker, a browser, and an editor, where a spike in
-CPU
-or memory costs more than a slow answer.
-`cpu_budget.py` already caps the native engines at 40% of the CPU count and exports run
-at
-`nice` +10, which cut a measured 906% to about 374% with no wall-time cost.
-That leaves memory and the Python side unbounded.
-
-- A memory ceiling, `[resources].max_memory_mb` with `TAIL_CW_MAX_MEMORY_MB`.
-    Derive the default from physical memory (`os.sysconf`, no `psutil`) as a fraction,
-    and give it two effects: fewer concurrent segment writers when the budget is tight, and
-    streaming collects in place of full ones for the local scans
-- A `--low-impact` switch (and a `[resources].profile = "low-impact"`) that sets half the
-    CPU fraction, one segment writer, and `nice` on the TUI's background fetches too.
-    Name the profile in the status line so a slow answer has a visible reason
-- Cap the TUI's refetch.
-    The review found that whole-window refetches on each filter edit are the path most
-    likely to reproduce the 6 GB RSS, so debounce them and fetch only the segments the new
-    window adds
+- Derive a default memory ceiling from physical memory (`os.sysconf`, no `psutil`) as a
+    fraction, and give a tight budget two more effects: fewer concurrent segment writers,
+    and streaming collects in place of full ones for the local scans
+- `nice` the TUI's background fetches under `low-impact` too, and name the profile in the
+    status line so a slow answer has a visible reason
 - Back the budget with a test that runs a synthetic 1.5M-event window under a lowered
     ceiling and asserts the run completes, with the peak RSS read from `getrusage` and
     compared to the ceiling with a generous margin (no wall-clock assertion)
@@ -256,26 +169,6 @@ up on day two.
 - Tests build the two windows from real log lines, because the earlier pattern and
     severity bugs appeared only against real data
 
-### M18 warm the windows people reread
-
-Effort: medium.
-Depends on M13 (proves repeat reads exist) and M14 (bounds what warming may store).
-
-`tail-cw warm` fetches the latest settled segments for the groups in `[warm].groups`,
-under the same CPU, memory, and disk budgets, and exits.
-A schedule runs it (launchd on macOS, cron elsewhere) and the tool does not stay
-resident, because
-[ADR 0010](../docs/docs/adr/0010-keep-tail-cw-with-a-narrower-scope.md)
-chose a narrow scope and a daemon on a laptop adds the background CPU the review is
-trying to remove.
-
-- Per-group high-water mark, so a run fetches only segments since the last one
-- Skips when on battery, when free disk is under the floor, or when a command is running
-- Warming counts against the per-group quota, so it cannot fill the cache
-- Ship it last.
-    If M13 shows the reread windows are already warm because agents repeat the same
-    queries, delete this milestone instead of building it
-
 ### M19 a better surface for agents and humans
 
 Effort: ongoing.
@@ -296,7 +189,6 @@ For agents, who are the heaviest users today.
     says what it skipped, in place of running until the user interrupts
 - `tail-cw export schema <command>` printing the record fields, so a consumer reads the
     contract from the tool and not from the docs
-- `--stream` on `export logs` (carried item)
 - Stable exit codes documented once: 0 complete, 2 usage, 3 partial because of a budget
     step, 130 interrupted
 
@@ -327,8 +219,6 @@ Revisit if the skill's approval prompts or token cost show up as the bottleneck.
     18,800 plus 16,100 of tests.
     Record the true size where the scope argument reads it, because the argument rested on
     the smaller number
-- Update ADR 0003 when M14 and M15 change the eviction policy, and add an ADR for the
-    degrade ladder because it changes what an answer means
 
 ## Carried open items
 
@@ -343,38 +233,6 @@ whole window.
 Each needs the same live check before it moves: a regex can span JSON keys, whose order
 the cache does not keep, and `status:>=500` is unverified against a number logged as a
 string.
-
-**A quoted term that matches nothing gives no hint that CloudWatch terms are
-case-sensitive.**
-On 2026-10-21 a watch-doggo worker polled
-`export logs '/watchdoggo/jobs/codegen' --filter '"dev-11423"' --limit 3` every 60
-seconds for over half an hour and got nothing, then guessed that tail-cw had cached an
-open window and never re-read it.
-The result was correct.
-No event in the window held `dev-11423` in lowercase, three held `DEV-11423` (from a
-different build that quotes the ticket), and the build it waited for never logged the
-id.
-Run after the events existed, the lowercase term returned 0 events cached and with
-`--no-cache`, and `"DEV-11423"` returned 3 on both.
-`aws logs filter-log-events` gave the same split, so tail-cw passes the term through
-faithfully.
-
-The cache did not cause it, and for a poll with no `--end` it cannot.
-`plan_segments` marks a segment that ended within `INGESTION_LAG` (5 minutes) of now as
-unsettled, and an unsettled segment is refetched even on a cache hit
-(`tail_cw/cache/window.py`).
-The one gap is an event that arrives more than 5 minutes late, which a settled aligned
-segment keeps missing because it never expires.
-No test re-reads one window while a new event lands inside the last 5 minutes, and a
-fake clock advanced past `INGESTION_LAG` between two reads would pin the refetch.
-
-A case-insensitive search already exists as a regex (`%(?i)dev-11423%`, in the
-[filter guide](../docs/docs/FILTER_GUIDE.md)), but a regex is not pushed down, so a cold
-export downloads the whole window.
-The cheaper fix is a stderr hint when a quoted term matches nothing, naming the case
-sensitivity and the regex form.
-It matters only if silent zero-match polls keep happening, and it must not change what a
-bare command does.
 
 **The scan estimate is the only cost gate on a wide Insights window.**
 `[insights].confirm_above_gb` decides on the estimate alone, whatever the window.
@@ -460,17 +318,6 @@ CloudWatch-only, so it is a scope decision before it is a coding task.
 Polars does not, but the Polars path already does `scan_parquet` into
 `collect(engine='streaming')`, so the premise is weak.
 If pursued, use a configured byte ceiling rather than adding `psutil`.
-
-**No way to read one log stream.** CodeBuild writes one stream per build, named by the
-build id, so "show me build `1878a4c2`'s log" is the common question for a job log
-group.
-`export logs` takes groups and a `--filter` on the message, never a stream name, so a
-watch-doggo investigation fell back to
-`aws logs get-log-events --log-group-name /watchdoggo/jobs/review --log-stream-name <build-id> --start-from-head`
-(and `filter-log-events --log-stream-names` for a keyword inside one build).
-A
-`--stream <name|prefix>` on `export logs` that maps to `logStreamNames` /
-`logStreamNamePrefix` would cover both.
 
 ## Blocked application-side, not here
 

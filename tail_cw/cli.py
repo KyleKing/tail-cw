@@ -84,7 +84,13 @@ from tail_cw.cache.storage import (
 from tail_cw.cache.window import Segment, plan_segments
 from tail_cw.concurrency import INTERRUPTED_EXIT, closing_stream, consume_in_thread, fetch_pool, run_blocking
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
-from tail_cw.cpu_budget import lower_priority_for_batch_work, max_threads, native_write_gate
+from tail_cw.cpu_budget import (
+    LOW_IMPACT_ENV,
+    apply_memory_ceiling,
+    lower_priority_for_batch_work,
+    max_threads,
+    native_write_gate,
+)
 from tail_cw.demo import DEMO_LOG_GROUP, demo_dashboard, demo_resolve_logs
 from tail_cw.history import HistoryKind, append, make_entry
 from tail_cw.parser import DEFAULT_STATS_FIELD_LIMIT, DEFAULT_WINDOW, build_parser
@@ -920,6 +926,11 @@ def _load_config_or_report(args: argparse.Namespace) -> TailCWConfig | None:
         return None
     if args.region is None:
         args.region = config.aws.region
+    if config.resources.max_memory_mb:
+        apply_memory_ceiling(config.resources.max_memory_mb)
+    if config.resources.profile == 'low-impact':
+        config.fetch.max_concurrent_segments = 1
+        os.environ.setdefault(LOW_IMPACT_ENV, '1')
     return config
 
 

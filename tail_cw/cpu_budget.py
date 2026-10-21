@@ -125,14 +125,16 @@ def apply_native_thread_limits() -> None:
     os.environ.setdefault(POLARS_THREADS_ENV, str(max_threads()))
 
 
-def apply_memory_ceiling() -> None:
-    """Bound the process's address space from ``TAIL_CW_MAX_MEMORY_MB``.
+def apply_memory_ceiling(max_mb: int | None = None) -> None:
+    """Bound the process's address space.
 
-    A soft RLIMIT is the only portable lever over the native layers' allocation;
-    past it the engines raise rather than the machine swapping. Best-effort:
-    where setrlimit is absent (Windows) or refused, the command still runs.
+    ``TAIL_CW_MAX_MEMORY_MB`` or ``[resources].max_memory_mb`` supplies the
+    value (the argument wins). A soft RLIMIT is the only portable lever over
+    the native layers' allocation; past it the engines raise rather than the
+    machine swapping. Best-effort: where setrlimit is absent (Windows) or
+    refused, the command still runs.
     """
-    mb = _positive_int(os.environ.get(MAX_MEMORY_ENV))
+    mb = max_mb if max_mb and max_mb > 0 else _positive_int(os.environ.get(MAX_MEMORY_ENV))
     setrlimit = getattr(resource, 'setrlimit', None)
     rlimit_as = getattr(resource, 'RLIMIT_AS', None)
     getrlimit = getattr(resource, 'getrlimit', None)
