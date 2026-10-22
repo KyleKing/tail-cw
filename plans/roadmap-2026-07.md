@@ -133,17 +133,13 @@ Shipped except compaction, which waits on M13's read numbers.
 ### M16 CPU and peak memory on a constrained laptop
 
 Effort: medium.
-The ceiling, the low-impact profile, and the TUI refetch debounce shipped; what remains
-is tightening them.
+The ceiling, the low-impact profile, and the TUI refetch debounce shipped; the
+tightening shipped too: a default ceiling derived from physical memory, fewer segment
+writers under a tight budget, batched reads with bounded fetches, a `nice` on TUI
+fetches under `low-impact` (named in the status line), and the 1.5M-event
+`getrusage` test.
+What remains:
 
-- Derive a default memory ceiling from physical memory (`os.sysconf`, no `psutil`) as a
-    fraction, and give a tight budget two more effects: fewer concurrent segment writers,
-    and streaming collects in place of full ones for the local scans
-- `nice` the TUI's background fetches under `low-impact` too, and name the profile in the
-    status line so a slow answer has a visible reason
-- Back the budget with a test that runs a synthetic 1.5M-event window under a lowered
-    ceiling and asserts the run completes, with the peak RSS read from `getrusage` and
-    compared to the ceiling with a generous margin (no wall-clock assertion)
 - Push regex and numeric filters down (carried item below), because a narrower
     cold download is the largest single cut in CPU, memory, and disk at once
 

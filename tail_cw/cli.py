@@ -24,7 +24,7 @@ except ImportError:  # Windows has no resource module
     resource = None  # type: ignore[assignment]
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager, nullcontext, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from functools import partial
@@ -86,6 +86,7 @@ from tail_cw.concurrency import INTERRUPTED_EXIT, closing_stream, consume_in_thr
 from tail_cw.config import TailCWConfig, get_default_cache_dir, load_config
 from tail_cw.cpu_budget import (
     LOW_IMPACT_ENV,
+    TIGHT_MEMORY_MB,
     apply_memory_ceiling,
     lower_priority_for_batch_work,
     max_threads,
@@ -664,6 +665,7 @@ async def resolve_parquet_path(
     ttl_arg: str | None = None,
     max_disk_mb: int | None = None,
     sparse_paths: list[Path] | None = None,
+    shared_cache: LogCache | None = None,
 ) -> list[Path]:
     """Return the cached Parquet segments for one request, fetching on miss.
 
@@ -671,7 +673,8 @@ async def resolve_parquet_path(
     """
     notices: list[str] = []
     budget = _DiskBudget(max_bytes=max_disk_mb * 1024 * 1024 if max_disk_mb is not None else None)
-    with open_log_cache(config, ttl_arg=ttl_arg) as cache, command_lock(request_cache_dir(config)):
+    managed = nullcontext(shared_cache) if shared_cache is not None else open_log_cache(config, ttl_arg=ttl_arg)
+    with managed as cache, cache.command_scope(), command_lock(request_cache_dir(config)):
         paths = await _resolve_into_cache(
             client,
             request,
@@ -706,6 +709,7 @@ async def resolve_parquet_paths(
     ttl_arg: str | None = None,
     max_disk_mb: int | None = None,
     sparse_paths: list[Path] | None = None,
+    shared_cache: LogCache | None = None,
 ) -> list[Path]:
     """Resolve several fetches concurrently, dropping the ones with no events.
 
@@ -737,7 +741,10 @@ async def resolve_parquet_paths(
     notices: list[str] = []
     budget = _FetchBudget(limit=limit) if limit is not None and limit > 0 else None
     disk_budget = _DiskBudget(max_bytes=max_disk_mb * 1024 * 1024 if max_disk_mb is not None else None)
-    with open_log_cache(config, ttl_arg=ttl_arg) as cache, command_lock(request_cache_dir(config)):
+    # A caller-owned cache (the TUI) keeps its seeded bookkeeping across
+    # commands; ``command_scope`` resets only per-command state.
+    managed = nullcontext(shared_cache) if shared_cache is not None else open_log_cache(config, ttl_arg=ttl_arg)
+    with managed as cache, cache.command_scope(), command_lock(request_cache_dir(config)):
 
         async def resolve(request: FetchRequest) -> list[Path]:
             return await _resolve_into_cache(
@@ -926,8 +933,11 @@ def _load_config_or_report(args: argparse.Namespace) -> TailCWConfig | None:
         return None
     if args.region is None:
         args.region = config.aws.region
-    if config.resources.max_memory_mb:
-        apply_memory_ceiling(config.resources.max_memory_mb)
+    ceiling_mb = apply_memory_ceiling(config.resources.max_memory_mb or None)
+    if ceiling_mb is not None and ceiling_mb < TIGHT_MEMORY_MB:
+        # A tight budget can afford roughly one in-flight segment per GB; each
+        # writer holds a segment's events plus its Parquet buffers at once.
+        config.fetch.max_concurrent_segments = min(config.fetch.max_concurrent_segments, max(1, ceiling_mb // 1024))
     if config.resources.profile == 'low-impact':
         config.fetch.max_concurrent_segments = 1
         os.environ.setdefault(LOW_IMPACT_ENV, '1')

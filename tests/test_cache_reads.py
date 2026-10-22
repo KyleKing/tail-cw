@@ -103,3 +103,30 @@ def test_status_reports_read_activity_and_top_groups(fix_test_cache: Path):
     assert status.bytes_used > 0
     unread = dict(status.top_groups)
     assert status.reads.bytes_never_read == unread['/aws/lambda/big']
+
+
+def test_last_reads_parses_once_until_the_log_grows(fix_test_cache: Path, monkeypatch):
+    calls = []
+    real = reads.last_reads
+
+    def counting(cache_dir: Path) -> dict[str, datetime]:
+        calls.append(cache_dir)
+        return real(cache_dir)
+
+    monkeypatch.setattr(reads, 'last_reads', counting)
+
+    with LogCache(fix_test_cache / 'c') as cache:
+        cache.write(make_events(['a']), _key(), log_group='/aws/lambda/fn')
+        cache.get_parquet_path(_key())
+
+        first = cache._fresh_last_reads()
+        assert len(calls) == 1
+        assert _key() in first
+
+        cache._fresh_last_reads()
+        cache._fresh_last_reads()
+        assert len(calls) == 1
+
+        reads.record(cache._cache_dir, op='hit', key=_key(), log_group='/aws/lambda/fn')
+        cache._fresh_last_reads()
+        assert len(calls) == 2

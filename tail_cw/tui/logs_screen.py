@@ -35,6 +35,7 @@ from tail_cw.charts.sparkline import sparkline_blocks
 from tail_cw.cli import server_side_pattern
 from tail_cw.concurrency import closing_stream
 from tail_cw.config import TailCWConfig
+from tail_cw.cpu_budget import low_impact
 from tail_cw.histogram import bucket_events, histogram_headline
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.expression import parse_query
@@ -588,7 +589,8 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         ``MarkupError`` from inside the update. That took the whole app down on
         any failed search, so the error handler was worse than the error.
         """
-        self.query_one('#status', Label).update(Text(message))
+        suffix = ' · low-impact' if low_impact() else ''
+        self.query_one('#status', Label).update(Text(message + suffix))
 
     def on_progress_update(self, message: ProgressUpdate) -> None:
         """Show a worker's progress on the status line."""

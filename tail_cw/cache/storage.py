@@ -15,7 +15,7 @@ import statistics
 import tempfile
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from operator import itemgetter
@@ -889,6 +889,7 @@ class LogCache:
         self._max_segment_bytes = max_segment_mb * 1024 * 1024
         self._sparse_only = sparse_only
         self.sparse: list[Path] = []
+        self._sparse_sizes: dict[Path, int] = {}
         self._inflight: set[Path] = set()
         self._inflight_lock = Lock()
         # Bookkeeping kept current by every mutation below, so the per-segment
@@ -897,6 +898,9 @@ class LogCache:
         self._sizes_seeded = False
         self._all_sizes: list[int] = []
         self._group_sizes: dict[str | None, list[int]] = defaultdict(list)
+        self._command_depth = 0
+        self._last_reads_marker: tuple[int, int] | None = None
+        self._last_reads: dict[str, datetime] = {}
 
         # Create directories
         self._cache_dir.mkdir(parents=True, exist_ok=True)
@@ -916,10 +920,10 @@ class LogCache:
             disk_compress_level=1,
         )
         self._prune_superseded_entries()
-        # Seeded once after pruning, then adjusted by every write and delete;
-        # a file removed outside this object leaves it high, which errs toward
-        # sparse mode rather than overflow.
-        self._bytes_on_disk = self._glob_disk_bytes()
+        # Lazily seeded from disk on first budget question, then adjusted by
+        # every write and delete; a file removed outside this object leaves it
+        # high, which errs toward sparse mode rather than overflow.
+        self._bytes_on_disk: int | None = None
 
     def _prune_superseded_entries(self) -> int:
         """Delete entries written under an older cache schema, files included.
@@ -945,7 +949,8 @@ class LogCache:
     def _track_entry(self, path: Path, size: int, group: str | None) -> None:
         """Account a new live entry in the incremental totals."""
         self._written.add(path)
-        self._bytes_on_disk += size
+        if self._bytes_on_disk is not None:
+            self._bytes_on_disk += size
         if self._sizes_seeded:
             self._all_sizes.append(size)
             self._group_sizes[group].append(size)
@@ -967,7 +972,8 @@ class LogCache:
         """
         self._metadata.delete(cache_key)
         entry.path.unlink(missing_ok=True)
-        self._bytes_on_disk -= entry.size
+        if self._bytes_on_disk is not None:
+            self._bytes_on_disk -= entry.size
         self._untrack_size(entry.size, entry.group)
         self._written.discard(entry.path)
         if scan is not None:
@@ -1010,7 +1016,8 @@ class LogCache:
                 except OSError:
                     continue
                 parquet_file.unlink(missing_ok=True)
-                self._bytes_on_disk -= size
+                if self._bytes_on_disk is not None:
+                    self._bytes_on_disk -= size
                 cleaned_count += 1
 
         return cleaned_count
@@ -1054,7 +1061,7 @@ class LogCache:
             return 0
         scan = scan or self._scan_entries()
         if last_read is None:
-            last_read = _reads.last_reads(self._cache_dir)
+            last_read = self._fresh_last_reads()
         candidates: list[tuple[datetime, str, _LiveEntry]] = []
         for key, entry in scan.live.items():
             if entry.expires_at is not None or entry.path in self._written:
@@ -1142,6 +1149,8 @@ class LogCache:
         return self._sparse_only
 
     def _size_on_disk(self) -> int:
+        if self._bytes_on_disk is None:
+            self._bytes_on_disk = self._glob_disk_bytes()
         return self._bytes_on_disk
 
     def _glob_disk_bytes(self) -> int:
@@ -1181,7 +1190,9 @@ class LogCache:
             path = Path(handle.name)
         stats = write_log_events_to_parquet(log_events, path, staging_dir=self._staging_dir())
         self.sparse.append(path)
-        self._bytes_on_disk += stats['file_size_bytes']
+        self._sparse_sizes[path] = stats['file_size_bytes']
+        if self._bytes_on_disk is not None:
+            self._bytes_on_disk += stats['file_size_bytes']
         _reads.record(
             self._cache_dir,
             op='write',
@@ -1190,6 +1201,23 @@ class LogCache:
             bytes_served=stats['file_size_bytes'],
         )
         return path
+
+    def _fresh_last_reads(self) -> dict[str, datetime]:
+        """Parse the read log again only when it has grown on disk.
+
+        The log is append-only, so ``(mtime, size)`` changes exactly when the
+        content does — the 24-hour protection still sees a hit served seconds
+        ago.
+        """
+        try:
+            stat = (self._cache_dir / _reads.READS_FILENAME).stat()
+            marker = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            marker = None
+        if self._last_reads_marker != marker:
+            self._last_reads = _reads.last_reads(self._cache_dir)
+            self._last_reads_marker = marker
+        return self._last_reads
 
     def maintain(self, *, now: datetime | None = None) -> int:
         """Run the once-per-command sweeps: expiry, orphans, read TTL, stale staging.
@@ -1207,7 +1235,7 @@ class LogCache:
         self._metadata.cull()
         scan = self._scan_entries()
         cleaned = self._cleanup_orphaned_files(scan)
-        last_read = _reads.last_reads(self._cache_dir)
+        last_read = self._fresh_last_reads()
         self._expire_read_ttl(moment, scan=scan, last_read=last_read)
         self._enforce_parquet_size_limit(scan, last_read)
         self._enforce_group_quota(scan, last_read)
@@ -1225,7 +1253,7 @@ class LogCache:
             return 0
         scan = scan or self._scan_entries()
         if last_read is None:
-            last_read = _reads.last_reads(self._cache_dir)
+            last_read = self._fresh_last_reads()
         candidates = [
             (last_read.get(key) or _birth(entry.path), key, entry.group, entry)
             for key, entry in scan.live.items()
@@ -1257,7 +1285,7 @@ class LogCache:
         cutoff = now - timedelta(seconds=float(self._read_ttl))
         scan = scan or self._scan_entries()
         if last_read is None:
-            last_read = _reads.last_reads(self._cache_dir)
+            last_read = self._fresh_last_reads()
         evicted = 0
         for key, entry in list(scan.live.items()):
             if entry.expires_at is not None:
@@ -1286,17 +1314,19 @@ class LogCache:
                 continue
             if now.timestamp() - stat.st_mtime > _STALE_STAGING.total_seconds():
                 child.unlink(missing_ok=True)
-                self._bytes_on_disk -= stat.st_size
+                if self._bytes_on_disk is not None:
+                    self._bytes_on_disk -= stat.st_size
                 swept += 1
         return swept
 
     def drop_sparse(self) -> None:
         """Delete every sparse file this cache wrote, when the command is done with them."""
         for path in self.sparse:
-            with suppress(OSError):
-                self._bytes_on_disk -= path.stat().st_size
+            if self._bytes_on_disk is not None:
+                self._bytes_on_disk -= self._sparse_sizes.get(path, 0)
             path.unlink(missing_ok=True)
         self.sparse.clear()
+        self._sparse_sizes.clear()
 
     def status(self) -> CacheStatus:
         """Report what is on disk against the limit, without changing anything.
@@ -1603,8 +1633,9 @@ class LogCache:
         # Delete all Parquet files
         for parquet_file in self._parquet_dir.glob('*.parquet'):
             parquet_file.unlink()
-        self._bytes_on_disk = self._glob_disk_bytes()
+        self._bytes_on_disk = self._glob_disk_bytes() if self._bytes_on_disk is not None else None
         self._written.clear()
+        self._sparse_sizes.clear()
         self._sizes_seeded = False
         self._all_sizes.clear()
         self._group_sizes.clear()
@@ -1628,3 +1659,28 @@ class LogCache:
     def __exit__(self, *args: object) -> None:
         """Context manager exit."""
         self.close()
+
+    @contextmanager
+    def command_scope(self) -> Iterator[LogCache]:
+        """Reset per-command state on a long-lived cache for one command's lifetime.
+
+        Resets only at the start of the first of possibly overlapping commands,
+        so one command never strips another's ``_written``/``sparse`` shield.
+        Sparse files the caller already dropped get uncounted here — the only
+        place a long-lived cache learns they are gone.
+
+        Yields:
+            This cache, for ``with`` chaining.
+        """
+        self._command_depth += 1
+        if self._command_depth == 1:
+            self._written.clear()
+            for path in list(self.sparse):
+                if not path.exists():
+                    self.sparse.remove(path)
+                    if self._bytes_on_disk is not None:
+                        self._bytes_on_disk -= self._sparse_sizes.pop(path, 0)
+        try:
+            yield self
+        finally:
+            self._command_depth -= 1

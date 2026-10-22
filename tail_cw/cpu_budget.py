@@ -24,6 +24,7 @@ from __future__ import annotations
 import contextlib
 import math
 import os
+import platform
 import sys
 import threading
 
@@ -128,28 +129,53 @@ def apply_native_thread_limits() -> None:
     os.environ.setdefault(POLARS_THREADS_ENV, str(max_threads()))
 
 
-def apply_memory_ceiling(max_mb: int | None = None) -> None:
+def apply_memory_ceiling(max_mb: int | None = None) -> int | None:
     """Bound the process's address space.
 
     ``TAIL_CW_MAX_MEMORY_MB`` or ``[resources].max_memory_mb`` supplies the
-    value (the argument wins). A soft RLIMIT is the only portable lever over
-    the native layers' allocation; past it the engines raise rather than the
-    machine swapping. Best-effort: where setrlimit is absent (Windows) or
-    refused, the command still runs.
+    value (the argument wins); when neither does, a fraction of physical memory
+    is derived, so a runaway still trips a bound instead of swapping the
+    machine. A soft RLIMIT is the only portable lever over the native layers'
+    allocation; past it the engines raise rather than swap. Best-effort: where
+    setrlimit is absent (Windows) or refused, the command still runs — the
+    refusal only warns when the ceiling was asked for explicitly, since a
+    derived default the user never requested is not worth a stderr line.
+
+    Returns:
+        The effective ceiling in MB (explicit or derived), or None when no
+        memory could be measured, so callers can tighten other budgets.
     """
-    mb = max_mb if max_mb and max_mb > 0 else _positive_int(os.environ.get(MAX_MEMORY_ENV))
+    explicit = max_mb if max_mb and max_mb > 0 else _positive_int(os.environ.get(MAX_MEMORY_ENV))
+    mb = explicit if explicit is not None else default_memory_ceiling_mb()
+    _MEMORY_CEILING['mb'] = mb
     setrlimit = getattr(resource, 'setrlimit', None)
     rlimit_as = getattr(resource, 'RLIMIT_AS', None)
     getrlimit = getattr(resource, 'getrlimit', None)
     if mb is None or setrlimit is None or rlimit_as is None or getrlimit is None:
-        return
+        return mb
     try:
         _soft, hard = getrlimit(rlimit_as)
         setrlimit(rlimit_as, (mb * 1024 * 1024, hard))
     except (OSError, ValueError):
         # macOS refuses RLIMIT_AS at every value, so the warning has to say the
         # ceiling was asked for and could not be set, not just that it is absent.
-        sys.stderr.write(f'{MAX_MEMORY_ENV}={mb} could not be applied on this platform\n')
+        if explicit is not None:
+            sys.stderr.write(f'{MAX_MEMORY_ENV}={mb} could not be applied on this platform\n')
+    return mb
+
+
+def renice_fetch_thread() -> None:
+    """Lower this fetch thread's priority under the low-impact profile.
+
+    ``nice()`` is per-thread on Linux and per-process on macOS/BSD, so it is
+    applied only where it cannot drag the interactive app down with it.
+    """
+    if not low_impact() or platform.system() != 'Linux':
+        return
+    nice = getattr(os, 'nice', None)
+    if nice is not None:
+        with contextlib.suppress(OSError):
+            nice(DEFAULT_NICE_INCREMENT)
 
 
 def lower_priority_for_batch_work() -> None:
@@ -184,3 +210,41 @@ def _positive_float(value: str | None) -> float | None:
     except ValueError:
         return None
     return parsed if parsed > 0 else None
+
+
+DEFAULT_MEMORY_FRACTION = 0.5
+"""Share of physical memory a run may address when no ceiling is configured."""
+
+TIGHT_MEMORY_MB = 2048
+"""A ceiling under this counts as tight: segment writers shrink to leave headroom."""
+
+_MEMORY_CEILING: dict[str, int | None] = {'mb': None}
+"""The ceiling the running process committed to, visible to the query engines."""
+
+
+def physical_memory_mb() -> int | None:
+    """Physical RAM in MB, or None where the OS will not say (Windows)."""
+    sysconf = getattr(os, 'sysconf', None)
+    if sysconf is None:
+        return None
+    try:
+        return int(sysconf('SC_PHYS_PAGES') * sysconf('SC_PAGE_SIZE') / 1048576)
+    except (OSError, ValueError):
+        return None
+
+
+def default_memory_ceiling_mb() -> int | None:
+    """The ceiling a run gets when nothing configures one: a fraction of physical RAM."""
+    physical = physical_memory_mb()
+    return int(physical * DEFAULT_MEMORY_FRACTION) if physical else None
+
+
+def memory_ceiling_mb() -> int | None:
+    """The ceiling in force, for parts of the process that can honor it natively."""
+    return _MEMORY_CEILING['mb']
+
+
+def duckdb_memory_limit() -> str | None:
+    """The ``SET memory_limit`` value a DuckDB connection should adopt, if any."""
+    mb = _MEMORY_CEILING['mb']
+    return f'{max(256, mb // 2)}MB' if mb else None

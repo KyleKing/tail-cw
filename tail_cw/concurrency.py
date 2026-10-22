@@ -95,13 +95,18 @@ def fetch_pool(max_workers: int = DEFAULT_FETCH_WORKERS) -> Iterator[ThreadPoolE
     Yields:
         The pool, shut down when the block exits.
     """
-    with _named_pool('tail-cw-fetch', max_workers) as pool:
+    # Local import: cpu_budget imports this module's DEFAULT_BLOCKING_WORKERS.
+    from tail_cw.cpu_budget import renice_fetch_thread  # noqa: PLC0415
+
+    with _named_pool('tail-cw-fetch', max_workers, initializer=renice_fetch_thread) as pool:
         yield pool
 
 
 @contextmanager
-def _named_pool(prefix: str, max_workers: int) -> Iterator[ThreadPoolExecutor]:
-    pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix=prefix)
+def _named_pool(
+    prefix: str, max_workers: int, initializer: Callable[[], None] | None = None
+) -> Iterator[ThreadPoolExecutor]:
+    pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix=prefix, initializer=initializer)
     try:
         yield pool
     finally:

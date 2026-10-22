@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
+import tail_cw.cli as tail_cw_cli
 from tail_cw.aws.alarms import AlarmSummary, AlarmTransition
 from tail_cw.aws.dashboards import Dashboard, DashboardSummary, TextWidget, WidgetLayout
 from tail_cw.aws.events import LogEvent
@@ -34,6 +35,7 @@ from tail_cw.cli import (
     expand_filter,
     expand_presets,
     iter_tail_events,
+    open_log_cache,
     parse_time,
     resolve_parquet_path,
     resolve_parquet_paths,
@@ -2168,3 +2170,26 @@ def test_stream_ndjson_counts_into_a_holder_that_survives_the_interrupt():
 
     assert written == 3
     assert count.written == 3
+
+
+async def test_resolve_parquet_path_reuses_a_caller_owned_cache(tmp_path, monkeypatch):
+    opens = []
+    real_open = open_log_cache
+
+    def counting(*args, **kwargs):
+        opens.append(args)
+        return real_open(*args, **kwargs)
+
+    monkeypatch.setattr(tail_cw_cli, 'open_log_cache', counting)
+    config = _make_config(tmp_path)
+
+    with real_open(config) as cache:
+        await resolve_parquet_path(
+            _CLIENT, _make_request(), config, fetch_events=_FakeFetcher(_make_events()), shared_cache=cache
+        )
+        await resolve_parquet_path(
+            _CLIENT, _make_request(), config, fetch_events=_FakeFetcher(_make_events()), shared_cache=cache
+        )
+
+        assert opens == []
+        assert cache.status() is not None  # the shared instance was not closed by a command

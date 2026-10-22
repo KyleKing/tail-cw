@@ -26,8 +26,16 @@ from tail_cw.aws.live_tail import stream_live_tail
 from tail_cw.aws.log_groups import LogGroupInfo, describe_log_groups
 from tail_cw.aws.metrics import MetricSeries, fetch_metric_data
 from tail_cw.aws.xray import XRayTrace, batch_get_traces
-from tail_cw.cache.storage import read_parquet_to_log_events
-from tail_cw.cli import FetchRequest, NoticeSink, Session, ShellSeed, dispatch, resolve_parquet_paths
+from tail_cw.cache.storage import LogCache, read_parquet_to_log_events
+from tail_cw.cli import (
+    FetchRequest,
+    NoticeSink,
+    Session,
+    ShellSeed,
+    dispatch,
+    open_log_cache,
+    resolve_parquet_paths,
+)
 from tail_cw.concurrency import blocking_pool, fetch_pool, run_blocking, take
 from tail_cw.config import TailCWConfig
 from tail_cw.demo import (
@@ -182,12 +190,16 @@ def _cache_services(
     fetch_executor: ThreadPoolExecutor,
     *,
     on_notice: NoticeSink,
+    cache: LogCache | None = None,
 ) -> tuple[ResolveLogs, LogVolume, CountEvents, LoadTraces, FieldFacets]:
     """Build the services that end in blocking Parquet work.
 
     Query work goes to ``executor`` and segment writes to ``fetch_executor``, so a
     fetch filling its own pool cannot make a search wait.
     """
+    # A shared cache serializes commands: its per-command state is scoped, not
+    # built for concurrency.
+    resolve_lock = asyncio.Lock()
 
     async def resolve_logs(groups: Sequence[str], start: datetime, end: datetime) -> list[Path]:
         requests = [
@@ -200,15 +212,17 @@ def _cache_services(
             )
             for group in groups
         ]
-        return await resolve_parquet_paths(
-            await pool.client('logs'),
-            requests,
-            config,
-            executor=fetch_executor,
-            on_notice=on_notice,
-            ttl_arg=session.cache_ttl,
-            max_disk_mb=session.max_disk_mb,
-        )
+        async with resolve_lock:
+            return await resolve_parquet_paths(
+                await pool.client('logs'),
+                requests,
+                config,
+                executor=fetch_executor,
+                on_notice=on_notice,
+                ttl_arg=session.cache_ttl,
+                max_disk_mb=session.max_disk_mb,
+                shared_cache=cache,
+            )
 
     async def log_volume(log_group: str, start: datetime, end: datetime) -> list[float]:
         paths = await resolve_logs([log_group], start, end)
@@ -309,6 +323,7 @@ def _live_services(
     fetch_executor: ThreadPoolExecutor,
     *,
     on_notice: NoticeSink,
+    cache: LogCache | None = None,
 ) -> ShellServices:
     resolve_logs, log_volume, count_events, load_traces, field_facets = _cache_services(
         config,
@@ -317,6 +332,7 @@ def _live_services(
         executor,
         fetch_executor,
         on_notice=on_notice,
+        cache=cache,
     )
     list_alarms, run_insights, sample_rates, fetch_xray_trace = _cloudwatch_services(pool)
 
@@ -414,10 +430,15 @@ async def _run_shell_async(config: TailCWConfig, session: Session, seed: ShellSe
 
     with blocking_pool() as executor, fetch_pool(config.fetch.max_concurrent_segments) as fetch_executor:
         async with client_pool(profile_name=session.profile, region_name=session.region) as pool:
-            services = _live_services(config, session, pool, executor, fetch_executor, on_notice=report)
-            app = _build_app(config, session, seed, services)
-            sink.append(lambda notice: app.notify(notice, title='Cached payload', severity='warning', timeout=12))
-            await app.run_async()
+            # One cache for the session: a fresh one re-seeds its size bookkeeping
+            # on every refetch, which is a directory walk per refresh.
+            with open_log_cache(config, ttl_arg=session.cache_ttl) as cache:
+                services = _live_services(
+                    config, session, pool, executor, fetch_executor, on_notice=report, cache=cache
+                )
+                app = _build_app(config, session, seed, services)
+                sink.append(lambda notice: app.notify(notice, title='Cached payload', severity='warning', timeout=12))
+                await app.run_async()
 
 
 def _run_shell(config: TailCWConfig, session: Session, seed: ShellSeed) -> None:

@@ -26,7 +26,7 @@ import polars as pl
 from tail_cw.aws.events import LogEvent
 from tail_cw.cache.records import readable_message
 from tail_cw.concurrency import is_engine_panic
-from tail_cw.cpu_budget import duckdb_threads
+from tail_cw.cpu_budget import duckdb_memory_limit, duckdb_threads
 from tail_cw.query.parser import FilterNode, FilterNodeType
 
 MAX_POLARS_FIELD_DEPTH = 2
@@ -294,41 +294,72 @@ def _query_with_duckdb(
     """
     try:
         with duckdb.connect() as con:
-            con.execute(f'SET threads = {duckdb_threads()}')
+            _configure_duckdb(con)
             described = con.execute('DESCRIBE SELECT * FROM read_parquet(?)', [str(parquet_path)]).fetchall()
             columns = [row[0] for row in described]
             params: list[Any] = [str(parquet_path)]
             source, where = duckdb_source_and_where(columns, filter_node)
-
-            # Datetimes come back as epoch microseconds and are rebuilt below. DuckDB's
-            # own conversion of a timezone-aware timestamp needs pytz, and reading
-            # through Arrow needs pyarrow; neither is worth a dependency.
-            projection = ', '.join(
-                [
-                    f'* EXCLUDE ({", ".join([*_TIME_COLUMNS, SEARCH_TEXT])})'
-                    if where
-                    else f'* EXCLUDE ({", ".join(_TIME_COLUMNS)})'
-                ]
-                + [f'epoch_us({name}) AS {name}' for name in _TIME_COLUMNS],
-            )
-            sql = f'SELECT {projection} FROM {source}{where}'  # noqa: S608
-
-            if limit is not None:
-                sql += ' LIMIT ?'
-                params.append(limit)
-
-            cursor = con.execute(sql, params)
-            names = [description[0] for description in cursor.description or []]
-            for row in cursor.fetchall():
-                record = dict(zip(names, row, strict=False))
-                yield {**record, **{name: _from_epoch_us(record.get(name)) for name in _TIME_COLUMNS}}
+            yield from _stream_duckdb_rows(con, source, where, params, limit)
 
     except duckdb.Error as e:
         msg = f'DuckDB query failed: {e}'
         raise ValueError(msg) from e
 
 
-def duckdb_source_and_where(columns: Sequence[str], filter_node: FilterNode | None) -> tuple[str, str]:
+_FETCH_BATCH = 4096
+"""Rows pulled from a DuckDB cursor at once; bounds the Python-side copy of a result."""
+
+
+def _configure_duckdb(con: duckdb.DuckDBPyConnection) -> None:
+    """Apply the shared engine budgets to a fresh connection."""
+    con.execute(f'SET threads = {duckdb_threads()}')
+    if limit := duckdb_memory_limit():
+        con.execute(f"SET memory_limit = '{limit}'")
+
+
+def _stream_duckdb_rows(
+    con: duckdb.DuckDBPyConnection,
+    source: str,
+    where: str,
+    params: list[Any],
+    limit: int | None,
+    *,
+    sort: bool = False,
+) -> Iterator[dict[str, Any]]:
+    """Run one projected query and yield rows in bounded batches.
+
+    Datetimes come back as epoch microseconds and are rebuilt below. DuckDB's
+    own conversion of a timezone-aware timestamp needs pytz, and reading
+    through Arrow needs pyarrow; neither is worth a dependency.
+
+    Yields:
+        Dict for each result row, timestamps as UTC datetimes.
+    """
+    projection = ', '.join(
+        [
+            f'* EXCLUDE ({", ".join([*_TIME_COLUMNS, SEARCH_TEXT])})'
+            if where
+            else f'* EXCLUDE ({", ".join(_TIME_COLUMNS)})'
+        ]
+        + [f'epoch_us({name}) AS {name}' for name in _TIME_COLUMNS],
+    )
+    sql = f'SELECT {projection} FROM {source}{where}'  # noqa: S608
+    if sort:
+        sql += ' ORDER BY "timestamp"'
+    if limit is not None:
+        sql += ' LIMIT ?'
+        params.append(limit)
+    cursor = con.execute(sql, params)
+    names = [description[0] for description in cursor.description or []]
+    while batch := cursor.fetchmany(_FETCH_BATCH):
+        for row in batch:
+            record = dict(zip(names, row, strict=False))
+            yield {**record, **{name: _from_epoch_us(record.get(name)) for name in _TIME_COLUMNS}}
+
+
+def duckdb_source_and_where(
+    columns: Sequence[str], filter_node: FilterNode | None, *, union_by_name: bool = False
+) -> tuple[str, str]:
     """Build the ``FROM`` source and ``WHERE`` clause one filtered Parquet read needs.
 
     A text search reads a column that does not exist in the file, so the filter
@@ -338,16 +369,18 @@ def duckdb_source_and_where(columns: Sequence[str], filter_node: FilterNode | No
     Args:
         columns: Column names the file actually has.
         filter_node: Parsed filter, or None for an unfiltered read.
+        union_by_name: The parameter is a list of paths rather than one path.
 
     Returns:
-        The source expression, which takes the file path as its one parameter,
+        The source expression, which takes the file path(s) as its one parameter,
         and the ``WHERE`` clause including its leading space (empty when
         unfiltered).
     """
+    read = 'read_parquet(?, union_by_name=true)' if union_by_name else 'read_parquet(?)'
     if filter_node is None or filter_node.node_type == FilterNodeType.MATCH_ALL:
-        return 'read_parquet(?)', ''
+        return read, ''
     text_sql = _search_text_sql(has_parsed='parsed' in columns)
-    source = f'(SELECT *, {text_sql} AS {SEARCH_TEXT} FROM read_parquet(?))'  # noqa: S608
+    source = f'(SELECT *, {text_sql} AS {SEARCH_TEXT} FROM {read})'  # noqa: S608
     # Values reaching the clause are escaped by _escape_sql_string; the identifiers are
     # module constants.
     return source, f' WHERE {build_duckdb_where_clause(filter_node)}'
@@ -556,6 +589,63 @@ def _query_with_polars(
     except pl.exceptions.PolarsError as e:
         msg = f'Polars query failed: {e}'
         raise ValueError(msg) from e
+
+
+def _query_files_duckdb(
+    parquet_paths: Sequence[Path],
+    filter_node: FilterNode | None,
+    limit: int | None,
+) -> Iterator[dict[str, Any]]:
+    """Read many segment files as one unioned, timestamp-sorted scan.
+
+    ``union_by_name`` merges the ``parsed`` structs, so rows missing a field
+    read it as NULL — the answer the per-file skip gives a positive filter,
+    and a match for a negated one.
+
+    Yields:
+        Dict for each result row, timestamps as UTC datetimes.
+    """
+    try:
+        with duckdb.connect() as con:
+            _configure_duckdb(con)
+            paths = [str(path) for path in parquet_paths]
+            described = con.execute('DESCRIBE SELECT * FROM read_parquet(?, union_by_name=true)', [paths]).fetchall()
+            columns = [row[0] for row in described]
+            source, where = duckdb_source_and_where(columns, filter_node, union_by_name=True)
+            yield from _stream_duckdb_rows(con, source, where, [paths], limit, sort=True)
+    except BaseException as err:
+        if not is_engine_panic(err):
+            raise
+        raise EnginePanicError(Path('<batched read>'), err) from err
+
+
+def _query_files_polars(
+    parquet_paths: Sequence[Path],
+    filter_node: FilterNode | None,
+    limit: int | None,
+) -> Iterator[dict[str, Any]]:
+    """Read many segment files as one concatenated, timestamp-sorted scan.
+
+    Yields:
+        Dict for each result row, timestamps as UTC datetimes.
+    """
+    try:
+        lf = pl.concat([pl.scan_parquet(str(path)) for path in parquet_paths], how='diagonal_relaxed')
+        if filter_node is not None and filter_node.node_type != FilterNodeType.MATCH_ALL:
+            has_parsed = 'parsed' in lf.collect_schema()
+            lf = (
+                lf.with_columns(_polars_search_text(has_parsed=has_parsed).alias(SEARCH_TEXT))
+                .filter(_build_polars_filter_expr(filter_node))
+                .drop(SEARCH_TEXT)
+            )
+        lf = lf.sort('timestamp', maintain_order=True)
+        if limit is not None:
+            lf = lf.limit(limit)
+        yield from lf.collect(engine='streaming').iter_rows(named=True)
+    except BaseException as err:
+        if not is_engine_panic(err):
+            raise
+        raise EnginePanicError(Path('<batched read>'), err) from err
 
 
 def _build_polars_filter_expr(node: FilterNode) -> pl.Expr:
@@ -793,6 +883,26 @@ def query_parquet_file_to_log_events(
         yield _dict_to_log_event(row)
 
 
+def _merged_per_file(
+    parquet_paths: Sequence[Path],
+    filter_node: FilterNode | None,
+    *,
+    backend: QueryBackend,
+    limit: int | None,
+) -> Iterator[dict[str, Any]]:
+    """Query each file on its own schema and merge the sorted streams.
+
+    The fallback for a batched read that cannot run — mostly schema shapes the
+    union cannot express — and the path an explicit Polars request takes.
+
+    Yields:
+        Dict for each matching row, timestamps as UTC datetimes.
+    """
+    streams = [query_parquet_file(path, filter_node, backend=backend, limit=limit) for path in parquet_paths]
+    merged = heapq.merge(*streams, key=itemgetter('timestamp'))
+    yield from islice(merged, limit) if limit is not None else merged
+
+
 def query_parquet_files_to_records(
     parquet_paths: Sequence[Path],
     filter_node: FilterNode | None = None,
@@ -805,12 +915,28 @@ def query_parquet_files_to_records(
     The same merge as :func:`query_parquet_files_to_log_events`, except the row
     keeps ``parsed``, which a :class:`LogEvent` has nowhere to hold.
 
+    Several files go through one unioned scan — a single plan and a native sort
+    in place of a connection, a plan, and a Python-side merge per file. A read
+    that fails before producing its first row falls back to the per-file merge.
+
     Yields:
         Row dicts in ascending timestamp order across all files
     """
-    streams = [query_parquet_file(path, filter_node, backend=backend, limit=limit) for path in parquet_paths]
-    merged = heapq.merge(*streams, key=itemgetter('timestamp'))
-    yield from islice(merged, limit) if limit is not None else merged
+    if len(parquet_paths) > 1 and backend != QueryBackend.POLARS:
+        batched = _query_files_duckdb(parquet_paths, filter_node, limit)
+        try:
+            first = next(batched)
+        except StopIteration:
+            return
+        except BaseException as err:
+            if not (isinstance(err, Exception) or is_engine_panic(err)):
+                raise
+        else:
+            yield {**first, 'message': readable_message(first)}
+            for row in batched:
+                yield {**row, 'message': readable_message(row)}
+            return
+    yield from _merged_per_file(parquet_paths, filter_node, backend=backend, limit=limit)
 
 
 def query_parquet_files_to_log_events(
@@ -822,19 +948,14 @@ def query_parquet_files_to_log_events(
 ) -> Iterator[LogEvent]:
     """Query several Parquet files and yield their events merged by timestamp.
 
-    Each file holds one log group, so a multi-group search reads them
-    independently and interleaves the results. ``limit`` caps the merged
-    output rather than each file, and is also applied per file so a single
-    busy group cannot exhaust memory before the merge.
+    Each file holds one log group, so a multi-group search reads them together
+    and interleaves the results; ``limit`` caps the merged output.
 
     Yields:
         LogEvent instances in ascending timestamp order across all files
     """
-    streams = [
-        query_parquet_file_to_log_events(path, filter_node, backend=backend, limit=limit) for path in parquet_paths
-    ]
-    merged = heapq.merge(*streams, key=lambda event: event.timestamp)
-    yield from islice(merged, limit) if limit is not None else merged
+    for row in query_parquet_files_to_records(parquet_paths, filter_node, backend=backend, limit=limit):
+        yield _dict_to_log_event(row)
 
 
 def benchmark_backends(

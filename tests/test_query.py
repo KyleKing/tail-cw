@@ -18,6 +18,7 @@ from tail_cw.query.engine import (
     query_parquet_file_to_log_events,
     query_parquet_files_to_log_events,
 )
+from tail_cw.query.expression import parse_query
 from tail_cw.query.parser import (
     FilterNode,
     FilterNodeType,
@@ -890,3 +891,64 @@ def test_a_native_engine_panic_becomes_an_exception_callers_can_catch(tmp_path, 
 
     assert 'PanicException reading events.parquet' in str(caught.value)
     assert isinstance(caught.value, Exception), 'the whole point is that except Exception sees it'
+
+
+def test_a_batched_read_merges_groups_with_different_parsed_shapes(fix_test_cache):
+    """One unioned scan answers a window whose groups stored different fields."""
+    ts = datetime(2025, 1, 1, tzinfo=UTC)
+    with_level = fix_test_cache / 'shape_a.parquet'
+    with_extra = fix_test_cache / 'shape_b.parquet'
+    text_only = fix_test_cache / 'shape_c.parquet'
+    write_log_events_to_parquet(
+        [make_event('{"level":"info","msg":"up"}', log_group='/a', timestamp=ts)],
+        with_level,
+    )
+    write_log_events_to_parquet(
+        [make_event('{"extra":7,"msg":"mid"}', log_group='/b', timestamp=ts + timedelta(seconds=1))],
+        with_extra,
+    )
+    write_log_events_to_parquet(
+        [make_event('plain text', log_group='/c', timestamp=ts + timedelta(seconds=2))],
+        text_only,
+    )
+    paths = [with_level, with_extra, text_only]
+
+    results = list(query_parquet_files_to_log_events(paths))
+    assert [event.log_group for event in results] == ['/a', '/b', '/c']
+    assert next(iter(query_parquet_files_to_log_events(paths, parse_extended_filter('level:info')))).log_group == '/a'
+
+
+def test_a_negated_field_filter_survives_a_group_without_it(fix_test_cache):
+    """A ``NOT`` filter used to take the whole merge down when one group lacked the field."""
+    ts = datetime(2025, 1, 1, tzinfo=UTC)
+    with_level = fix_test_cache / 'neg_a.parquet'
+    text_only = fix_test_cache / 'neg_b.parquet'
+    write_log_events_to_parquet(
+        [
+            make_event('{"level":"info"}', log_group='/a', timestamp=ts),
+            make_event('{"level":"error"}', log_group='/a', timestamp=ts + timedelta(seconds=1)),
+        ],
+        with_level,
+    )
+    write_log_events_to_parquet(
+        [make_event('plain text', log_group='/b', timestamp=ts + timedelta(seconds=2))],
+        text_only,
+    )
+
+    results = list(query_parquet_files_to_log_events([with_level, text_only], parse_query('NOT level:info')))
+
+    assert [(event.log_group, event.message) for event in results] == [
+        ('/a', '{"level":"error"}'),
+        ('/b', 'plain text'),
+    ]
+
+
+def test_a_field_filter_on_window_with_no_parsed_at_all_is_empty_not_an_error(fix_test_cache):
+    """When no file in the window stores ``parsed``, a field filter answers nothing."""
+    ts = datetime(2025, 1, 1, tzinfo=UTC)
+    first = fix_test_cache / 'text_a.parquet'
+    second = fix_test_cache / 'text_b.parquet'
+    write_log_events_to_parquet([make_event('plain a', timestamp=ts)], first)
+    write_log_events_to_parquet([make_event('plain b', timestamp=ts + timedelta(seconds=1))], second)
+
+    assert list(query_parquet_files_to_log_events([first, second], parse_extended_filter('level:info'))) == []

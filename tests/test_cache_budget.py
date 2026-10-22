@@ -386,3 +386,30 @@ def test_resolve_cache_ttl_spells():
     assert resolve_cache_ttl('7d', config) == pytest.approx(7 * 86400.0)
     with pytest.raises(ValueError, match='cache-ttl'):
         resolve_cache_ttl('sometimes', config)
+
+
+def test_a_shared_cache_resets_command_state_once_per_command(fix_test_cache: Path):
+    with LogCache(fix_test_cache / 'c') as cache:
+        with cache.command_scope():
+            cache.write(make_events(['a']), _key(), log_group='/g')
+            assert cache._written
+
+            with cache.command_scope():
+                assert cache._written  # an overlapping command keeps the shield
+
+        with cache.command_scope():
+            assert not cache._written
+
+
+def test_a_shared_cache_uncounts_sparse_files_the_caller_dropped(fix_test_cache: Path):
+    with LogCache(fix_test_cache / 'c') as cache:
+        path = cache.write_sparse(make_events(['a', 'b']), log_group='/g')
+        used_after_write = cache._size_on_disk()
+        written_size = path.stat().st_size
+        path.unlink()  # the caller dropped it without telling the cache
+
+        with cache.command_scope():
+            pass
+
+        assert cache.sparse == []
+        assert cache._size_on_disk() == used_after_write - written_size

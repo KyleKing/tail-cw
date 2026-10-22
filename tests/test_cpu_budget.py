@@ -216,3 +216,49 @@ def test_the_memory_ceiling_applies_at_import():
         assert applied != 2048 * 1024 * 1024  # a platform that refuses says so out loud
     else:
         assert applied == 2048 * 1024 * 1024
+
+
+@pytest.mark.skipif(not cpu_budget.HAS_RLIMIT_AS, reason='no RLIMIT_AS')
+def test_a_1_5m_event_window_stays_under_a_lowered_ceiling(tmp_path):
+    """The budget test the ladder cannot fake: a real run, peak RSS read afterwards."""
+    code = """
+import resource, sys, tempfile
+from pathlib import Path
+from datetime import datetime, timedelta, UTC
+import tail_cw
+from tail_cw.aws.events import LogEvent
+from tail_cw.cache.storage import write_log_events_to_parquet
+from tail_cw.query.engine import query_parquet_files_to_records
+
+base = datetime(2025, 1, 1, tzinfo=UTC)
+
+def events(group, n):
+    for i in range(n):
+        t = base + timedelta(seconds=group * 250000 + i)
+        msg = f'{{"level":"info","msg":"event {i}"}}' if i % 2 == 0 else f'plain log line {i}'
+        yield LogEvent(log_group=f'/g{group}', log_stream='s', timestamp=t, message=msg, ingestion_time=t)
+
+with tempfile.TemporaryDirectory() as td:
+    paths = []
+    for group in range(6):
+        path = Path(td) / f'{group}.parquet'
+        write_log_events_to_parquet(events(group, 250000), path)
+        paths.append(path)
+    count = sum(1 for _ in query_parquet_files_to_records(paths))
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    peak_mb = peak / 1048576 if sys.platform == 'darwin' else peak / 1024
+    print(count, round(peak_mb))
+"""
+    result = subprocess.run(  # noqa: S603 - fixed argv, no input
+        [sys.executable, '-c', code],
+        env={**os.environ, MAX_MEMORY_ENV: '4096'},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=180,
+    )
+
+    assert result.returncode == 0, result.stderr
+    count, peak_mb = result.stdout.strip().split()[-2:]  # write_log_events_to_parquet draws a progress bar
+    assert int(count) == 1_500_000
+    assert float(peak_mb) <= 4096 * 1.5
