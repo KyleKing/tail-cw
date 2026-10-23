@@ -14,7 +14,7 @@ import shutil
 import statistics
 import tempfile
 from collections import defaultdict
-from collections.abc import Iterable, Iterator
+from collections.abc import Generator, Iterable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -1661,7 +1661,7 @@ class LogCache:
         self.close()
 
     @contextmanager
-    def command_scope(self) -> Iterator[LogCache]:
+    def command_scope(self) -> Generator[LogCache]:
         """Reset per-command state on a long-lived cache for one command's lifetime.
 
         Resets only at the start of the first of possibly overlapping commands,

@@ -6,7 +6,7 @@ import contextlib
 import io
 import json
 import signal
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -181,7 +181,7 @@ class _FakePool:
 
 
 @contextlib.asynccontextmanager
-async def _fake_client_pool(**kwargs: object) -> AsyncIterator[_FakePool]:
+async def _fake_client_pool(**kwargs: object) -> AsyncGenerator[_FakePool]:
     """Replacement for `client_pool` that records its credentials and opens nothing.
 
     Yields:
@@ -1217,7 +1217,7 @@ def test_run_cli_export_dashboards_threads_credentials(tmp_path, capsys, monkeyp
     pools: list[_FakePool] = []
 
     @contextlib.asynccontextmanager
-    async def _recording_pool(**kwargs: object) -> AsyncIterator[_FakePool]:
+    async def _recording_pool(**kwargs: object) -> AsyncGenerator[_FakePool]:
         pool = _FakePool()
         pool.opened_with = dict(kwargs)
         pools.append(pool)

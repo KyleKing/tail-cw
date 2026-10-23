@@ -197,6 +197,9 @@ known-first-party = ['tail_cw']
   'undocumented-public-module', # Missing docstring in public module
   'unused-function-argument', # Unused function argument: `line`
 ]
+'tests/conftest.py' = [
+  'pytest-fixture-autouse', # The autouse fixtures are hermeticity guards; every test needs them whether it asks or not
+]
 'tests/test_cache.py' = [
   'too-many-positional-arguments', # Too many positional arguments (6/5) - test helper function with many optional params
 ]

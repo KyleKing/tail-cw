@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from textual.pilot import Pilot
@@ -11,7 +11,7 @@ from tail_cw.tui.shell import TailCWApp
 
 
 @asynccontextmanager
-async def running(app: TailCWApp, *, settled: bool = False) -> AsyncIterator[Pilot[None]]:
+async def running(app: TailCWApp, *, settled: bool = False) -> AsyncGenerator[Pilot[None]]:
     """Run ``app`` with its opening view mounted.
 
     Args:

@@ -12,7 +12,7 @@ import contextlib
 import json
 import platform
 import subprocess  # noqa: S404 - pmset is the platform's own power status tool
-from collections.abc import Iterator
+from collections.abc import Generator
 from datetime import datetime
 from pathlib import Path
 
@@ -54,7 +54,7 @@ def save_marks(cache_dir: Path, marks: dict[str, datetime]) -> None:
 
 
 @contextlib.contextmanager
-def command_lock(cache_dir: Path) -> Iterator[bool]:
+def command_lock(cache_dir: Path) -> Generator[bool]:
     """Hold the advisory "a command is running" lock for this cache.
 
     A regular resolve does not need to win it (two exports may run at once); it

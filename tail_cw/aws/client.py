@@ -10,7 +10,7 @@ logic straightforward to test with a fake.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -79,7 +79,7 @@ async def client_pool(
     *,
     profile_name: str | None = None,
     region_name: str | None = None,
-) -> AsyncIterator[ClientPool]:
+) -> AsyncGenerator[ClientPool]:
     """Open a pool of AWS clients sharing one credential resolution.
 
     Resolves credentials through a named profile when given, otherwise the

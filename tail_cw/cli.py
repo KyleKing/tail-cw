@@ -22,7 +22,7 @@ try:
     import resource
 except ImportError:  # Windows has no resource module
     resource = None  # type: ignore[assignment]
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext, suppress
 from dataclasses import dataclass, field
@@ -2211,7 +2211,7 @@ def _hard_interrupt_on_signal(signum: int, frame: FrameType | None) -> None:  # 
 
 
 @contextmanager
-def _exit_immediately_on_interrupt() -> Iterator[None]:
+def _exit_immediately_on_interrupt() -> Generator[None]:
     """Install :func:`_hard_interrupt_on_signal` for SIGINT/SIGTERM, restoring on exit."""
     previous = {sig: signal.signal(sig, _hard_interrupt_on_signal) for sig in (signal.SIGINT, signal.SIGTERM)}
     try:

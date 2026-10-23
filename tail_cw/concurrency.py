@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Generator, Iterator
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
 
@@ -61,7 +61,7 @@ class BridgeCancelledError(Exception):
 
 
 @contextmanager
-def blocking_pool(max_workers: int = DEFAULT_BLOCKING_WORKERS) -> Iterator[ThreadPoolExecutor]:
+def blocking_pool(max_workers: int = DEFAULT_BLOCKING_WORKERS) -> Generator[ThreadPoolExecutor]:
     """Open a dedicated pool for blocking cache and query work.
 
     Kept separate from asyncio's default executor so query work cannot be starved
@@ -77,7 +77,7 @@ def blocking_pool(max_workers: int = DEFAULT_BLOCKING_WORKERS) -> Iterator[Threa
 
 
 @contextmanager
-def fetch_pool(max_workers: int = DEFAULT_FETCH_WORKERS) -> Iterator[ThreadPoolExecutor]:
+def fetch_pool(max_workers: int = DEFAULT_FETCH_WORKERS) -> Generator[ThreadPoolExecutor]:
     """Open the pool that Parquet writes for in-flight segment fetches run on.
 
     Separate from :func:`blocking_pool` because the two are bounded by different
@@ -105,7 +105,7 @@ def fetch_pool(max_workers: int = DEFAULT_FETCH_WORKERS) -> Iterator[ThreadPoolE
 @contextmanager
 def _named_pool(
     prefix: str, max_workers: int, initializer: Callable[[], None] | None = None
-) -> Iterator[ThreadPoolExecutor]:
+) -> Generator[ThreadPoolExecutor]:
     pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix=prefix, initializer=initializer)
     try:
         yield pool
@@ -123,7 +123,7 @@ async def run_blocking[T](executor: ThreadPoolExecutor | None, work: Callable[[]
 
 
 @asynccontextmanager
-async def closing_stream[T](source: AsyncIterator[T]) -> AsyncIterator[AsyncIterator[T]]:
+async def closing_stream[T](source: AsyncIterator[T]) -> AsyncGenerator[AsyncIterator[T]]:
     """Close an async source on the way out, when it supports closing.
 
     Closing matters for anything backed by a paginator: abandoning the generator
