@@ -105,7 +105,7 @@ from tail_cw.query.rollup import Granularity, RollupReport, roll_up
 from tail_cw.query.severity import Severity
 from tail_cw.query.trace import query_traces_from_parquet_files
 from tail_cw.recents import load_recents, record_selection, save_recents
-from tail_cw.warm import command_lock, load_marks, on_battery, save_marks
+from tail_cw.warm import LOCK_FILENAME, MARKS_FILENAME, command_lock, load_marks, on_battery, save_marks
 
 FetchEvents = Callable[..., AsyncIterator[LogEvent]]
 NoticeSink = Callable[[str], None]
@@ -2133,15 +2133,40 @@ def _cache_status_record(status: CacheStatus) -> dict[str, object]:
 
 
 def _run_cache_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    """Report on the local cache. Reads only, so nothing here evicts or writes."""
+    """Report on the local cache, or empty it for ``cache clear``."""
     if args.cache_command is None:
         parser.print_help(sys.stderr)
         return 2
     config = _load_config_or_report(args)
     if config is None:
         return 1
+    if args.cache_command == 'clear':
+        return _cache_clear(config)
     with open_log_cache(config) as cache:
         _write_json_line(_cache_status_record(cache.status()))
+    return 0
+
+
+def _cache_clear(config: TailCWConfig) -> int:
+    """Empty the cache under the command lock; warm marks and the lock itself survive."""
+    cache_dir = request_cache_dir(config)
+    with command_lock(cache_dir) as held:
+        if not held:
+            sys.stderr.write('cache clear: a tail-cw command is running\n')
+            return 1
+        removed = 0
+        freed = 0
+        for child in cache_dir.iterdir():
+            if child.name in {LOCK_FILENAME, MARKS_FILENAME}:
+                continue
+            if child.is_dir() and not child.is_symlink():
+                freed += sum(item.stat().st_size for item in child.rglob('*') if item.is_file())
+                shutil.rmtree(child)
+            else:
+                freed += child.stat().st_size
+                child.unlink()
+            removed += 1
+    _write_json_line({'cache_dir': str(cache_dir), 'removed': removed, 'bytes_freed': freed})
     return 0
 
 

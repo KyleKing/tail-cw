@@ -51,6 +51,7 @@ from tail_cw.concurrency import INTERRUPTED_EXIT
 from tail_cw.config import AwsConfig, CacheConfig, TailCWConfig
 from tail_cw.parser import build_parser
 from tail_cw.recents import Recents
+from tail_cw.warm import HAS_FLOCK, command_lock, load_marks, save_marks
 
 NOW = datetime(2026, 7, 5, 12, 0, 0, tzinfo=UTC)
 
@@ -1881,6 +1882,34 @@ def test_run_cli_cache_with_no_subcommand_prints_help(tmp_path, capsys):
     del tmp_path
     assert run_cli(['cache'], None, is_tty=False) == 2
     assert 'usage' in capsys.readouterr().err
+
+
+def test_run_cli_cache_clear_empties_the_cache_but_keeps_scheduling_state(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+    cache_dir = tmp_path / 'cache'
+    (cache_dir / 'parquet').mkdir(parents=True)
+    (cache_dir / 'parquet' / 'seg.parquet').write_bytes(b'x' * 32)
+    save_marks(cache_dir, {'/g': NOW})
+
+    result = run_cli(['cache', 'clear', '--config', str(config_path)], None, is_tty=False)
+
+    assert result == 0
+    record = json.loads(capsys.readouterr().out)
+    assert record['bytes_freed'] == 32
+    assert {child.name for child in cache_dir.iterdir()} == {'command.lock', 'warm-marks.json'}
+    assert load_marks(cache_dir) == {'/g': NOW}
+
+
+@pytest.mark.skipif(not HAS_FLOCK, reason='flock needs fcntl')
+def test_run_cli_cache_clear_refuses_while_a_command_runs(tmp_path, capsys):
+    config_path = _write_config_file(tmp_path)
+
+    with command_lock(tmp_path / 'cache') as held:
+        assert held is True
+        result = run_cli(['cache', 'clear', '--config', str(config_path)], None, is_tty=False)
+
+    assert result == 1
+    assert 'command is running' in capsys.readouterr().err
 
 
 def test_export_tail_refuses_a_filter_cloudwatch_would_answer_wrongly(tmp_path, capsys, monkeypatch):

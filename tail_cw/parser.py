@@ -542,6 +542,8 @@ def build_parser() -> argparse.ArgumentParser:
     cache_sub = cache.add_subparsers(dest='cache_command')
     status = cache_sub.add_parser('status', help='Write what the cache holds against its limit, as JSON.')
     status.add_argument('--config', dest='config_path', type=Path, default=None, help='Config file path override')
+    clear = cache_sub.add_parser('clear', help='Delete every cached segment and index, freeing the space.')
+    clear.add_argument('--config', dest='config_path', type=Path, default=None, help='Config file path override')
 
     export = subparsers.add_parser('export', help='Write CloudWatch data to stdout as NDJSON or JSON.')
     _add_export_parsers(export)
