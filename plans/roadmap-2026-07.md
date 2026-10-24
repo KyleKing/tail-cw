@@ -220,6 +220,15 @@ Revisit if the skill's approval prompts or token cost show up as the bottleneck.
 
 Ordered by value against effort.
 
+**`export metrics` cannot run a metric math SEARCH expression.**
+On 2026-10-24 an IRM on-call agent needed `TavilyRequestCount` summed across every
+dimension set (`SEARCH('{IRM,Origin} TavilyRequestCount', 'Sum', 60)`) and fell back to
+`aws cloudwatch get-metric-data --metric-data-queries` because `export metrics` takes
+one
+namespace and metric name.
+Accepting `--expression` (passed through as a `GetMetricData` expression) would cover
+SEARCH and metric math.
+
 **Push regex and numeric filters down once they are proven equal.**
 `pushdown_filter_pattern` sends text, phrases, and field `=` and `!=`, each checked live
 against CloudWatch first
