@@ -14,6 +14,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from botocore.exceptions import TokenRetrievalError  # type: ignore[import-untyped]
 
 from tail_cw.__main__ import main
 from tail_cw.aws.dashboards import Dashboard
@@ -116,6 +117,20 @@ def test_main_names_the_failure_inside_a_task_group(capsys):
     assert result == 1
     assert 'token has expired' in err
     assert 'sub-exception' not in err
+
+
+def test_main_names_the_login_command_when_the_sso_refresh_fails(monkeypatch, capsys):
+    monkeypatch.delenv('AWS_PROFILE', raising=False)
+    expired = TokenRetrievalError(provider='sso', error_msg='Token has expired and refresh failed')
+    carried = ExceptionGroup('unhandled errors in a TaskGroup', [expired])
+    with patch('tail_cw.services.run', side_effect=carried):
+        result = main(['logs', '/g', '--profile', 'read-prod'])
+
+    err = capsys.readouterr().err
+    assert result == 1
+    assert 'Token has expired and refresh failed' in err
+    assert '`aws sso login --profile read-prod`' in err
+    assert 'Traceback' not in err
 
 
 def test_main_handles_config_error(tmp_path, capsys):

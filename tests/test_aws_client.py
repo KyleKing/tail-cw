@@ -5,9 +5,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from aiobotocore.session import AioSession  # type: ignore[import-untyped]
 from aiobotocore.stub import AioStubber  # type: ignore[import-untyped]
+from aiobotocore.tokens import AioSSOTokenProvider  # type: ignore[import-untyped]
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 from botocore.stub import ANY  # type: ignore[import-untyped]
+from botocore.utils import JSONFileCache, SSOTokenLoader  # type: ignore[import-untyped]
 
 from tail_cw.aws.client import RETRIES, client_pool, fetch_log_events, retry_config
 from tail_cw.aws.events import LogEvent, epoch_ms_to_datetime
@@ -776,3 +779,49 @@ async def test_fetch_log_events_special_characters_in_log_group(logs_client: Any
     assert results[0].log_group == log_group
 
     stub.deactivate()
+
+
+async def test_a_refreshed_sso_token_is_used_when_the_cache_is_unwritable(tmp_path, monkeypatch):
+    """The ``aws`` CLI carries on with a refreshed token it cannot save, so tail-cw must too."""
+    start_url, session_name = 'https://example.awsapps.com/start', 'Example'
+    config = tmp_path / 'config'
+    config.write_text(
+        f'[profile p]\nsso_session = {session_name}\nsso_account_id = 123456789012\nsso_role_name = R\n'
+        f'[sso-session {session_name}]\nsso_start_url = {start_url}\nsso_region = us-east-1\n',
+        encoding='utf-8',
+    )
+    cache_dir = tmp_path / 'cache'
+    expired = datetime.now(UTC) - timedelta(hours=1)
+    SSOTokenLoader(cache=JSONFileCache(str(cache_dir))).save_token(
+        start_url,
+        {
+            'accessToken': 'stale',
+            'clientId': 'id',
+            'clientSecret': 'secret',
+            'expiresAt': expired.isoformat(),
+            'refreshToken': 'refresh',
+            'registrationExpiresAt': (datetime.now(UTC) + timedelta(days=30)).isoformat(),
+            'startUrl': start_url,
+        },
+        session_name=session_name,
+    )
+    cache_dir.chmod(0o500)
+    refreshed = {'accessToken': 'fresh', 'expiresAt': datetime.now(UTC) + timedelta(hours=1)}
+
+    async def _create_token(_self: object, token: dict[str, Any]) -> dict[str, Any]:  # noqa: RUF029 - the patched coroutine's signature
+        return {**token, **refreshed}
+
+    monkeypatch.setenv('AWS_CONFIG_FILE', str(config))
+    monkeypatch.setattr(AioSSOTokenProvider, '_SSO_TOKEN_CACHE_DIR', str(cache_dir))
+    monkeypatch.setattr(AioSSOTokenProvider, '_attempt_create_token', _create_token)
+
+    try:
+        async with client_pool(profile_name='p', region_name='us-east-1'):
+            deferred = AioSSOTokenProvider(AioSession(profile='p')).load_token()
+            assert deferred is not None
+            frozen = await deferred.get_frozen_token()
+    finally:
+        cache_dir.chmod(0o700)
+
+    assert frozen is not None
+    assert frozen.token == 'fresh'  # noqa: S105 - a fixture value

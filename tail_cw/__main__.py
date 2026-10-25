@@ -8,6 +8,7 @@ paid on every invocation from a shell loop.
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Sequence
 
@@ -46,7 +47,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stderr.write('Interrupted before finishing\n')
         return INTERRUPTED_EXIT
     except Exception as err:
-        sys.stderr.write(f'Error: {_readable(err)}\n')
+        message = _readable(err)
+        if _needs_sso_login(err):
+            profile = getattr(args, 'profile', None) or os.environ.get('AWS_PROFILE')
+            login = f'aws sso login --profile {profile}' if profile else 'aws sso login'
+            message = f'{message}. The SSO session needs a new login: run `{login}` and retry'
+        sys.stderr.write(f'Error: {message}\n')
         return 1
     except BaseException as err:
         # Polars' Rust side raises outside the Exception hierarchy, so without this the
@@ -55,6 +61,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise
         sys.stderr.write(f'Error: the query engine panicked, which is a bug: {err}\n')
         return 1
+
+
+_SSO_LOGIN_ERRORS = frozenset({'SSOTokenLoadError', 'TokenRetrievalError', 'UnauthorizedSSOTokenError'})
+
+
+def _needs_sso_login(err: BaseException) -> bool:
+    """Report whether botocore gave up on an SSO token that only a new login fixes."""
+    if isinstance(err, BaseExceptionGroup):
+        return any(_needs_sso_login(inner) for inner in err.exceptions)
+    return type(err).__name__ in _SSO_LOGIN_ERRORS
 
 
 def _readable(err: BaseException) -> str:

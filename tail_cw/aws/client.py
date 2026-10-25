@@ -10,6 +10,7 @@ logic straightforward to test with a fake.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
@@ -17,11 +18,41 @@ from datetime import datetime
 from typing import Any, runtime_checkable
 
 from aiobotocore.session import AioSession  # type: ignore[import-untyped]
+from aiobotocore.tokens import AioSSOTokenProvider  # type: ignore[import-untyped]
 from beartype.typing import Protocol
 from botocore.config import Config  # type: ignore[import-untyped]
+from botocore.utils import JSONFileCache  # type: ignore[import-untyped]
 
 from tail_cw.aws.events import LogEvent, epoch_ms_to_datetime
 from tail_cw.progress import TOTAL_UNKNOWN, ProgressCallback
+
+logger = logging.getLogger(__name__)
+
+
+class _WriteTolerantTokenCache(JSONFileCache):
+    """SSO token cache that keeps a refreshed token in memory when the file is unwritable.
+
+    botocore saves a refreshed token and raises when ``~/.aws/sso/cache`` is read-only,
+    where the ``aws`` CLI carries on with the token it just got.
+    """
+
+    def __setitem__(self, cache_key: str, value: object) -> None:
+        try:
+            super().__setitem__(cache_key, value)
+        except OSError as err:
+            logger.warning('Could not save the refreshed SSO token (%s); using it for this run only', err)
+
+
+def _tolerate_unwritable_sso_cache() -> None:
+    """Install :class:`_WriteTolerantTokenCache` and drop botocore's token-refresh tracebacks.
+
+    The tracebacks duplicate the error the CLI already prints. Remove this when botocore
+    keeps a refreshed token it cannot save.
+    """
+    AioSSOTokenProvider.DEFAULT_CACHE_CLS = _WriteTolerantTokenCache
+    for name in ('aiobotocore.credentials', 'aiobotocore.tokens'):
+        logging.getLogger(name).setLevel(logging.ERROR)
+
 
 RETRIES: dict[str, object] = {'max_attempts': 10, 'mode': 'standard'}
 """Standard-mode retries, which back off on throttling without a custom handler."""
@@ -88,6 +119,7 @@ async def client_pool(
     Yields:
         A pool whose clients stay open until the block exits.
     """
+    _tolerate_unwritable_sso_cache()
     async with AsyncExitStack() as stack:
         yield ClientPool(session=AioSession(profile=profile_name), stack=stack, region_name=region_name)
 
