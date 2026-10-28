@@ -39,7 +39,7 @@ from tail_cw.cpu_budget import low_impact
 from tail_cw.histogram import bucket_events, histogram_headline
 from tail_cw.query.engine import query_parquet_files_to_log_events
 from tail_cw.query.expression import parse_query
-from tail_cw.query.parser import FilterNode, combine_filters, parse_filter_pattern
+from tail_cw.query.parser import FilterNode, combine_filters
 from tail_cw.query.severity import Severity
 from tail_cw.query.trace import (
     TraceGroup,
@@ -1091,7 +1091,7 @@ class LogsScreen(ShellScreen):  # ruff: ignore[too-many-public-methods]
         narrows within it instead of escaping it.
         """
         pattern = self.shell.session.filter_pattern
-        nodes = [node for node in (parse_filter_pattern(pattern) if pattern else None, extra) if node is not None]
+        nodes = [node for node in (parse_query(pattern) if pattern else None, extra) if node is not None]
         if not nodes:
             return None
         return nodes[0] if len(nodes) == 1 else combine_filters(nodes)

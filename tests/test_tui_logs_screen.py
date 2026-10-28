@@ -884,8 +884,13 @@ async def test_refresh_without_service_reports_no_source():
 
 
 @pytest.mark.asyncio
-async def test_the_session_filter_narrows_the_view_on_read(tmp_path: Path):
-    """The cached window holds every event, so the filter is applied locally."""
+@pytest.mark.parametrize(
+    ('pattern', 'expected_rows'),
+    [('ERROR', 1), ('?ERROR ?CRITICAL', 1), ('?WARN ?CRITICAL', 0)],
+    ids=['term', 'any-of run', 'any-of with no match'],
+)
+async def test_the_session_filter_narrows_the_view_on_read(tmp_path: Path, pattern: str, expected_rows: int):
+    """The cached window holds every event, so the filter is applied locally, `?` any-of terms included."""
     events = [_json_event('one', level='INFO'), _json_event('two', level='ERROR')]
     path = _write_parquet(events, tmp_path / 'events.parquet')
     app = _make_app(services=_resolving_to([path]))
@@ -895,14 +900,14 @@ async def test_the_session_filter_narrows_the_view_on_read(tmp_path: Path):
         await pilot.pause()
         assert app.screen.query_one('#log_table', DataTable).row_count == 2
 
-        app.session.filter_pattern = 'ERROR'
+        app.session.filter_pattern = pattern
         screen = _logs_screen(app)
         screen.refresh_view()
         screen._refetch_debounce.flush()
         await app.workers.wait_for_complete()
         await pilot.pause()
 
-        assert app.screen.query_one('#log_table', DataTable).row_count == 1
+        assert app.screen.query_one('#log_table', DataTable).row_count == expected_rows
 
 
 @pytest.mark.asyncio
