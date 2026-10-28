@@ -32,6 +32,7 @@ AND = 'AND'
 OR = 'OR'
 NOT = 'NOT'
 _KEYWORDS = frozenset({AND, OR, NOT})
+_ANY_OF = '?'
 _OPEN = '('
 _CLOSE = ')'
 
@@ -163,7 +164,21 @@ def _parse_unary(cursor: _Cursor) -> FilterNode:
     if token in {AND, OR, _CLOSE}:
         msg = f'Filter starts with {token!r}'
         raise FilterParseError(msg, suggestion='Put a term before the operator')
+    if _is_any_of_term(token):
+        return _parse_any_of(cursor)
     return _parse_term(cursor.take())
+
+
+def _is_any_of_term(token: str) -> bool:
+    return token.startswith(_ANY_OF) and len(token) > len(_ANY_OF)
+
+
+def _parse_any_of(cursor: _Cursor) -> FilterNode:
+    terms = [cursor.take().removeprefix(_ANY_OF)]
+    while (token := cursor.peek()) is not None and _is_any_of_term(token):
+        terms.append(cursor.take().removeprefix(_ANY_OF))
+    nodes = [_parse_term(term) for term in terms]
+    return nodes[0] if len(nodes) == 1 else FilterNode(node_type=FilterNodeType.OR, children=nodes)
 
 
 def _parse_term(token: str) -> FilterNode:

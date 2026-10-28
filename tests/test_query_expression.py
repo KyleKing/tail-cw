@@ -60,6 +60,21 @@ def test_not_negates_the_term_after_it() -> None:
     assert (negated.children or [])[0].node_type is FilterNodeType.JSON_FIELD_EQUALS
 
 
+@pytest.mark.parametrize(
+    ('text', 'expected'),
+    [
+        ('?ERROR', 'TEXT_SEARCH: ERROR'),
+        ('?ERROR ?Error ?Traceback', '(TEXT_SEARCH: ERROR OR TEXT_SEARCH: Error OR TEXT_SEARCH: Traceback)'),
+        ('?a ?b c', '((TEXT_SEARCH: a OR TEXT_SEARCH: b) AND TEXT_SEARCH: c)'),
+        ('"?a" ?', '(EXACT_PHRASE: "?a" AND TEXT_SEARCH: ?)'),
+    ],
+    ids=['lone', 'run', 'mixed with a term', 'quoted or bare question mark is text'],
+)
+def test_a_run_of_question_mark_terms_is_one_or(text: str, expected: str) -> None:
+    """The `?` stayed in each term, so `?a ?b` was an AND of two strings no log line contains."""
+    assert filter_to_string(parse_query(text)) == expected
+
+
 def test_lowercase_or_is_still_text_because_log_lines_say_it() -> None:
     """Making `or` an operator would quietly change what an existing search means."""
     node = parse_query('timed out or retried')
@@ -112,6 +127,7 @@ def test_a_malformed_filter_names_the_fix(text: str, expected_in_suggestion: str
         ('%[Ee]rror%', '%[Ee]rror%'),
         ('ERROR ARGUMENTS', 'ERROR ARGUMENTS'),
         ('ERROR OR WARNING', '?ERROR ?WARNING'),
+        ('?ERROR ?WARNING', '?ERROR ?WARNING'),
         ('ERROR AND NOT ARGUMENTS', 'ERROR -ARGUMENTS'),
         ('level:error', '{ $.level = "error" }'),
         ('status:>=500', '{ $.status >= 500 }'),

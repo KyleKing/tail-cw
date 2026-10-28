@@ -869,6 +869,21 @@ def test_text_search_matches_a_literal_substring(fix_test_cache, backend, messag
     assert [row['message'] for row in matched] == [expected]
 
 
+@pytest.mark.parametrize('backend', [QueryBackend.DUCKDB, QueryBackend.POLARS])
+def test_any_of_terms_match_a_tab_delimited_lambda_line(fix_test_cache, backend):
+    """`?a ?b` reached the engine as an AND of the literal strings `?a` and `?b`, which matched nothing."""
+    error = '2026-10-28T01:00:45.014Z\t1b2c\tERROR\tInvoke Error \t{"errorType":"KMSKeyNotAccessibleFault"}'
+    start = '2026-10-28T01:00:44.000Z\t1b2c\tSTART RequestId: 1b2c'
+    parquet_path = fix_test_cache / 'any_of.parquet'
+    write_log_events_to_parquet([make_event(start), make_event(error)], parquet_path)
+
+    matched = list(
+        query_parquet_file(parquet_path, parse_query('?ERROR ?Traceback ?CRITICAL'), backend=backend),
+    )
+
+    assert [row['message'] for row in matched] == [error]
+
+
 def test_a_native_engine_panic_becomes_an_exception_callers_can_catch(tmp_path, monkeypatch):
     """DuckDB and Polars raise from Rust outside the Exception hierarchy."""
     path = tmp_path / 'events.parquet'
