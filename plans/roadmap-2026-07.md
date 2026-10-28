@@ -220,6 +220,13 @@ Revisit if the skill's approval prompts or token cost show up as the bottleneck.
 
 Ordered by value against effort.
 
+**No way to test a metric filter pattern against sample events.**
+On 2026-10-28 a Watch Doggo agent writing per-job Bedrock spend filters fell back to
+`aws logs test-metric-filter --filter-pattern '{ ($.modelId = "*.openai.gpt-6.1-sol") && ... }' --log-event-messages ...`,
+which returned the two matching events.
+An `export test-filter`
+that takes a pattern and either inline events or a cached window would answer it.
+
 **`export metrics` cannot run a metric math SEARCH expression.**
 On 2026-10-24 an IRM on-call agent needed `TavilyRequestCount` summed across every
 dimension set (`SEARCH('{IRM,Origin} TavilyRequestCount', 'Sum', 60)`) and fell back to
