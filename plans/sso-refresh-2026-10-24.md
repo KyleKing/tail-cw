@@ -31,6 +31,15 @@ Context:
     Its client registration expires 2026-12-01
 - Versions: aws-cli 2.37.13, botocore 1.43.46, aiobotocore 3.9.0
 
+2026-10-28 09:23Z, with the `Coverbase` SSO token expired and refresh failing:
+`aws sts get-caller-identity --profile user-prod` succeeded while
+`tail-cw export logs ... --profile user-prod` failed with the same
+`TokenRetrievalError`.
+The CLI answered from its own role-credential cache (`~/.aws/cli/cache/*.json`,
+`ProviderType: sso`, expiring 10:44Z to 11:39Z), which botocore and aiobotocore do not
+read.
+That explains a CLI-works, tail-cw-fails split without any refresh difference.
+
 ## Open questions
 
 1. Earlier in the session, did aiobotocore's refresh fail while aws-cli's succeeded on the
