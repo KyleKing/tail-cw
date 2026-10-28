@@ -229,6 +229,14 @@ namespace and metric name.
 Accepting `--expression` (passed through as a `GetMetricData` expression) would cover
 SEARCH and metric math.
 
+**`export alarms` drops an alarm's `Metrics[]` queries.**
+On 2026-10-28 a Watch Doggo investigation needed the 24 `irm-prod-` alarms defined by
+metric data queries, and `export alarms irm-prod-` printed `namespace`, `metric_name`,
+and `period_seconds` as null for each, with no field for the queries.
+It fell back to `aws cloudwatch describe-alarms`, whose `Metrics[]` held the query ids,
+expressions, and `MetricStat` inputs.
+Emitting the queries (or a `metrics` field mirroring `Metrics[]`) would cover it.
+
 **Push regex and numeric filters down once they are proven equal.**
 `pushdown_filter_pattern` sends text, phrases, and field `=` and `!=`, each checked live
 against CloudWatch first
